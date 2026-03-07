@@ -10,6 +10,7 @@ SolidJS-style reactivity with CSS flexbox layout. Early development with archite
 3. **Everything is tested.** No exceptions. Tests verify behaviour, not implementation.
 4. **Fix issues immediately.** When you see a problem, fix it now.
 5. **Bugfixes start with a test.** Write a failing test first, then fix the code.
+6. **NEVER discard unstaged changes.** Before running any git operation that could discard, overwrite, or reset user changes (e.g., `git checkout`, `git reset`, `git stash`, `git clean`), you MUST check for unstaged changes with `git status` and ask the user for explicit confirmation. Losing user work is unacceptable.
 
 ## Build/Test/Lint Commands
 

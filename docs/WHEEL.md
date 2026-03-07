@@ -45,3 +45,15 @@ without a lookup table.
 - Mouse event routing and hit-testing
 - Focus tree and event bubbling
 - SGR mouse protocol parsing (not covered by `readline`)
+
+## Further reading
+
+Resources on terminal Unicode handling and the challenges of text measurement:
+
+- [Grapheme Clusters and Terminal Emulators](https://mitchellh.com/writing/grapheme-clusters-in-terminals) — Mitchell Hashimoto's explanation of why terminals disagree on emoji widths and the Mode 2027 proposal
+- [Terminal Emulators Battle Royale](https://ucs-detect.readthedocs.io/results.html) — Jeff Quast's systematic testing of 35+ terminals for Unicode compliance (wide chars, ZWJ, VS-16)
+- [Mode 2027 proposal](https://github.com/contour-terminal/terminal-unicode-core) — opt-in grapheme cluster support for terminals
+
+**Current approach:** Muntins uses wcwidth-style width calculation (UAX #11 ranges) which matches the behavior of most terminals including GNOME Terminal and other VTE-based emulators. This ensures consistent layout even if emoji sequences render as multiple glyphs.
+
+**Future enhancement:** Mode 2027 support could allow better emoji rendering on modern terminals (Ghostty, kitty, foot, WezTerm, iTerm2) that support grapheme clustering.
