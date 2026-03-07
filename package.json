@@ -1,0 +1,32 @@
+{
+  "name": "muntins",
+  "version": "0.0.1",
+  "description": "Signals-driven, flexbox-powered terminal UI library",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "knip": "knip"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9",
+    "knip": "^5",
+    "typescript": "^5.6"
+  },
+  "keywords": ["terminal", "tui", "cli", "signals", "flexbox", "reactive"],
+  "license": "MIT"
+}
