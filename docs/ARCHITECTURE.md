@@ -195,11 +195,11 @@ The synthesis: **use signals (not React) for reactivity, flexbox (not Cassowary)
 
 The library decomposes into five independent modules with clean interfaces between them. No module depends on more than one other.
 
-- **`signals.ts`** (~150 lines) — `createSignal`, `createEffect`, `createMemo`, `batch`, `untrack`, `createRoot`, `onCleanup`. Zero dependencies. Fully self-contained push-pull reactive core.
-- **`layout.ts`** (~500 lines) — `computeLayout(node, availableWidth, availableHeight) → LayoutResult`. Pure function, no side effects, no dependency on signals. Takes a tree of `{style, children, measure?}` nodes, returns a tree of `{x, y, width, height}` results.
-- **`buffer.ts`** (~200 lines) — `Buffer` class (cell grid), `diff(current, previous)` function, `flush(updates) → string` ANSI serializer. The buffer handles double-width characters, style diffing, and cursor optimization.
-- **`input.ts`** (~300 lines) — State-machine parser, terminal mode setup/teardown, event type definitions. Converts raw stdin bytes into typed `InputEvent` objects.
-- **`runtime.ts`** (~200 lines) — The glue layer. Manages the render cycle: processes input events in a batch, runs layout if dirty, runs paint effects, diffs and flushes the buffer. Provides the component primitives (`Box`, `Text`, `Show`, `For`) that wire signals to layout nodes and buffer writes.
+- **`core/signals.ts`** (~150 lines) — `createSignal`, `createEffect`, `createMemo`, `batch`, `untrack`, `createRoot`, `onCleanup`. Zero dependencies. Fully self-contained push-pull reactive core.
+- **`core/layout.ts`** (~500 lines) — `computeLayout(node, availableWidth, availableHeight) → LayoutResult`. Pure function, no side effects, no dependency on signals. Takes a tree of `{style, children, measure?}` nodes, returns a tree of `{x, y, width, height}` results.
+- **`core/buffer.ts`** (~200 lines) — `Buffer` class (cell grid), `diff(current, previous)` function, `flush(updates) → string` ANSI serializer. The buffer handles double-width characters, style diffing, and cursor optimization.
+- **`core/input.ts`** (~300 lines) — State-machine parser, terminal mode setup/teardown, event type definitions. Converts raw stdin bytes into typed `InputEvent` objects.
+- **`core/runtime.ts`** (~200 lines) — The glue layer. Manages the render cycle: processes input events in a batch, runs layout if dirty, runs paint effects, diffs and flushes the buffer. Provides the component primitives (`Box`, `Text`, `Show`, `For`) that wire signals to layout nodes and buffer writes.
 
 **Total: ~1,350 lines of TypeScript, zero external dependencies.** This is realistic based on existing implementations: tchayen's flexbox engine is ~600 lines, a solid signals runtime is ~150 lines, Ratatui's buffer+diff is ~400 lines of Rust (comparable in TypeScript), and input parsing is well-bounded.
 
