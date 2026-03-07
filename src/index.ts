@@ -1,2 +1,2 @@
 // Public API exports
-// TODO: Re-export public API from submodules
+export * from "./core/index.js";
