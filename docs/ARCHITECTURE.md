@@ -1,6 +1,6 @@
 # Building a reactive terminal UI from scratch
 
-**A signals-driven, flexbox-powered TUI library in TypeScript needs exactly five subsystems: a fine-grained reactivity core (~150 lines), a flexbox layout engine (~500 lines), a double-buffered cell grid with differential rendering, a state-machine input parser, and a three-phase render pipeline that ties them together.** This architecture avoids the heavyweight dependencies of Ink (React + Yoga WASM) while achieving better update granularity than Ratatui's full-redraw model. The key insight is that SolidJS-style signals can surgically invalidate only the dirty portions of the component tree, layout, and cell buffer — giving you the declarative ergonomics of React with the performance profile of immediate-mode rendering.
+**A signals-driven, flexbox-powered TUI library in TypeScript needs exactly five subsystems: a fine-grained reactivity core, a flexbox layout engine, a double-buffered cell grid with differential rendering, a state-machine input parser, and a three-phase render pipeline that ties them together.** This architecture avoids the heavyweight dependencies of Ink (React + Yoga WASM) while achieving better update granularity than Ratatui's full-redraw model. The key insight is that SolidJS-style signals can surgically invalidate only the dirty portions of the component tree, layout, and cell buffer — giving you the declarative ergonomics of React with the performance profile of immediate-mode rendering.
 
 What follows is a complete architectural blueprint, covering every subsystem's internals, data structures, algorithms, and how they interconnect.
 
@@ -195,13 +195,11 @@ The synthesis: **use signals (not React) for reactivity, flexbox (not Cassowary)
 
 The library decomposes into five independent modules with clean interfaces between them. No module depends on more than one other.
 
-- **`core/signals.ts`** (~150 lines) — `createSignal`, `createEffect`, `createMemo`, `batch`, `untrack`, `createRoot`, `onCleanup`. Zero dependencies. Fully self-contained push-pull reactive core.
-- **`core/layout.ts`** (~500 lines) — `computeLayout(node, availableWidth, availableHeight) → LayoutResult`. Pure function, no side effects, no dependency on signals. Takes a tree of `{style, children, measure?}` nodes, returns a tree of `{x, y, width, height}` results.
-- **`core/buffer.ts`** (~200 lines) — `Buffer` class (cell grid), `diff(current, previous)` function, `flush(updates) → string` ANSI serializer. The buffer handles double-width characters, style diffing, and cursor optimization.
-- **`core/input.ts`** (~300 lines) — State-machine parser, terminal mode setup/teardown, event type definitions. Converts raw stdin bytes into typed `InputEvent` objects.
-- **`core/runtime.ts`** (~200 lines) — The glue layer. Manages the render cycle: processes input events in a batch, runs layout if dirty, runs paint effects, diffs and flushes the buffer. Provides the component primitives (`Box`, `Text`, `Show`, `For`) that wire signals to layout nodes and buffer writes.
-
-**Total: ~1,350 lines of TypeScript, zero external dependencies.** This is realistic based on existing implementations: tchayen's flexbox engine is ~600 lines, a solid signals runtime is ~150 lines, Ratatui's buffer+diff is ~400 lines of Rust (comparable in TypeScript), and input parsing is well-bounded.
+- **`core/signals.ts`** — `createSignal`, `createEffect`, `createMemo`, `batch`, `untrack`, `createRoot`, `onCleanup`. Zero dependencies. Fully self-contained push-pull reactive core.
+- **`core/layout.ts`** — `computeLayout(node, availableWidth, availableHeight) → LayoutResult`. Pure function, no side effects, no dependency on signals. Takes a tree of `{style, children, measure?}` nodes, returns a tree of `{x, y, width, height}` results.
+- **`core/buffer.ts`** — `Buffer` class (cell grid), `diff(current, previous)` function, `flush(updates) → string` ANSI serializer. The buffer handles double-width characters, style diffing, and cursor optimization.
+- **`core/input.ts`** — State-machine parser, terminal mode setup/teardown, event type definitions. Converts raw stdin bytes into typed `InputEvent` objects.
+- **`core/runtime.ts`** — The glue layer. Manages the render cycle: processes input events in a batch, runs layout if dirty, runs paint effects, diffs and flushes the buffer. Provides the component primitives (`Box`, `Text`, `Show`, `For`) that wire signals to layout nodes and buffer writes.
 
 ## Conclusion
 
