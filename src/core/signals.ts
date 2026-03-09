@@ -65,6 +65,8 @@ export function createSignal<T>(initial: T): [Accessor<T>, Setter<T>] {
     cleanups: [],
     mounts: [],
   };
+  // Widen to Computation for use in untyped arrays (sources/observers)
+  const untypedNode: Computation = node;
 
   const getter: Accessor<T> = () => {
     if (currentObserver) {
@@ -75,8 +77,8 @@ export function createSignal<T>(initial: T): [Accessor<T>, Setter<T>] {
       }
       // Register source: observer -> signal
       if (!currentObserver.sources) currentObserver.sources = [];
-      if (!currentObserver.sources.includes(node as Computation)) {
-        currentObserver.sources.push(node as Computation);
+      if (!currentObserver.sources.includes(untypedNode)) {
+        currentObserver.sources.push(untypedNode);
       }
     }
     return node.value;
