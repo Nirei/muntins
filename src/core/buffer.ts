@@ -108,3 +108,179 @@ export function cellsEqual(a: Cell, b: Cell): boolean {
     colorsEqual(a.bg, b.bg)
   );
 }
+
+/**
+ * 2D grid of cells with row-major storage.
+ * Tracks dirty regions for efficient diff operations.
+ *
+ * Out-of-bounds access is handled gracefully:
+ * - get() returns DEFAULT_CELL
+ * - set() is a no-op
+ */
+export class Buffer {
+  private cells: Cell[];
+  private _width: number;
+  private _height: number;
+
+  // Dirty rectangle tracking for efficient diff
+  private _dirtyMinX: number;
+  private _dirtyMinY: number;
+  private _dirtyMaxX: number;
+  private _dirtyMaxY: number;
+
+  constructor(width: number, height: number) {
+    this._width = width;
+    this._height = height;
+    this.cells = new Array(width * height);
+
+    // Initialize dirty region as empty (no dirty cells)
+    this._dirtyMinX = width; // Invalid high value
+    this._dirtyMinY = height;
+    this._dirtyMaxX = -1; // Invalid low value
+    this._dirtyMaxY = -1;
+
+    this.clear();
+  }
+
+  get width(): number {
+    return this._width;
+  }
+
+  get height(): number {
+    return this._height;
+  }
+
+  get dirtyMinX(): number {
+    return this._dirtyMinX;
+  }
+
+  get dirtyMinY(): number {
+    return this._dirtyMinY;
+  }
+
+  get dirtyMaxX(): number {
+    return this._dirtyMaxX;
+  }
+
+  get dirtyMaxY(): number {
+    return this._dirtyMaxY;
+  }
+
+  hasDirtyRegion(): boolean {
+    return (
+      this._dirtyMaxX >= this._dirtyMinX && this._dirtyMaxY >= this._dirtyMinY
+    );
+  }
+
+  clearDirtyRegion(): void {
+    this._dirtyMinX = this._width;
+    this._dirtyMinY = this._height;
+    this._dirtyMaxX = -1;
+    this._dirtyMaxY = -1;
+  }
+
+  private index(x: number, y: number): number {
+    return y * this._width + x;
+  }
+
+  private markDirty(x: number, y: number): void {
+    if (x < this._dirtyMinX) this._dirtyMinX = x;
+    if (x > this._dirtyMaxX) this._dirtyMaxX = x;
+    if (y < this._dirtyMinY) this._dirtyMinY = y;
+    if (y > this._dirtyMaxY) this._dirtyMaxY = y;
+  }
+
+  get(x: number, y: number): Cell {
+    if (x < 0 || x >= this._width || y < 0 || y >= this._height) {
+      return DEFAULT_CELL;
+    }
+    return { ...this.cells[this.index(x, y)] };
+  }
+
+  set(x: number, y: number, cell: Cell): void {
+    if (x < 0 || x >= this._width || y < 0 || y >= this._height) {
+      return;
+    }
+    this.cells[this.index(x, y)] = { ...cell };
+    this.markDirty(x, y);
+  }
+
+  clear(): void {
+    for (let i = 0; i < this.cells.length; i++) {
+      this.cells[i] = { ...DEFAULT_CELL };
+    }
+    // Mark entire buffer as dirty since all cells changed
+    this._dirtyMinX = 0;
+    this._dirtyMinY = 0;
+    this._dirtyMaxX = this._width - 1;
+    this._dirtyMaxY = this._height - 1;
+  }
+
+  resize(width: number, height: number): void {
+    if (width === this._width && height === this._height) {
+      return;
+    }
+
+    const newCells = new Array(width * height);
+
+    // Copy existing content where it fits
+    const copyWidth = Math.min(width, this._width);
+    const copyHeight = Math.min(height, this._height);
+
+    for (let y = 0; y < copyHeight; y++) {
+      for (let x = 0; x < copyWidth; x++) {
+        const oldIndex = y * this._width + x;
+        const newIndex = y * width + x;
+        newCells[newIndex] = this.cells[oldIndex];
+      }
+    }
+
+    // Fill new areas with default
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const newIndex = y * width + x;
+        if (newCells[newIndex] === undefined) {
+          newCells[newIndex] = { ...DEFAULT_CELL };
+        }
+      }
+    }
+
+    this._width = width;
+    this._height = height;
+    this.cells = newCells;
+
+    // Mark entire buffer dirty after resize (full redraw needed)
+    this._dirtyMinX = 0;
+    this._dirtyMinY = 0;
+    this._dirtyMaxX = width - 1;
+    this._dirtyMaxY = height - 1;
+  }
+
+  fillRect(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    cell: Cell,
+  ): void {
+    const x1 = Math.max(0, x);
+    const y1 = Math.max(0, y);
+    const x2 = Math.min(this._width, x + width);
+    const y2 = Math.min(this._height, y + height);
+
+    // Early exit if rect is completely outside buffer
+    if (x1 >= x2 || y1 >= y2) return;
+
+    for (let py = y1; py < y2; py++) {
+      for (let px = x1; px < x2; px++) {
+        this.cells[this.index(px, py)] = { ...cell };
+      }
+    }
+
+    // Mark the filled region as dirty
+    if (x1 < this._dirtyMinX) this._dirtyMinX = x1;
+    if (y1 < this._dirtyMinY) this._dirtyMinY = y1;
+    if (x2 - 1 > this._dirtyMaxX) this._dirtyMaxX = x2 - 1;
+    if (y2 - 1 > this._dirtyMaxY) this._dirtyMaxY = y2 - 1;
+  }
+}
