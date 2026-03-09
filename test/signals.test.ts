@@ -6,6 +6,7 @@ import {
   type Computation,
   Dirty,
   createEffect,
+  createMemo,
   createSignal,
 } from "../src/core/signals.ts";
 
@@ -26,6 +27,7 @@ describe("signals core types", () => {
       children: [],
       cleanups: [],
       mounts: [],
+      effect: false,
     };
 
     assert.strictEqual(node.value, 42);
@@ -317,8 +319,114 @@ describe("createEffect", () => {
   });
 });
 
+describe("createMemo", () => {
+  it("returns computed value", () => {
+    const [count] = createSignal(5);
+    const double = createMemo(() => count() * 2);
+    assert.strictEqual(double(), 10);
+  });
+
+  it("caches value (fn called once initially)", () => {
+    let calls = 0;
+    const [count] = createSignal(5);
+    const double = createMemo(() => {
+      calls++;
+      return count() * 2;
+    });
+
+    double();
+    double();
+    double();
+    assert.strictEqual(calls, 1);
+  });
+
+  it("recomputes when dependency changes", () => {
+    const [count, setCount] = createSignal(5);
+    const double = createMemo(() => count() * 2);
+
+    assert.strictEqual(double(), 10);
+    setCount(10);
+    assert.strictEqual(double(), 20);
+  });
+
+  it("does not recompute when dependency unchanged", () => {
+    let calls = 0;
+    const [count, setCount] = createSignal(5);
+    const double = createMemo(() => {
+      calls++;
+      return count() * 2;
+    });
+
+    double();
+    assert.strictEqual(calls, 1);
+
+    setCount(5); // same value
+    double();
+    assert.strictEqual(calls, 1); // no recompute
+  });
+
+  it("same result stops propagation", () => {
+    const [count, setCount] = createSignal(5);
+    // Memo that always returns same value
+    const stable = createMemo(() => {
+      count();
+      return "constant";
+    });
+
+    let effectRuns = 0;
+    createEffect(() => {
+      stable();
+      effectRuns++;
+    });
+    assert.strictEqual(effectRuns, 1);
+
+    setCount(10); // memo recomputes but returns same value
+    assert.strictEqual(effectRuns, 1); // effect should NOT re-run
+  });
+
+  it("memo chains work", () => {
+    const [count, setCount] = createSignal(2);
+    const double = createMemo(() => count() * 2);
+    const quadruple = createMemo(() => double() * 2);
+
+    assert.strictEqual(quadruple(), 8);
+    setCount(3);
+    assert.strictEqual(quadruple(), 12);
+  });
+
+  it("diamond with memos: computes once per change", () => {
+    const [a, setA] = createSignal(1);
+    const b = createMemo(() => a() * 2);
+    const c = createMemo(() => a() * 3);
+
+    let effectRuns = 0;
+    let result = 0;
+    createEffect(() => {
+      effectRuns++;
+      result = b() + c();
+    });
+
+    assert.strictEqual(effectRuns, 1);
+    assert.strictEqual(result, 5);
+
+    setA(2);
+    assert.strictEqual(effectRuns, 2); // effect runs once
+    assert.strictEqual(result, 10);
+  });
+
+  it("detects circular memo dependencies", () => {
+    // This should throw, not hang
+    // Using an array to hold references so both can be assigned before either runs
+    const memos: Array<() => number> = [];
+
+    memos[0] = createMemo(() => memos[1]() + 1);
+    memos[1] = createMemo(() => memos[0]() + 1);
+
+    assert.throws(() => memos[0](), /circular/i);
+  });
+});
+
 describe("signals", () => {
-  it.todo("createMemo");
   it.todo("batch");
   it.todo("untrack");
   it.todo("createRoot");

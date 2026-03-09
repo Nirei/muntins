@@ -101,3 +101,7 @@ describe("signals", () => {
 ```
 
 Tests must be black-box: verify behaviour through interface, never implementation details.
+
+## Notes
+
+Biome LSP will automatically convert any `let` variables that are never written into `const`. Don't lose time attempting to turn them back. When later changes write to them, that's the time to change to `let`.
