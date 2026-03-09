@@ -160,10 +160,14 @@ function Counter() {
   const [count, setCount] = createSignal(0);
 
   // This node participates in flexbox layout
-  return Box({ flexDirection: 'column', padding: [1,1,1,1] }, [
-    Text(() => `Count: ${count()}`),   // effect auto-created for text content
-    Text(() => `Double: ${count() * 2}`),
-  ]);
+  return Box({
+    flexDirection: 'column',
+    padding: [1, 1, 1, 1],
+    children: [
+      Text({ content: () => `Count: ${count()}` }),   // effect auto-created for text content
+      Text({ content: () => `Double: ${count() * 2}` }),
+    ],
+  });
 }
 ```
 

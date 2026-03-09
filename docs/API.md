@@ -15,9 +15,12 @@
 import { mount, Box, Text } from 'muntins';
 
 mount(() =>
-  Box({ padding: 1 }, [
-    Text('Hello, world!')
-  ])
+  Box({
+    padding: 1,
+    children: [
+      Text({ content: 'Hello, world!' })
+    ],
+  })
 );
 ```
 
@@ -31,22 +34,27 @@ import { mount, Box, Text, createSignal } from 'muntins';
 function Counter() {
   const [count, setCount] = createSignal(0);
 
-  return Box({ flexDirection: 'column', gap: 1, padding: 1 }, [
-    Text(() => `Count: ${count()}`),
-    Text('↑/↓ to change', {
-      onKeyPress(key) {
-        if (key.name === 'up')   setCount(c => c + 1);
-        if (key.name === 'down') setCount(c => c - 1);
-        if (key.name === 'q')    process.exit(0);
-      }
-    }),
-  ]);
+  return Box({
+    flexDirection: 'column',
+    gap: 1,
+    padding: 1,
+    children: [
+      Text({ content: () => `Count: ${count()}` }),
+      Text({
+        content: '↑/↓ to change',
+        onKeyPress(key) {
+          if (key.name === 'up')   setCount(c => c + 1);
+          if (key.name === 'down') setCount(c => c - 1);
+          if (key.name === 'q')    process.exit(0);
+        },
+      }),
+    ],
+  });
 }
 
 mount(Counter);
 ```
 
-The second argument of `Text` accepts additional props, including event handlers.
 `onKeyPress` is only called when the node is **focused** (see section 6).
 
 ---
@@ -90,7 +98,10 @@ Box({
 
   // visibility
   display: 'none',             // () => condition ? 'flex' : 'none'
-}, children);
+
+  // children
+  children: [...],
+});
 ```
 
 Any style prop can be a **reactive getter**:
@@ -99,6 +110,7 @@ Any style prop can be a **reactive getter**:
 Box({
   width: () => showSidebar() ? 20 : 0,
   display: () => showSidebar() ? 'flex' : 'none',
+  children: [...],
 });
 ```
 
@@ -111,11 +123,11 @@ Box({
 ```typescript
 import { Show } from 'muntins';
 
-Show(
-  () => isLoggedIn(),
-  () => Dashboard(),
-  () => LoginScreen(),   // optional: else branch
-);
+Show({
+  when: () => isLoggedIn(),
+  then: () => Dashboard(),
+  else: () => LoginScreen(),   // optional
+});
 ```
 
 Reactively creates and destroys the subtree.
@@ -128,15 +140,30 @@ import { For } from 'muntins';
 
 const [items, setItems] = createSignal(['one', 'two', 'three']);
 
-For(items, (item, index) =>
-  Box({ padding: [0, 1] }, [
-    Text(() => `${index() + 1}. ${item()}`)
-  ])
-);
+For({
+  each: items,
+  render: (item, index) =>
+    Box({
+      padding: [0, 1],
+      children: [
+        Text({ content: () => `${index() + 1}. ${item()}` })
+      ],
+    }),
+});
 ```
 
 Each element has its own reactive scope. Adding or removing items does not recreate the others.
 `item` and `index` are **getters** — they update if the list mutates rather than being replaced.
+
+Use the `key` prop when item identity isn't based on object reference:
+
+```typescript
+For({
+  each: () => users,
+  key: (user) => user.id,
+  render: (user) => Text({ content: () => user().name }),
+});
+```
 
 ---
 
@@ -152,7 +179,8 @@ Box({
   border: { top: true, left: true },   // selective borders
   borderColor: 'cyan',
   borderStyle: 'round',       // alias for border: 'round'
-}, children);
+  children: [...],
+});
 ```
 
 Available border styles: `'single'` `'round'` `'double'` `'bold'` `'dashed'` `'ascii'`
@@ -197,7 +225,8 @@ TextInput({ focusable: true, ref: searchRef })
 Box({
   onKeyPress(key) {
     if (key.char === '/') { focus.set(searchRef); return true; }
-  }
+  },
+  children: [...],
 })
 ```
 
@@ -211,33 +240,33 @@ import { TabFocus } from 'muntins';
 
 // Wrap the app root to get tab navigation app-wide
 mount(() =>
-  TabFocus({}, [
-    App()
-  ])
+  TabFocus({ children: [App()] })
 );
 ```
 
 `TabFocus` is just a regular component — it has no special privileges:
 
 ```typescript
-function TabFocus({ children }: { children: Node[] }) {
+function TabFocus(props: { children: Node[] }) {
   const focus = useFocus();
 
   return Box({
     onKeyPress(key) {
       if (key.name === 'tab' && !key.shift) { focus.next(); return true; }
       if (key.name === 'tab' &&  key.shift) { focus.prev(); return true; }
-    }
-  }, children);
+    },
+    children: props.children,
+  });
 }
 ```
 
 You can write your own variant — arrow keys, vi-style `j`/`k`, anything — and plug it in the same way.
-Nesting focus components creates **focus scopes** that trap focus within them, useful for modals and dialogs.
+
+Use `TabFocus({ trap: true, ... })` to trap focus within a scope (useful for modals).
 
 ### Event bubbling
 
-Keyboard events **bubble up the focus tree** if the focused node does not consume them.
+Keyboard events **bubble up the tree** if the focused node does not consume them.
 To consume an event (stop it from bubbling), the handler returns `true`:
 
 ```typescript
@@ -261,7 +290,8 @@ Box({
   onMouseMove(event)    { },
   onScroll(event)       { /* event.direction: 'up' | 'down' */ },
   onHover(hovering)     { /* true when the cursor is over the node */ },
-}, children);
+  children: [...],
+});
 ```
 
 The mouse system automatically computes whether the cursor is inside a node's bounding box.
@@ -293,18 +323,21 @@ function Button({ label, onPress, focused = () => false }: ButtonProps) {
         return true;
       }
     },
-  }, [
-    Text(label)
-  ]);
+    children: [
+      Text({ content: label })
+    ],
+  });
 }
 ```
 
 ```typescript
 // Scrollable.ts
-function Scrollable(
-  { height }: { height: number },
-  children: Node[]
-) {
+interface ScrollableProps {
+  height: number;
+  children: Node[];
+}
+
+function Scrollable({ height, children }: ScrollableProps) {
   const [offset, setOffset] = createSignal(0);
 
   return Box({
@@ -317,12 +350,14 @@ function Scrollable(
       if (key.name === 'up')   { setOffset(o => Math.max(0, o - 1)); return true; }
       if (key.name === 'down') { setOffset(o => o + 1); return true; }
     },
-  }, [
-    Box({
-      flexDirection: 'column',
-      marginTop: () => -offset(),   // the scroll trick: negative margin
-    }, children)
-  ]);
+    children: [
+      Box({
+        flexDirection: 'column',
+        marginTop: () => -offset(),   // the scroll trick: negative margin
+        children,
+      })
+    ],
+  });
 }
 ```
 
@@ -342,7 +377,7 @@ function App() {
     // called on exit — muntins restores the terminal automatically
   });
 
-  return Box({}, [/* ... */]);
+  return Box({ children: [/* ... */] });
 }
 
 // mount options
@@ -362,7 +397,8 @@ app.unmount();  // manual cleanup if needed
 ## 10. Text styles
 
 ```typescript
-Text('Hello', {
+Text({
+  content: 'Hello',
   color: 'red',                     // name | '#rrggbb' | [r, g, b]
   backgroundColor: '#1a1a2e',
   bold: true,
@@ -375,7 +411,8 @@ Text('Hello', {
 });
 
 // Content and styles can be reactive
-Text(() => `Status: ${status()}`, {
+Text({
+  content: () => `Status: ${status()}`,
   color: () => status() === 'ok' ? 'green' : 'red',
   bold: () => status() === 'error',
 });
@@ -388,12 +425,12 @@ Text(() => `Status: ${status()}`, {
 ```typescript
 // Layout primitives
 mount(component, options?)
-Box(style, children)
-Text(content, props?)
+Box(props)           // { children, ...flexStyle, ...eventHandlers }
+Text(props)          // { content, ...textStyle, ...eventHandlers }
 
 // Conditional rendering and lists
-Show(condition, then, else?)
-For(signal, render)
+Show(props)          // { when, then, else? }
+For(props)           // { each, render, key? }
 
 // Reactivity (re-exported from core)
 createSignal(initial)
