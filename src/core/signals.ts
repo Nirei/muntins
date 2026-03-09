@@ -26,7 +26,7 @@ interface Computation<T = unknown> {
 // Global context
 let currentObserver: Computation | null = null;
 let currentSourcesIndex = 0;
-const currentOwner: Computation | null = null;
+let currentOwner: Computation | null = null;
 const batchDepth = 0;
 const batchQueue: Set<Computation> = new Set();
 
@@ -51,6 +51,107 @@ function unlinkSourceFromObserver(
     const idx = source.observers.indexOf(observer);
     if (idx !== -1) source.observers.splice(idx, 1);
   }
+}
+
+/**
+ * Runs a node's cleanup callbacks in reverse order (LIFO).
+ * Collects any errors thrown by cleanups and returns them.
+ */
+function runCleanups(node: Computation): unknown[] {
+  const errors: unknown[] = [];
+  for (let i = node.cleanups.length - 1; i >= 0; i--) {
+    try {
+      node.cleanups[i]();
+    } catch (err) {
+      errors.push(err);
+    }
+  }
+  node.cleanups = [];
+  return errors;
+}
+
+/**
+ * Recursively disposes all children of a node.
+ */
+function disposeChildren(node: Computation): void {
+  for (const child of node.children) {
+    dispose(child);
+  }
+  node.children = [];
+}
+
+/**
+ * Throws collected cleanup errors (single error or AggregateError for multiple).
+ */
+function throwCleanupErrors(errors: unknown[]): void {
+  if (errors.length === 1) {
+    throw errors[0];
+  }
+  if (errors.length > 1) {
+    throw new AggregateError(errors, "Multiple cleanup errors");
+  }
+}
+
+/**
+ * Disposes a computation node and all its children.
+ * Runs cleanup callbacks, removes from parent ownership, and unlinks from sources.
+ * Safe to call multiple times (no-op on disposed nodes).
+ */
+function dispose(node: Computation): void {
+  // Double-dispose safety: check if already disposed (no fn and no cleanups/children)
+  // Root nodes have fn = undefined but may have children, so check children too
+  if (
+    node.fn === undefined &&
+    node.cleanups.length === 0 &&
+    node.children.length === 0 &&
+    node.sources === null
+  ) {
+    return;
+  }
+
+  const errors = runCleanups(node);
+  disposeChildren(node);
+
+  // Remove from all sources' observer lists
+  if (node.sources) {
+    for (const source of node.sources) {
+      if (source.observers) {
+        const idx = source.observers.indexOf(node);
+        if (idx >= 0) {
+          source.observers.splice(idx, 1);
+        }
+      }
+    }
+    node.sources = null;
+  }
+
+  // Remove from parent's children list (O(1) swap-and-pop)
+  if (node.owner) {
+    const idx = node.owner.children.indexOf(node);
+    if (idx >= 0) {
+      const last = node.owner.children.pop();
+      if (last && idx < node.owner.children.length) {
+        node.owner.children[idx] = last;
+      }
+    }
+    node.owner = null;
+  }
+
+  // Clear fn to mark as disposed
+  node.fn = undefined;
+
+  throwCleanupErrors(errors);
+}
+
+/**
+ * Cleans up a node's cleanups and disposes all children, but does not
+ * remove the node from its parent or unlink from sources.
+ * Used during effect re-run to clean up before re-executing.
+ */
+function cleanupNode(node: Computation): void {
+  const errors = runCleanups(node);
+  disposeChildren(node);
+  throwCleanupErrors(errors);
 }
 
 /**
@@ -149,18 +250,21 @@ function trackRead(signal: Computation): void {
 }
 
 /**
- * Executes a computation's function with dependency tracking.
- * Saves and restores the tracking context to support nested effects.
+ * Executes a computation's function with dependency and ownership tracking.
+ * Saves and restores context to support nested effects/memos.
  * For memos, stores the return value in node.value.
+ * Sets currentOwner so any created computations become children of this node.
  */
 function executeWithTracking(node: Computation): void {
   if (!node.fn) return;
 
   const prevObserver = currentObserver;
   const prevIndex = currentSourcesIndex;
+  const prevOwner = currentOwner;
 
   currentObserver = node;
   currentSourcesIndex = 0;
+  currentOwner = node;
 
   try {
     node.value = node.fn();
@@ -175,6 +279,7 @@ function executeWithTracking(node: Computation): void {
 
     currentObserver = prevObserver;
     currentSourcesIndex = prevIndex;
+    currentOwner = prevOwner;
   }
 }
 
@@ -213,9 +318,11 @@ function updateIfNecessary(node: Computation): void {
 /**
  * Re-executes a computation with dependency tracking.
  * For memos, stores the computed value and stops propagation if unchanged.
+ * Cleans up node's cleanups and disposes children before re-executing.
  */
 function update(node: Computation): void {
-  // TODO(Task 1.5): Run cleanups and dispose children before re-executing
+  // Run cleanups and dispose children before re-executing
+  cleanupNode(node);
   updatingNodes.add(node);
 
   try {
@@ -300,7 +407,7 @@ export function createSignal<T>(initial: T): [Accessor<T>, Setter<T>] {
     state: Clean,
     sources: null,
     observers: null,
-    owner: currentOwner,
+    owner: null, // Signals don't participate in ownership - they're passive data containers
     children: [],
     cleanups: [],
     mounts: [],
@@ -353,7 +460,7 @@ export function createEffect(fn: () => void): void {
     effect: true,
   };
 
-  // TODO(Task 1.5): Register with owner for disposal
+  // Register with owner for disposal
   if (currentOwner) {
     currentOwner.children.push(node);
   }
@@ -404,6 +511,61 @@ export function createMemo<T>(fn: () => T): Accessor<T> {
   };
 
   return getter;
+}
+
+/**
+ * Creates an ownership boundary for reactive computations.
+ *
+ * All effects and memos created within the callback become children of this
+ * root. When dispose is called, all children are cleaned up recursively.
+ *
+ * The dispose function is passed to the callback and can be called to clean
+ * up the entire subtree. The caller is responsible for calling dispose;
+ * it is not automatic.
+ */
+export function createRoot<T>(fn: (dispose: () => void) => T): T {
+  const root: Computation = {
+    fn: undefined, // Roots have no fn
+    value: undefined,
+    state: Clean,
+    sources: null,
+    observers: null,
+    owner: currentOwner,
+    children: [],
+    cleanups: [],
+    mounts: [],
+    effect: false,
+  };
+
+  // Register with parent owner if exists
+  if (currentOwner) {
+    currentOwner.children.push(root);
+  }
+
+  const prevOwner = currentOwner;
+  currentOwner = root;
+
+  try {
+    return fn(() => dispose(root));
+  } finally {
+    currentOwner = prevOwner;
+  }
+}
+
+/**
+ * Registers a cleanup callback to run when the owning computation re-runs
+ * or is disposed.
+ *
+ * Must be called within a reactive context (inside createRoot, createEffect,
+ * or createMemo). Cleanups run in reverse order (LIFO).
+ *
+ * @throws Error if called outside a reactive context
+ */
+export function onCleanup(fn: () => void): void {
+  if (!currentOwner) {
+    throw new Error("onCleanup must be called within a reactive context");
+  }
+  currentOwner.cleanups.push(fn);
 }
 
 // Export state constants and Computation for tests (internal use)

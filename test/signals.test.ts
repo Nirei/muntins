@@ -7,7 +7,9 @@ import {
   Dirty,
   createEffect,
   createMemo,
+  createRoot,
   createSignal,
+  onCleanup,
 } from "../src/core/signals.ts";
 
 describe("signals core types", () => {
@@ -426,8 +428,201 @@ describe("createMemo", () => {
   });
 });
 
+describe("createRoot", () => {
+  it("provides working dispose function", () => {
+    let disposed = false;
+    createRoot((dispose) => {
+      onCleanup(() => {
+        disposed = true;
+      });
+      dispose();
+    });
+    assert.strictEqual(disposed, true);
+  });
+
+  it("dispose stops nested effects", () => {
+    const [count, setCount] = createSignal(0);
+    let effectRuns = 0;
+
+    const dispose = createRoot((dispose) => {
+      createEffect(() => {
+        count();
+        effectRuns++;
+      });
+      return dispose;
+    });
+
+    assert.strictEqual(effectRuns, 1);
+    setCount(1);
+    assert.strictEqual(effectRuns, 2);
+
+    dispose();
+    setCount(2);
+    assert.strictEqual(effectRuns, 2); // effect no longer runs
+  });
+
+  it("nested roots: inner dispose does not affect outer", () => {
+    const [count, setCount] = createSignal(0);
+    let outerRuns = 0;
+    let innerRuns = 0;
+
+    createRoot(() => {
+      createEffect(() => {
+        count();
+        outerRuns++;
+      });
+
+      const disposeInner = createRoot((dispose) => {
+        createEffect(() => {
+          count();
+          innerRuns++;
+        });
+        return dispose;
+      });
+
+      disposeInner();
+    });
+
+    setCount(1);
+    assert.strictEqual(outerRuns, 2); // outer still runs
+    assert.strictEqual(innerRuns, 1); // inner stopped
+  });
+
+  it("returns value from fn", () => {
+    const result = createRoot(() => {
+      return 42;
+    });
+    assert.strictEqual(result, 42);
+  });
+
+  it("double dispose is safe (no-op)", () => {
+    let cleanupCount = 0;
+    const dispose = createRoot((dispose) => {
+      onCleanup(() => {
+        cleanupCount++;
+      });
+      return dispose;
+    });
+
+    dispose();
+    assert.strictEqual(cleanupCount, 1);
+
+    dispose(); // Should not throw or run cleanup again
+    assert.strictEqual(cleanupCount, 1);
+  });
+});
+
+describe("onCleanup", () => {
+  it("runs on effect re-run", () => {
+    const [count, setCount] = createSignal(0);
+    let cleanupRan = false;
+
+    createRoot(() => {
+      createEffect(() => {
+        count();
+        onCleanup(() => {
+          cleanupRan = true;
+        });
+      });
+    });
+
+    assert.strictEqual(cleanupRan, false);
+    setCount(1); // triggers re-run
+    assert.strictEqual(cleanupRan, true);
+  });
+
+  it("runs on dispose", () => {
+    let cleanupRan = false;
+
+    const dispose = createRoot((dispose) => {
+      createEffect(() => {
+        onCleanup(() => {
+          cleanupRan = true;
+        });
+      });
+      return dispose;
+    });
+
+    assert.strictEqual(cleanupRan, false);
+    dispose();
+    assert.strictEqual(cleanupRan, true);
+  });
+
+  it("multiple cleanups run in reverse order", () => {
+    const order: number[] = [];
+
+    createRoot((dispose) => {
+      createEffect(() => {
+        onCleanup(() => order.push(1));
+        onCleanup(() => order.push(2));
+        onCleanup(() => order.push(3));
+      });
+      dispose();
+    });
+
+    assert.deepStrictEqual(order, [3, 2, 1]);
+  });
+
+  it("effect re-run disposes children", () => {
+    const [cond, setCond] = createSignal(true);
+    let innerDisposed = false;
+
+    createRoot(() => {
+      createEffect(() => {
+        if (cond()) {
+          createEffect(() => {
+            onCleanup(() => {
+              innerDisposed = true;
+            });
+          });
+        }
+      });
+    });
+
+    assert.strictEqual(innerDisposed, false);
+    setCond(false); // outer re-runs, inner should be disposed
+    assert.strictEqual(innerDisposed, true);
+  });
+
+  it("throws when called outside reactive context", () => {
+    assert.throws(() => onCleanup(() => {}), { message: /reactive context/ });
+  });
+
+  it("continues running cleanups after one throws", () => {
+    const order: number[] = [];
+
+    const dispose = createRoot((dispose) => {
+      onCleanup(() => order.push(1));
+      onCleanup(() => {
+        throw new Error("cleanup error");
+      });
+      onCleanup(() => order.push(3));
+      return dispose;
+    });
+
+    assert.throws(() => dispose());
+    assert.deepStrictEqual(order, [3, 1]); // All cleanups ran (reverse order)
+  });
+
+  it("nested effect cleanups run in correct order", () => {
+    const order: number[] = [];
+
+    createRoot((dispose) => {
+      createEffect(() => {
+        onCleanup(() => order.push(1));
+        createEffect(() => {
+          onCleanup(() => order.push(2));
+        });
+      });
+      dispose();
+    });
+
+    // Parent cleanup runs first, then children are disposed
+    assert.deepStrictEqual(order, [1, 2]);
+  });
+});
+
 describe("signals", () => {
   it.todo("batch");
   it.todo("untrack");
-  it.todo("createRoot");
 });
