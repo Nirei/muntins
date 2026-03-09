@@ -5,6 +5,7 @@ import {
   Clean,
   type Computation,
   Dirty,
+  createEffect,
   createSignal,
 } from "../src/core/signals.ts";
 
@@ -143,13 +144,164 @@ describe("createSignal", () => {
     assert.strictEqual(c(), 30);
   });
 
-  // Tests that require createEffect - marked as todo until Task 1.3
-  it.todo("setter with same value does not trigger observers");
-  it.todo("setting marks observers as Dirty");
+  it("setter with same value does not trigger observers", () => {
+    const [count, setCount] = createSignal(5);
+    let effectRuns = 0;
+    createEffect(() => {
+      count();
+      effectRuns++;
+    });
+    assert.strictEqual(effectRuns, 1);
+
+    // Set to same value - should not trigger
+    setCount(5);
+    assert.strictEqual(effectRuns, 1);
+
+    // Set to different value - should trigger
+    setCount(6);
+    assert.strictEqual(effectRuns, 2);
+  });
+
+  it("setting marks observers as Dirty", () => {
+    const [count, setCount] = createSignal(0);
+    let observed = -1;
+    createEffect(() => {
+      observed = count();
+    });
+    assert.strictEqual(observed, 0);
+
+    // Setting triggers the effect, proving the observer was marked dirty
+    setCount(42);
+    assert.strictEqual(observed, 42);
+  });
+});
+
+describe("createEffect", () => {
+  it("runs immediately on creation", () => {
+    let ran = false;
+    createEffect(() => {
+      ran = true;
+    });
+    assert.strictEqual(ran, true);
+  });
+
+  it("re-runs when dependency changes", () => {
+    const [count, setCount] = createSignal(0);
+    let value = -1;
+    createEffect(() => {
+      value = count();
+    });
+    assert.strictEqual(value, 0);
+    setCount(1);
+    assert.strictEqual(value, 1);
+  });
+
+  it("tracks multiple dependencies", () => {
+    const [a, setA] = createSignal(1);
+    const [b, setB] = createSignal(2);
+    let sum = 0;
+    createEffect(() => {
+      sum = a() + b();
+    });
+    assert.strictEqual(sum, 3);
+    setA(10);
+    assert.strictEqual(sum, 12);
+    setB(20);
+    assert.strictEqual(sum, 30);
+  });
+
+  it("cleans up old dependencies", () => {
+    const [cond, setCond] = createSignal(true);
+    const [a, setA] = createSignal(1);
+    const [b, setB] = createSignal(2);
+    let runs = 0;
+    createEffect(() => {
+      runs++;
+      return cond() ? a() : b();
+    });
+    assert.strictEqual(runs, 1);
+
+    setA(10); // should trigger (a is tracked)
+    assert.strictEqual(runs, 2);
+
+    setCond(false); // now tracks b, not a
+    assert.strictEqual(runs, 3);
+
+    setA(20); // should NOT trigger (a no longer tracked)
+    assert.strictEqual(runs, 3);
+
+    setB(30); // should trigger (b is now tracked)
+    assert.strictEqual(runs, 4);
+  });
+
+  it("does not re-run if signal set to same value", () => {
+    const [count, setCount] = createSignal(0);
+    let runs = 0;
+    createEffect(() => {
+      count();
+      runs++;
+    });
+    assert.strictEqual(runs, 1);
+    setCount(0); // same value
+    assert.strictEqual(runs, 1);
+  });
+
+  it("diamond problem: effect runs once with correct values", () => {
+    // NOTE: This test uses plain functions, NOT memos. It does NOT actually
+    // test the diamond problem correctly because plain functions re-execute
+    // on every call (no caching). The effect tracks `a` twice (through b()
+    // and c()), but both reads happen in a single effect execution.
+    //
+    // The TRUE diamond problem test is in Task 1.4 (createMemo) where memos
+    // prevent duplicate computation. This test just verifies the effect runs
+    // once per signal change, not that diamond dependencies are deduplicated.
+    const [a, setA] = createSignal(1);
+    const b = () => a() * 2; // plain function, NOT a memo
+    const c = () => a() * 3; // plain function, NOT a memo
+    let runs = 0;
+    let result = 0;
+    createEffect(() => {
+      runs++;
+      result = b() + c();
+    });
+    assert.strictEqual(runs, 1);
+    assert.strictEqual(result, 5); // 2 + 3
+
+    setA(2);
+    assert.strictEqual(runs, 2); // only one re-run
+    assert.strictEqual(result, 10); // 4 + 6
+  });
+
+  it("supports nested effects", () => {
+    const [outer, setOuter] = createSignal(1);
+    const [inner, setInner] = createSignal(10);
+    let outerRuns = 0;
+    let innerRuns = 0;
+    let outerValue = 0;
+    let innerValue = 0;
+
+    createEffect(() => {
+      outerRuns++;
+      outerValue = outer();
+      createEffect(() => {
+        innerRuns++;
+        innerValue = inner();
+      });
+    });
+
+    assert.strictEqual(outerRuns, 1);
+    assert.strictEqual(innerRuns, 1);
+    assert.strictEqual(outerValue, 1);
+    assert.strictEqual(innerValue, 10);
+
+    setInner(20);
+    assert.strictEqual(outerRuns, 1); // outer should not re-run
+    assert.strictEqual(innerRuns, 2);
+    assert.strictEqual(innerValue, 20);
+  });
 });
 
 describe("signals", () => {
-  it.todo("createEffect");
   it.todo("createMemo");
   it.todo("batch");
   it.todo("untrack");
