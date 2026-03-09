@@ -219,79 +219,48 @@ function clamp(
 }
 
 /**
- * Calculates intrinsic width based on children sizes.
- * Row: sum of children widths + gaps
- * Column: max of children widths
+ * Calculates intrinsic size for a given axis based on children sizes.
+ * Main axis: sum of children sizes + gaps
+ * Cross axis: max of children sizes
  */
-function calculateIntrinsicWidth(box: LayoutBox): number {
+function calculateIntrinsicSize(
+  box: LayoutBox,
+  axis: "width" | "height",
+): number {
   const style = box.style;
-  const paddingStart = style.paddingStart;
-  const paddingEnd = style.paddingEnd;
+  const isMainAxis =
+    (axis === "width" && style.flexDirection === "row") ||
+    (axis === "height" && style.flexDirection === "column");
 
-  let contentWidth = 0;
+  // Select padding and margin properties based on axis
+  const [paddingBefore, paddingAfter, marginBefore, marginAfter] =
+    axis === "width"
+      ? (["paddingStart", "paddingEnd", "marginStart", "marginEnd"] as const)
+      : (["paddingTop", "paddingBottom", "marginTop", "marginBottom"] as const);
+
+  let contentSize = 0;
   let childCount = 0;
 
   for (const child of box.children) {
     if (child.style.display === "none") continue;
 
-    const marginStart = child.style.marginStart;
-    const marginEnd = child.style.marginEnd;
-    const childWidth = child.width + marginStart + marginEnd;
+    const childSize =
+      child[axis] + child.style[marginBefore] + child.style[marginAfter];
 
-    if (style.flexDirection === "row") {
-      // Row: sum of children widths
-      contentWidth += childWidth;
+    if (isMainAxis) {
+      contentSize += childSize;
       childCount++;
     } else {
-      // Column: max of children widths
-      contentWidth = Math.max(contentWidth, childWidth);
+      contentSize = Math.max(contentSize, childSize);
     }
   }
 
-  // Add gaps between children (row direction only)
-  if (style.flexDirection === "row" && childCount > 1) {
-    contentWidth += (childCount - 1) * style.gap;
+  // Add gaps between children (main axis only)
+  if (isMainAxis && childCount > 1) {
+    contentSize += (childCount - 1) * style.gap;
   }
 
-  return contentWidth + paddingStart + paddingEnd;
-}
-
-/**
- * Calculates intrinsic height based on children sizes.
- * Column: sum of children heights + gaps
- * Row: max of children heights
- */
-function calculateIntrinsicHeight(box: LayoutBox): number {
-  const style = box.style;
-  const paddingTop = style.paddingTop;
-  const paddingBottom = style.paddingBottom;
-
-  let contentHeight = 0;
-  let childCount = 0;
-
-  for (const child of box.children) {
-    if (child.style.display === "none") continue;
-
-    const marginTop = child.style.marginTop;
-    const marginBottom = child.style.marginBottom;
-    const childHeight = child.height + marginTop + marginBottom;
-
-    if (style.flexDirection === "column") {
-      // Column: sum of children heights
-      contentHeight += childHeight;
-      childCount++;
-    } else {
-      // Row: max of children heights
-      contentHeight = Math.max(contentHeight, childHeight);
-    }
-  }
-
-  // Add gaps between children (column direction only)
-  if (style.flexDirection === "column" && childCount > 1) {
-    contentHeight += (childCount - 1) * style.gap;
-  }
-
-  return contentHeight + paddingTop + paddingBottom;
+  return contentSize + style[paddingBefore] + style[paddingAfter];
 }
 
 /**
@@ -351,10 +320,10 @@ function resolveIntrinsicSize(box: LayoutBox): void {
   // 3. Calculate from children (for containers)
   // Root's auto dimensions use available space (set before this pass), not intrinsic size
   if (style.width === "auto" && !isRoot) {
-    box.width = calculateIntrinsicWidth(box);
+    box.width = calculateIntrinsicSize(box, "width");
   }
   if (style.height === "auto" && !isRoot) {
-    box.height = calculateIntrinsicHeight(box);
+    box.height = calculateIntrinsicSize(box, "height");
   }
 
   // 4. Clamp to min/max

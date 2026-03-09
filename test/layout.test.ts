@@ -450,7 +450,7 @@ describe("intrinsic size resolution", () => {
     assert.strictEqual(result.children[0].width, 25);
   });
 
-  it("includes child margins in intrinsic size", () => {
+  it("includes child margins in intrinsic size (row)", () => {
     const node: LayoutNode = {
       style: {},
       children: [
@@ -466,6 +466,45 @@ describe("intrinsic size resolution", () => {
 
     // 10 + 2 + 3 = 15
     assert.strictEqual(result.children[0].width, 15);
+  });
+
+  it("includes child margins in intrinsic size (column)", () => {
+    const node: LayoutNode = {
+      style: {},
+      children: [
+        {
+          style: { flexDirection: "column" },
+          children: [
+            { style: { width: 10, height: 5, marginTop: 2, marginBottom: 3 } },
+          ],
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // 5 + 2 + 3 = 10
+    assert.strictEqual(result.children[0].height, 10);
+  });
+
+  it("skips display:none at edges correctly for gap calculation", () => {
+    const node: LayoutNode = {
+      style: {},
+      children: [
+        {
+          style: { flexDirection: "row", gap: 2 },
+          children: [
+            { style: { width: 10, height: 5, display: "none" } },
+            { style: { width: 10, height: 5 } },
+            { style: { width: 10, height: 5 } },
+            { style: { width: 10, height: 5, display: "none" } },
+          ],
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Only 2 visible children: 10 + 10 + 2 gap = 22
+    assert.strictEqual(result.children[0].width, 22);
   });
 
   it("measure function receives available space constraints", () => {
