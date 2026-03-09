@@ -115,12 +115,7 @@ function dispose(node: Computation): void {
   // Remove from all sources' observer lists
   if (node.sources) {
     for (const source of node.sources) {
-      if (source.observers) {
-        const idx = source.observers.indexOf(node);
-        if (idx >= 0) {
-          source.observers.splice(idx, 1);
-        }
-      }
+      unlinkSourceFromObserver(source, node);
     }
     node.sources = null;
   }
@@ -331,7 +326,7 @@ function update(node: Computation): void {
     executeWithTracking(node);
 
     // Run mount callbacks after initial execution (mounts is null after first drain)
-    if (node.mounts && node.mounts.length > 0) {
+    if (node.mounts) {
       const mounts = node.mounts;
       node.mounts = null; // Mark as drained so future onMount calls are ignored
 
@@ -345,9 +340,6 @@ function update(node: Computation): void {
       } finally {
         currentOwner = prevOwner;
       }
-    } else if (node.mounts) {
-      // No mounts registered, but still mark as drained for future calls
-      node.mounts = null;
     }
 
     // Memos: equality check for stopping propagation
