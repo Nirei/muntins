@@ -11,6 +11,7 @@ import {
   createRoot,
   createSignal,
   onCleanup,
+  onMount,
   untrack,
 } from "../src/core/signals.ts";
 
@@ -830,5 +831,117 @@ describe("untrack", () => {
     // b was inside untrack, should NOT trigger
     setB(20);
     assert.strictEqual(runs, 2);
+  });
+});
+
+describe("onMount", () => {
+  it("runs after effect initial execution", () => {
+    const order: string[] = [];
+
+    createRoot(() => {
+      createEffect(() => {
+        order.push("effect");
+        onMount(() => {
+          order.push("mount");
+        });
+      });
+    });
+
+    assert.deepStrictEqual(order, ["effect", "mount"]);
+  });
+
+  it("does not run on effect re-runs", () => {
+    const [count, setCount] = createSignal(0);
+    let mountRuns = 0;
+
+    createRoot(() => {
+      createEffect(() => {
+        count();
+        onMount(() => {
+          mountRuns++;
+        });
+      });
+    });
+
+    assert.strictEqual(mountRuns, 1);
+
+    setCount(1);
+    assert.strictEqual(mountRuns, 1); // still 1
+
+    setCount(2);
+    assert.strictEqual(mountRuns, 1); // still 1
+  });
+
+  it("multiple onMount callbacks run in order", () => {
+    const order: number[] = [];
+
+    createRoot(() => {
+      createEffect(() => {
+        onMount(() => order.push(1));
+        onMount(() => order.push(2));
+        onMount(() => order.push(3));
+      });
+    });
+
+    assert.deepStrictEqual(order, [1, 2, 3]);
+  });
+
+  it("onMount can register onCleanup", () => {
+    let cleanupRan = false;
+
+    const dispose = createRoot((dispose) => {
+      createEffect(() => {
+        onMount(() => {
+          onCleanup(() => {
+            cleanupRan = true;
+          });
+        });
+      });
+      return dispose;
+    });
+
+    assert.strictEqual(cleanupRan, false);
+    dispose();
+    assert.strictEqual(cleanupRan, true);
+  });
+
+  it("onMount in nested effect", () => {
+    const [cond, setCond] = createSignal(true);
+    let mountRuns = 0;
+
+    createRoot(() => {
+      createEffect(() => {
+        if (cond()) {
+          createEffect(() => {
+            onMount(() => {
+              mountRuns++;
+            });
+          });
+        }
+      });
+    });
+
+    assert.strictEqual(mountRuns, 1);
+
+    setCond(false); // disposes inner effect
+    setCond(true); // creates NEW inner effect
+
+    assert.strictEqual(mountRuns, 2); // new effect's onMount ran
+  });
+
+  it("warns when called outside reactive context", () => {
+    // Capture console.warn
+    const originalWarn = console.warn;
+    let warnMessage = "";
+    console.warn = (msg: string) => {
+      warnMessage = msg;
+    };
+
+    try {
+      onMount(() => {});
+      assert.ok(warnMessage.includes("outside reactive context"));
+    } finally {
+      console.warn = originalWarn;
+    }
   });
 });

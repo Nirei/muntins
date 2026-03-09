@@ -19,7 +19,7 @@ interface Computation<T = unknown> {
   owner: Computation | null; // parent in ownership tree
   children: Computation[]; // owned computations
   cleanups: (() => void)[]; // cleanup callbacks
-  mounts: (() => void)[]; // onMount callbacks (run once after initial execution)
+  mounts: (() => void)[] | null; // onMount callbacks (run once after initial execution, null after drained)
   effect: boolean; // true for effects, false for memos/signals
 }
 
@@ -319,6 +319,7 @@ function updateIfNecessary(node: Computation): void {
  * Re-executes a computation with dependency tracking.
  * For memos, stores the computed value and stops propagation if unchanged.
  * Cleans up node's cleanups and disposes children before re-executing.
+ * Runs onMount callbacks after initial execution.
  */
 function update(node: Computation): void {
   // Run cleanups and dispose children before re-executing
@@ -328,6 +329,26 @@ function update(node: Computation): void {
   try {
     const oldValue = node.value;
     executeWithTracking(node);
+
+    // Run mount callbacks after initial execution (mounts is null after first drain)
+    if (node.mounts && node.mounts.length > 0) {
+      const mounts = node.mounts;
+      node.mounts = null; // Mark as drained so future onMount calls are ignored
+
+      // Run mounts in owner context so onCleanup works inside mount callbacks
+      const prevOwner = currentOwner;
+      currentOwner = node;
+      try {
+        for (const mount of mounts) {
+          mount();
+        }
+      } finally {
+        currentOwner = prevOwner;
+      }
+    } else if (node.mounts) {
+      // No mounts registered, but still mark as drained for future calls
+      node.mounts = null;
+    }
 
     // Memos: equality check for stopping propagation
     // If value changed, mark observers Dirty so they recompute.
@@ -618,6 +639,31 @@ export function onCleanup(fn: () => void): void {
     throw new Error("onCleanup must be called within a reactive context");
   }
   currentOwner.cleanups.push(fn);
+}
+
+/**
+ * Registers a callback that runs once after the owning computation's
+ * initial execution completes.
+ *
+ * Unlike effects, onMount callbacks do not re-run when dependencies change.
+ * This is useful for one-time setup like DOM manipulation or subscribing to
+ * external resources. Callbacks registered with onMount can use onCleanup
+ * to register cleanup logic that runs when the owner is disposed.
+ *
+ * Must be called within a reactive context (inside createRoot, createEffect,
+ * or createMemo). If called outside a reactive context, a warning is logged
+ * and the callback is not registered.
+ */
+export function onMount(fn: () => void): void {
+  if (!currentOwner) {
+    console.warn("onMount called outside reactive context");
+    return;
+  }
+  // mounts is null after initial execution has completed (mounts were drained)
+  // Only register mount callbacks during initial execution
+  if (currentOwner.mounts) {
+    currentOwner.mounts.push(fn);
+  }
 }
 
 // Export state constants and Computation for tests (internal use)
