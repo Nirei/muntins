@@ -360,6 +360,9 @@ function resolveIntrinsicSize(box: LayoutBox): void {
 /**
  * Calculates available main-axis space after accounting for fixed-size children,
  * padding, and gaps.
+ *
+ * IMPORTANT: For space-between/around/evenly justification, style.gap is ignored
+ * because the gap is computed dynamically from remaining space.
  */
 function calculateAvailableMainSpace(box: LayoutBox): number {
   const style = box.style;
@@ -384,7 +387,13 @@ function calculateAvailableMainSpace(box: LayoutBox): number {
   }
 
   // Subtract gaps between visible children
-  if (visibleChildCount > 1) {
+  // For space-* justification, gap is computed dynamically, not from style.gap
+  const isSpaceJustify =
+    style.justifyContent === "space-between" ||
+    style.justifyContent === "space-around" ||
+    style.justifyContent === "space-evenly";
+
+  if (visibleChildCount > 1 && !isSpaceJustify) {
     mainSpace -= (visibleChildCount - 1) * style.gap;
   }
 
@@ -471,6 +480,208 @@ function distributeShrink(box: LayoutBox, overflow: number): void {
 }
 
 /**
+ * Calculates the remaining space after subtracting children sizes.
+ * Used for justifyContent spacing calculations.
+ */
+function calculateRemainingSpace(
+  box: LayoutBox,
+  visibleChildren: LayoutBox[],
+): number {
+  const style = box.style;
+  const isRow = style.flexDirection === "row";
+
+  // Container size minus padding
+  const paddingMain = isRow
+    ? style.paddingStart + style.paddingEnd
+    : style.paddingTop + style.paddingBottom;
+  let remaining = (isRow ? box.width : box.height) - paddingMain;
+
+  // Subtract children sizes and margins
+  for (const child of visibleChildren) {
+    const childMainSize = isRow ? child.width : child.height;
+    const childMarginMain = isRow
+      ? child.style.marginStart + child.style.marginEnd
+      : child.style.marginTop + child.style.marginBottom;
+    remaining -= childMainSize + childMarginMain;
+  }
+
+  // Note: For space-* justification, we ignore style.gap entirely.
+  // For other justification values, gaps are added during positioning.
+  // We DO NOT subtract gaps here; that happens in applyJustifyContent.
+
+  return Math.max(0, remaining);
+}
+
+/**
+ * Positions children along the main axis based on justifyContent.
+ *
+ * IMPORTANT: For space-between/around/evenly, the gap is computed dynamically
+ * from available space. style.gap is only used for flex-start/end/center.
+ * This prevents the double-counting bug where both computed and explicit gaps
+ * would be applied.
+ */
+function applyJustifyContent(
+  box: LayoutBox,
+  visibleChildren: LayoutBox[],
+): void {
+  const style = box.style;
+  const isRow = style.flexDirection === "row";
+  const count = visibleChildren.length;
+
+  if (count === 0) return;
+
+  // For non-space justification, subtract gaps from remaining space
+  const isSpaceJustify =
+    style.justifyContent === "space-between" ||
+    style.justifyContent === "space-around" ||
+    style.justifyContent === "space-evenly";
+
+  let remaining = calculateRemainingSpace(box, visibleChildren);
+
+  // For non-space justification, subtract explicit gaps
+  if (!isSpaceJustify && count > 1) {
+    remaining -= (count - 1) * style.gap;
+  }
+
+  // Starting position (after padding)
+  let pos = isRow ? style.paddingStart : style.paddingTop;
+
+  // Adjust starting position based on justifyContent
+  switch (style.justifyContent) {
+    case "flex-start":
+      // Default: items at start
+      break;
+
+    case "flex-end":
+      pos += remaining;
+      break;
+
+    case "center":
+      pos += remaining / 2;
+      break;
+
+    case "space-between":
+      // No initial offset, gaps between items
+      break;
+
+    case "space-around":
+      pos += remaining / count / 2;
+      break;
+
+    case "space-evenly":
+      pos += remaining / (count + 1);
+      break;
+  }
+
+  // Calculate gap between items
+  let gap: number;
+
+  if (style.justifyContent === "space-between") {
+    gap = count > 1 ? remaining / (count - 1) : 0;
+  } else if (style.justifyContent === "space-around") {
+    gap = remaining / count;
+  } else if (style.justifyContent === "space-evenly") {
+    gap = remaining / (count + 1);
+  } else {
+    // flex-start, flex-end, center: use explicit gap
+    gap = style.gap;
+  }
+
+  // Position each child along main axis.
+  // We compute positions from index rather than accumulating, to avoid
+  // fractional drift when gap is not an integer.
+  for (let i = 0; i < visibleChildren.length; i++) {
+    const child = visibleChildren[i];
+    const marginStart = isRow ? child.style.marginStart : child.style.marginTop;
+
+    // Sum sizes of all preceding children (including their margins)
+    let precedingSize = 0;
+    for (let j = 0; j < i; j++) {
+      const prev = visibleChildren[j];
+      const prevMainSize = isRow ? prev.width : prev.height;
+      const prevMarginStart = isRow
+        ? prev.style.marginStart
+        : prev.style.marginTop;
+      const prevMarginEnd = isRow
+        ? prev.style.marginEnd
+        : prev.style.marginBottom;
+      precedingSize += prevMarginStart + prevMainSize + prevMarginEnd;
+    }
+
+    // Position = start offset + preceding children + (i gaps)
+    const childPos = pos + precedingSize + i * gap + marginStart;
+
+    if (isRow) {
+      child.x = Math.round(childPos);
+    } else {
+      child.y = Math.round(childPos);
+    }
+  }
+}
+
+/**
+ * Positions children along the cross axis based on alignItems/alignSelf.
+ * Also handles stretch when child cross-axis dimension is "auto".
+ */
+function applyAlignItems(box: LayoutBox, visibleChildren: LayoutBox[]): void {
+  const style = box.style;
+  const isRow = style.flexDirection === "row";
+
+  // Cross-axis available space (after padding)
+  const crossStart = isRow ? style.paddingTop : style.paddingStart;
+  const crossSize = isRow
+    ? box.height - style.paddingTop - style.paddingBottom
+    : box.width - style.paddingStart - style.paddingEnd;
+
+  for (const child of visibleChildren) {
+    // Check for alignSelf override
+    const align =
+      child.style.alignSelf === "auto"
+        ? style.alignItems
+        : child.style.alignSelf;
+
+    const marginStart = isRow ? child.style.marginTop : child.style.marginStart;
+    const marginEnd = isRow ? child.style.marginBottom : child.style.marginEnd;
+    const childCrossSize = isRow ? child.height : child.width;
+
+    let crossPos: number;
+
+    switch (align) {
+      case "flex-start":
+        crossPos = crossStart + marginStart;
+        break;
+
+      case "flex-end":
+        crossPos = crossStart + crossSize - childCrossSize - marginEnd;
+        break;
+
+      case "center":
+        crossPos = crossStart + (crossSize - childCrossSize) / 2;
+        break;
+
+      case "stretch":
+        crossPos = crossStart + marginStart;
+        // Only stretch if dimension is "auto" (not explicit number)
+        if (isRow && child.style.height === "auto") {
+          child.height = crossSize - marginStart - marginEnd;
+        } else if (!isRow && child.style.width === "auto") {
+          child.width = crossSize - marginStart - marginEnd;
+        }
+        break;
+
+      default:
+        crossPos = crossStart + marginStart;
+    }
+
+    if (isRow) {
+      child.y = Math.round(crossPos);
+    } else {
+      child.x = Math.round(crossPos);
+    }
+  }
+}
+
+/**
  * Pass 3: Resolves flex distribution and positions children.
  *
  * For each container:
@@ -478,7 +689,7 @@ function distributeShrink(box: LayoutBox, overflow: number): void {
  * 2. If positive, distribute with flexGrow
  * 3. If negative, shrink with flexShrink
  * 4. Clamp all children to min/max bounds
- * 5. Position children (basic flex-start for now; alignment in Task 2.5)
+ * 5. Position children using justifyContent and alignItems
  */
 function resolveFlexAndPosition(box: LayoutBox): void {
   if (box.children.length === 0) return;
@@ -496,7 +707,8 @@ function resolveFlexAndPosition(box: LayoutBox): void {
     distributeShrink(box, -availableSpace);
   }
 
-  // 3. Clamp all children to min/max bounds
+  // 3. Collect visible children and clamp to min/max bounds
+  const visibleChildren: LayoutBox[] = [];
   for (const child of box.children) {
     if (child.style.display === "none") continue;
     child.width = clamp(
@@ -509,44 +721,17 @@ function resolveFlexAndPosition(box: LayoutBox): void {
       child.style.minHeight,
       child.style.maxHeight,
     );
+    visibleChildren.push(child);
   }
 
-  // 4. Position children (basic flex-start positioning)
-  // Full justifyContent/alignItems will be added in Task 2.5
-  let mainPos = isRow ? style.paddingStart : style.paddingTop;
+  // 4. Position children using justifyContent and alignItems
+  applyJustifyContent(box, visibleChildren);
+  applyAlignItems(box, visibleChildren);
 
-  for (const child of box.children) {
-    if (child.style.display === "none") continue;
-
-    const marginStart = isRow ? child.style.marginStart : child.style.marginTop;
-    const marginEnd = isRow ? child.style.marginEnd : child.style.marginBottom;
-    const childMainSize = isRow ? child.width : child.height;
-
-    // Set main-axis position
-    if (isRow) {
-      child.x = mainPos + marginStart;
-    } else {
-      child.y = mainPos + marginStart;
-    }
-
-    // Basic cross-axis positioning (flex-start)
-    // Full alignment will be added in Task 2.5
-    const crossStart = isRow ? style.paddingTop : style.paddingStart;
-    const crossMarginStart = isRow
-      ? child.style.marginTop
-      : child.style.marginStart;
-    if (isRow) {
-      child.y = crossStart + crossMarginStart;
-    } else {
-      child.x = crossStart + crossMarginStart;
-    }
-
-    // Calculate screen coordinates
+  // 5. Calculate screen coordinates for all children
+  for (const child of visibleChildren) {
     child.screenX = (box.screenX ?? 0) + child.x;
     child.screenY = (box.screenY ?? 0) + child.y;
-
-    // Advance main position
-    mainPos += marginStart + childMainSize + marginEnd + style.gap;
   }
 }
 
