@@ -27,7 +27,7 @@ interface Computation<T = unknown> {
 let currentObserver: Computation | null = null;
 let currentSourcesIndex = 0;
 let currentOwner: Computation | null = null;
-const batchDepth = 0;
+let batchDepth = 0;
 const batchQueue: Set<Computation> = new Set();
 
 // Circular dependency detection: tracks nodes currently being updated
@@ -387,6 +387,58 @@ function runTopLevelEffect(node: Computation): void {
   } finally {
     effectState.isRunning = false;
     pendingEffects.clear();
+  }
+}
+
+/**
+ * Flushes all pending effects from the batch queue.
+ * Called when the outermost batch completes.
+ */
+function flushBatchQueue(): void {
+  for (const node of batchQueue) {
+    updateIfNecessary(node);
+  }
+  batchQueue.clear();
+}
+
+/**
+ * Defers effect execution until all signal writes complete.
+ *
+ * When multiple signals are updated within a batch, effects that depend on
+ * any of those signals will only run once at the end of the batch, seeing
+ * all the final values. Nested batches are supported - only the outermost
+ * batch triggers the flush.
+ *
+ * Returns the value returned by the provided function.
+ */
+export function batch<T>(fn: () => T): T {
+  batchDepth++;
+  try {
+    return fn();
+  } finally {
+    batchDepth--;
+    if (batchDepth === 0) {
+      flushBatchQueue();
+    }
+  }
+}
+
+/**
+ * Reads signals without creating dependencies.
+ *
+ * Any signal reads within the provided function will not be tracked,
+ * meaning the enclosing effect or memo will not re-run when those
+ * signals change.
+ *
+ * Returns the value returned by the provided function.
+ */
+export function untrack<T>(fn: () => T): T {
+  const prev = currentObserver;
+  currentObserver = null;
+  try {
+    return fn();
+  } finally {
+    currentObserver = prev;
   }
 }
 

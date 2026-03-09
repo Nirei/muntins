@@ -5,11 +5,13 @@ import {
   Clean,
   type Computation,
   Dirty,
+  batch,
   createEffect,
   createMemo,
   createRoot,
   createSignal,
   onCleanup,
+  untrack,
 } from "../src/core/signals.ts";
 
 describe("signals core types", () => {
@@ -622,7 +624,211 @@ describe("onCleanup", () => {
   });
 });
 
-describe("signals", () => {
-  it.todo("batch");
-  it.todo("untrack");
+describe("batch", () => {
+  it("defers effect execution until end", () => {
+    const [a, setA] = createSignal(1);
+    const [b, setB] = createSignal(2);
+    const values: number[] = [];
+
+    createRoot(() => {
+      createEffect(() => {
+        values.push(a() + b());
+      });
+    });
+
+    assert.deepStrictEqual(values, [3]);
+
+    batch(() => {
+      setA(10);
+      // Effect has NOT run yet
+      setB(20);
+      // Effect has NOT run yet
+    });
+    // Effect runs ONCE here with final values
+
+    assert.deepStrictEqual(values, [3, 30]);
+  });
+
+  it("effect sees all values updated", () => {
+    const [a, setA] = createSignal(1);
+    const [b, setB] = createSignal(2);
+    let seen: [number, number] | null = null;
+
+    createRoot(() => {
+      createEffect(() => {
+        seen = [a(), b()];
+      });
+    });
+
+    batch(() => {
+      setA(10);
+      setB(20);
+    });
+
+    assert.deepStrictEqual(seen, [10, 20]);
+  });
+
+  it("nested batches: only outer flush", () => {
+    const [count, setCount] = createSignal(0);
+    let runs = 0;
+
+    createRoot(() => {
+      createEffect(() => {
+        count();
+        runs++;
+      });
+    });
+
+    assert.strictEqual(runs, 1);
+
+    batch(() => {
+      setCount(1);
+      batch(() => {
+        setCount(2);
+        // Inner batch ends, but no flush yet
+      });
+      setCount(3);
+      // Still no flush
+    });
+    // Outer batch ends, flush happens
+
+    assert.strictEqual(runs, 2); // only one additional run
+  });
+
+  it("returns fn return value", () => {
+    const result = batch(() => 42);
+    assert.strictEqual(result, 42);
+  });
+
+  it("restores state and flushes on exception", () => {
+    const [count, setCount] = createSignal(0);
+    let runs = 0;
+
+    createRoot(() => {
+      createEffect(() => {
+        count();
+        runs++;
+      });
+    });
+
+    assert.strictEqual(runs, 1);
+
+    assert.throws(() => {
+      batch(() => {
+        setCount(1);
+        throw new Error("test error");
+      });
+    }, /test error/);
+
+    // Effect should have run despite the exception (queue flushed in finally)
+    assert.strictEqual(runs, 2);
+
+    // Batch state should be restored - subsequent batch should work normally
+    batch(() => {
+      setCount(2);
+    });
+    assert.strictEqual(runs, 3);
+  });
+});
+
+describe("untrack", () => {
+  it("reads without creating dependency", () => {
+    const [a, setA] = createSignal(1);
+    const [b, setB] = createSignal(2);
+    let runs = 0;
+
+    createRoot(() => {
+      createEffect(() => {
+        runs++;
+        a(); // tracked
+        untrack(() => b()); // NOT tracked
+      });
+    });
+
+    assert.strictEqual(runs, 1);
+
+    setA(10); // should trigger
+    assert.strictEqual(runs, 2);
+
+    setB(20); // should NOT trigger
+    assert.strictEqual(runs, 2);
+  });
+
+  it("returns fn return value", () => {
+    const [count] = createSignal(42);
+    const result = untrack(() => count());
+    assert.strictEqual(result, 42);
+  });
+
+  it("nested untrack works", () => {
+    const [a, setA] = createSignal(1);
+    let runs = 0;
+
+    createRoot(() => {
+      createEffect(() => {
+        runs++;
+        untrack(() => {
+          untrack(() => a());
+        });
+      });
+    });
+
+    assert.strictEqual(runs, 1);
+    setA(2);
+    assert.strictEqual(runs, 1); // still no dependency
+  });
+
+  it("untrack inside signal setter works", () => {
+    const [a, setA] = createSignal(1);
+    const [b, setB] = createSignal(10);
+    let runs = 0;
+
+    createRoot(() => {
+      createEffect(() => {
+        a(); // track a
+        runs++;
+      });
+    });
+
+    assert.strictEqual(runs, 1);
+
+    // Set a to untracked read of b
+    setA(untrack(() => b()));
+    assert.strictEqual(runs, 2); // a changed, effect re-runs
+
+    setB(20); // b is not tracked
+    assert.strictEqual(runs, 2); // no re-run
+  });
+
+  it("restores observer on exception", () => {
+    const [a, setA] = createSignal(1);
+    const [b, setB] = createSignal(2);
+    let runs = 0;
+
+    createRoot(() => {
+      createEffect(() => {
+        runs++;
+        a(); // tracked before untrack
+
+        assert.throws(() => {
+          untrack(() => {
+            b(); // would be untracked
+            throw new Error("test error");
+          });
+        }, /test error/);
+
+        a(); // should still be tracked after exception
+      });
+    });
+
+    assert.strictEqual(runs, 1);
+
+    // a is tracked, effect should re-run
+    setA(10);
+    assert.strictEqual(runs, 2);
+
+    // b was inside untrack, should NOT trigger
+    setB(20);
+    assert.strictEqual(runs, 2);
+  });
 });
