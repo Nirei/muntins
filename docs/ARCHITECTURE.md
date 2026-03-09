@@ -67,8 +67,8 @@ interface FlexStyle {
   height: number | 'auto';
   minWidth: number;  maxWidth: number;
   minHeight: number; maxHeight: number;
-  padding: [top, right, bottom, left];
-  margin: [top, right, bottom, left];
+  paddingTop: number; paddingEnd: number; paddingBottom: number; paddingStart: number;
+  marginTop: number; marginEnd: number; marginBottom: number; marginStart: number;
   gap: number;
 }
 

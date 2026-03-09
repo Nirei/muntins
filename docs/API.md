@@ -86,15 +86,15 @@ Box({
   minWidth: 10,
   maxWidth: 80,
 
-  // spacing
+  // spacing (uses logical properties: start/end instead of left/right)
   padding: 1,                  // all sides
   padding: [1, 2],             // [vertical, horizontal]
-  padding: [1, 2, 1, 2],       // [top, right, bottom, left]
+  padding: [1, 2, 1, 2],       // [top, end, bottom, start]
   gap: 1,
 
-  // positioning
+  // positioning (uses logical properties: start/end instead of left/right)
   position: 'absolute',        // takes the node out of normal flow
-  top: 0, right: 0,
+  top: 0, end: 0,
 
   // visibility
   display: 'none',             // () => condition ? 'flex' : 'none'

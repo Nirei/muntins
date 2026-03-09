@@ -1,0 +1,179 @@
+import assert from "node:assert";
+import { describe, it } from "node:test";
+import {
+  DEFAULT_FLEX_STYLE,
+  type FlexStyle,
+  type LayoutNode,
+  type LayoutResult,
+  resolveStyle,
+} from "../src/core/layout.ts";
+
+describe("layout types", () => {
+  it("resolveStyle merges with defaults", () => {
+    const partial = { flexDirection: "column" as const, gap: 2 };
+    const resolved = resolveStyle(partial);
+
+    assert.strictEqual(resolved.flexDirection, "column");
+    assert.strictEqual(resolved.gap, 2);
+    assert.strictEqual(resolved.flexGrow, 0); // from default
+  });
+
+  it("DEFAULT_FLEX_STYLE has all required properties", () => {
+    // Verify all flex properties are present
+    assert.strictEqual(DEFAULT_FLEX_STYLE.display, "flex");
+    assert.strictEqual(DEFAULT_FLEX_STYLE.flexDirection, "row");
+    assert.strictEqual(DEFAULT_FLEX_STYLE.flexWrap, "nowrap");
+    assert.strictEqual(DEFAULT_FLEX_STYLE.justifyContent, "flex-start");
+    assert.strictEqual(DEFAULT_FLEX_STYLE.alignItems, "stretch");
+    assert.strictEqual(DEFAULT_FLEX_STYLE.alignContent, "stretch");
+    assert.strictEqual(DEFAULT_FLEX_STYLE.alignSelf, "auto");
+    assert.strictEqual(DEFAULT_FLEX_STYLE.flexGrow, 0);
+    assert.strictEqual(DEFAULT_FLEX_STYLE.flexShrink, 1);
+    assert.strictEqual(DEFAULT_FLEX_STYLE.flexBasis, "auto");
+    assert.strictEqual(DEFAULT_FLEX_STYLE.width, "auto");
+    assert.strictEqual(DEFAULT_FLEX_STYLE.height, "auto");
+    assert.strictEqual(DEFAULT_FLEX_STYLE.minWidth, 0);
+    assert.strictEqual(DEFAULT_FLEX_STYLE.maxWidth, null);
+    assert.strictEqual(DEFAULT_FLEX_STYLE.minHeight, 0);
+    assert.strictEqual(DEFAULT_FLEX_STYLE.maxHeight, null);
+    assert.strictEqual(DEFAULT_FLEX_STYLE.paddingTop, 0);
+    assert.strictEqual(DEFAULT_FLEX_STYLE.paddingEnd, 0);
+    assert.strictEqual(DEFAULT_FLEX_STYLE.paddingBottom, 0);
+    assert.strictEqual(DEFAULT_FLEX_STYLE.paddingStart, 0);
+    assert.strictEqual(DEFAULT_FLEX_STYLE.marginTop, 0);
+    assert.strictEqual(DEFAULT_FLEX_STYLE.marginEnd, 0);
+    assert.strictEqual(DEFAULT_FLEX_STYLE.marginBottom, 0);
+    assert.strictEqual(DEFAULT_FLEX_STYLE.marginStart, 0);
+    assert.strictEqual(DEFAULT_FLEX_STYLE.gap, 0);
+    assert.strictEqual(DEFAULT_FLEX_STYLE.position, "relative");
+    assert.strictEqual(DEFAULT_FLEX_STYLE.top, "auto");
+    assert.strictEqual(DEFAULT_FLEX_STYLE.end, "auto");
+    assert.strictEqual(DEFAULT_FLEX_STYLE.bottom, "auto");
+    assert.strictEqual(DEFAULT_FLEX_STYLE.start, "auto");
+  });
+
+  it("resolveStyle preserves partial overrides", () => {
+    const partial: Partial<FlexStyle> = {
+      display: "none",
+      flexDirection: "column",
+      paddingTop: 1,
+      paddingEnd: 2,
+      paddingBottom: 3,
+      paddingStart: 4,
+      maxWidth: 100,
+    };
+    const resolved = resolveStyle(partial);
+
+    assert.strictEqual(resolved.display, "none");
+    assert.strictEqual(resolved.flexDirection, "column");
+    assert.strictEqual(resolved.paddingTop, 1);
+    assert.strictEqual(resolved.paddingEnd, 2);
+    assert.strictEqual(resolved.paddingBottom, 3);
+    assert.strictEqual(resolved.paddingStart, 4);
+    assert.strictEqual(resolved.maxWidth, 100);
+    // Defaults preserved
+    assert.strictEqual(resolved.flexGrow, 0);
+    assert.strictEqual(resolved.alignItems, "stretch");
+  });
+
+  it("resolveStyle with empty partial returns defaults", () => {
+    const resolved = resolveStyle({});
+
+    assert.deepStrictEqual(resolved, DEFAULT_FLEX_STYLE);
+  });
+
+  it("LayoutNode can have children or measure", () => {
+    const container: LayoutNode = {
+      style: { flexDirection: "column" },
+      children: [{ style: { flexGrow: 1 } }, { style: { flexGrow: 2 } }],
+    };
+
+    assert.strictEqual(container.children?.length, 2);
+    assert.strictEqual(container.measure, undefined);
+
+    const leaf: LayoutNode = {
+      style: {},
+      measure: (availableWidth, availableHeight) => ({
+        width: Math.min(10, availableWidth),
+        height: Math.min(1, availableHeight),
+      }),
+    };
+
+    assert.strictEqual(leaf.children, undefined);
+    assert.strictEqual(typeof leaf.measure, "function");
+  });
+
+  it("measure function receives constraints", () => {
+    const measureCalls: Array<{ width: number; height: number }> = [];
+
+    const leaf: LayoutNode = {
+      style: {},
+      measure: (availableWidth, availableHeight) => {
+        measureCalls.push({ width: availableWidth, height: availableHeight });
+        return { width: 5, height: 1 };
+      },
+    };
+
+    // Simulate measure calls
+    leaf.measure?.(100, 50);
+    leaf.measure?.(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
+
+    assert.deepStrictEqual(measureCalls, [
+      { width: 100, height: 50 },
+      { width: Number.POSITIVE_INFINITY, height: Number.POSITIVE_INFINITY },
+    ]);
+  });
+
+  it("LayoutResult has relative and absolute coordinates", () => {
+    const result: LayoutResult = {
+      x: 5,
+      y: 10,
+      width: 20,
+      height: 5,
+      screenX: 15,
+      screenY: 20,
+      children: [],
+    };
+
+    assert.strictEqual(result.x, 5);
+    assert.strictEqual(result.y, 10);
+    assert.strictEqual(result.screenX, 15);
+    assert.strictEqual(result.screenY, 20);
+    assert.deepStrictEqual(result.children, []);
+  });
+
+  it("LayoutResult can have nested children", () => {
+    const result: LayoutResult = {
+      x: 0,
+      y: 0,
+      width: 80,
+      height: 24,
+      screenX: 0,
+      screenY: 0,
+      children: [
+        {
+          x: 0,
+          y: 0,
+          width: 40,
+          height: 24,
+          screenX: 0,
+          screenY: 0,
+          children: [],
+        },
+        {
+          x: 40,
+          y: 0,
+          width: 40,
+          height: 24,
+          screenX: 40,
+          screenY: 0,
+          children: [],
+        },
+      ],
+    };
+
+    assert.strictEqual(result.children.length, 2);
+    assert.strictEqual(result.children[0].width, 40);
+    assert.strictEqual(result.children[1].x, 40);
+  });
+});
