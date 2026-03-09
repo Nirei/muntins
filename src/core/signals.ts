@@ -29,8 +29,25 @@ const currentOwner: Computation | null = null;
 const batchDepth = 0;
 const batchQueue: Set<Computation> = new Set();
 
-// Re-entrancy guard to prevent infinite loops
+// Effect execution state: defers nested triggers to prevent stack overflow
+const effectState = { isRunning: false };
+const pendingEffects: Set<Computation> = new Set();
+
+// Iteration limit to prevent infinite loops
 const MAX_ITERATIONS = 100;
+
+/**
+ * Removes an observer from a source's observers list.
+ */
+function unlinkSourceFromObserver(
+  source: Computation,
+  observer: Computation,
+): void {
+  if (source.observers) {
+    const idx = source.observers.indexOf(observer);
+    if (idx !== -1) source.observers.splice(idx, 1);
+  }
+}
 
 /**
  * Propagates staleness through the dependency graph.
@@ -66,11 +83,7 @@ function trackRead(signal: Computation): void {
     }
     // Slow path: dependency order changed, remove stale sources from this point
     for (let i = currentSourcesIndex; i < sources.length; i++) {
-      const staleSource = sources[i];
-      if (staleSource.observers) {
-        const idx = staleSource.observers.indexOf(currentObserver);
-        if (idx !== -1) staleSource.observers.splice(idx, 1);
-      }
+      unlinkSourceFromObserver(sources[i], currentObserver);
     }
     sources.length = currentSourcesIndex;
   }
@@ -103,11 +116,7 @@ function executeWithTracking(node: Computation): void {
     // Remove sources that weren't accessed this run
     if (node.sources) {
       for (let i = currentSourcesIndex; i < node.sources.length; i++) {
-        const staleSource = node.sources[i];
-        if (staleSource.observers) {
-          const idx = staleSource.observers.indexOf(node);
-          if (idx !== -1) staleSource.observers.splice(idx, 1);
-        }
+        unlinkSourceFromObserver(node.sources[i], node);
       }
       node.sources.length = currentSourcesIndex;
     }
@@ -128,60 +137,72 @@ function updateIfNecessary(node: Computation): void {
     if (node.sources) {
       for (const source of node.sources) {
         updateIfNecessary(source);
-        // Re-read state since updateIfNecessary can trigger stale() which mutates it
-        if ((node.state as number) === Dirty) {
-          break; // Stop early, we know we need to update
-        }
+        // Source update may have marked us Dirty via stale()
+        if ((node.state as number) === Dirty) break;
       }
     }
   }
 
-  if (node.state === Dirty) {
+  const shouldRun = node.state === Dirty;
+
+  // Set Clean BEFORE running so self-triggering effects get marked Dirty again
+  node.state = Clean;
+
+  if (shouldRun) {
     update(node);
   }
-
-  node.state = Clean;
 }
 
 /**
  * Re-executes a computation with dependency tracking.
- * Handles cleanup, child disposal (placeholders until Task 1.5), and error recovery.
  */
 function update(node: Computation): void {
-  // Run cleanups (placeholder until Task 1.5)
-  // Dispose children (placeholder until Task 1.5)
-
+  // TODO(Task 1.5): Run cleanups and dispose children before re-executing
   executeWithTracking(node);
-  node.state = Clean;
 }
 
 /**
  * Schedules an effect to run. If not batching, runs immediately.
  * If batching, adds to the batch queue for later execution.
+ * If already running effects, defers to prevent stack overflow.
  */
 function scheduleEffect(node: Computation): void {
   if (batchDepth > 0) {
     batchQueue.add(node);
+  } else if (effectState.isRunning) {
+    pendingEffects.add(node);
   } else {
-    runEffect(node);
+    runTopLevelEffect(node);
   }
 }
 
 /**
- * Runs an effect with re-entrancy protection.
+ * Runs an effect and any effects it triggers, with re-entrancy protection.
  * Limits iterations to prevent infinite loops from effects that
  * trigger themselves through signal writes.
  */
-function runEffect(node: Computation): void {
+function runTopLevelEffect(node: Computation): void {
+  effectState.isRunning = true;
   let iterations = 0;
-  while (node.state !== Clean && iterations < MAX_ITERATIONS) {
-    iterations++;
-    updateIfNecessary(node);
-  }
-  if (iterations >= MAX_ITERATIONS) {
-    throw new Error(
-      "Effect exceeded maximum iterations - possible infinite loop",
-    );
+
+  try {
+    pendingEffects.add(node);
+
+    while (pendingEffects.size > 0 && iterations < MAX_ITERATIONS) {
+      iterations++;
+      const next = pendingEffects.values().next().value as Computation;
+      pendingEffects.delete(next);
+      updateIfNecessary(next);
+    }
+
+    if (iterations >= MAX_ITERATIONS) {
+      throw new Error(
+        "Effect exceeded maximum iterations - possible infinite loop",
+      );
+    }
+  } finally {
+    effectState.isRunning = false;
+    pendingEffects.clear();
   }
 }
 
@@ -260,13 +281,13 @@ export function createEffect(fn: () => void): void {
     mounts: [],
   };
 
-  // Register with owner (placeholder until Task 1.5)
+  // TODO(Task 1.5): Register with owner for disposal
   if (currentOwner) {
     currentOwner.children.push(node);
   }
 
   // Run immediately
-  runEffect(node);
+  runTopLevelEffect(node);
 }
 
 // Export state constants and Computation for tests (internal use)

@@ -273,6 +273,10 @@ describe("createEffect", () => {
   });
 
   it("supports nested effects", () => {
+    // NOTE: This test does NOT re-run the outer effect. Re-running outer would
+    // create duplicate inner effects (effect accumulation). This is fixed once
+    // ownership/disposal is implemented (Task 1.5) - outer will dispose its
+    // children before re-executing.
     const [outer, setOuter] = createSignal(1);
     const [inner, setInner] = createSignal(10);
     let outerRuns = 0;
@@ -298,6 +302,18 @@ describe("createEffect", () => {
     assert.strictEqual(outerRuns, 1); // outer should not re-run
     assert.strictEqual(innerRuns, 2);
     assert.strictEqual(innerValue, 20);
+  });
+
+  it("throws on infinite loop", () => {
+    const [count, setCount] = createSignal(0);
+    assert.throws(
+      () => {
+        createEffect(() => {
+          setCount(count() + 1);
+        });
+      },
+      { message: /maximum iterations/ },
+    );
   });
 });
 
