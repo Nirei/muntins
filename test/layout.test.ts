@@ -258,3 +258,303 @@ describe("computeLayout structure", () => {
     assert.strictEqual(result.children[1].children.length, 0);
   });
 });
+
+describe("intrinsic size resolution", () => {
+  // Note: Root node uses available space for auto dimensions, not intrinsic size.
+  // To test intrinsic sizing, we wrap test nodes in a parent container.
+
+  it("uses explicit width/height", () => {
+    const node: LayoutNode = {
+      style: { width: 50, height: 20 },
+    };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.width, 50);
+    assert.strictEqual(result.height, 20);
+  });
+
+  it("uses measure function for leaf", () => {
+    // Wrap in parent to test non-root intrinsic sizing
+    const node: LayoutNode = {
+      style: {},
+      children: [
+        {
+          style: {},
+          measure: () => ({ width: 15, height: 3 }),
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.children[0].width, 15);
+    assert.strictEqual(result.children[0].height, 3);
+  });
+
+  it("row container width = sum of children + gaps", () => {
+    const node: LayoutNode = {
+      style: {},
+      children: [
+        {
+          style: { flexDirection: "row", gap: 1 },
+          children: [
+            { style: { width: 10, height: 5 } },
+            { style: { width: 20, height: 5 } },
+          ],
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // 10 + 20 + 1 gap = 31
+    assert.strictEqual(result.children[0].width, 31);
+  });
+
+  it("column container height = sum of children + gaps", () => {
+    const node: LayoutNode = {
+      style: {},
+      children: [
+        {
+          style: { flexDirection: "column", gap: 1 },
+          children: [
+            { style: { width: 10, height: 5 } },
+            { style: { width: 10, height: 10 } },
+          ],
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // 5 + 10 + 1 gap = 16
+    assert.strictEqual(result.children[0].height, 16);
+  });
+
+  it("row container height = max of children", () => {
+    const node: LayoutNode = {
+      style: {},
+      children: [
+        {
+          style: { flexDirection: "row" },
+          children: [
+            { style: { width: 10, height: 5 } },
+            { style: { width: 10, height: 15 } },
+          ],
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.children[0].height, 15);
+  });
+
+  it("column container width = max of children", () => {
+    const node: LayoutNode = {
+      style: {},
+      children: [
+        {
+          style: { flexDirection: "column" },
+          children: [
+            { style: { width: 10, height: 5 } },
+            { style: { width: 25, height: 5 } },
+          ],
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.children[0].width, 25);
+  });
+
+  it("padding adds to intrinsic size", () => {
+    const node: LayoutNode = {
+      style: {},
+      children: [
+        {
+          style: {
+            paddingTop: 2,
+            paddingEnd: 3,
+            paddingBottom: 2,
+            paddingStart: 3,
+          },
+          children: [{ style: { width: 10, height: 5 } }],
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.children[0].width, 10 + 3 + 3); // 16
+    assert.strictEqual(result.children[0].height, 5 + 2 + 2); // 9
+  });
+
+  it("respects minWidth/maxWidth", () => {
+    const node: LayoutNode = {
+      style: {},
+      children: [
+        {
+          style: { minWidth: 20, maxWidth: 50 },
+          children: [{ style: { width: 10 } }],
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.children[0].width, 20); // clamped to min
+  });
+
+  it("respects maxWidth constraint", () => {
+    const node: LayoutNode = {
+      style: {},
+      children: [
+        {
+          style: { maxWidth: 30 },
+          children: [{ style: { width: 50 } }],
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.children[0].width, 30); // clamped to max
+  });
+
+  it("respects minHeight/maxHeight", () => {
+    const node: LayoutNode = {
+      style: {},
+      children: [
+        {
+          style: { minHeight: 15 },
+          children: [{ style: { width: 10, height: 5 } }],
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.children[0].height, 15); // clamped to min
+  });
+
+  it("skips display:none children in intrinsic calculation", () => {
+    const node: LayoutNode = {
+      style: {},
+      children: [
+        {
+          style: { flexDirection: "row" },
+          children: [
+            { style: { width: 10, height: 5 } },
+            { style: { width: 20, height: 5, display: "none" } },
+            { style: { width: 15, height: 5 } },
+          ],
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Only visible children: 10 + 15 = 25
+    assert.strictEqual(result.children[0].width, 25);
+  });
+
+  it("includes child margins in intrinsic size", () => {
+    const node: LayoutNode = {
+      style: {},
+      children: [
+        {
+          style: { flexDirection: "row" },
+          children: [
+            { style: { width: 10, height: 5, marginStart: 2, marginEnd: 3 } },
+          ],
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // 10 + 2 + 3 = 15
+    assert.strictEqual(result.children[0].width, 15);
+  });
+
+  it("measure function receives available space constraints", () => {
+    const measureCalls: Array<{ w: number; h: number }> = [];
+    const node: LayoutNode = {
+      style: { width: 40, height: 20, paddingStart: 5, paddingTop: 3 },
+      children: [
+        {
+          style: {},
+          measure: (w, h) => {
+            measureCalls.push({ w, h });
+            return { width: 10, height: 5 };
+          },
+        },
+      ],
+    };
+    computeLayout(node, 80, 24);
+
+    // Child with auto size gets Infinity for unconstrained dimensions
+    assert.strictEqual(measureCalls.length, 1);
+    assert.strictEqual(measureCalls[0].w, Number.POSITIVE_INFINITY);
+    assert.strictEqual(measureCalls[0].h, Number.POSITIVE_INFINITY);
+  });
+
+  it("measure with explicit size on measured node uses size for constraints", () => {
+    const measureCalls: Array<{ w: number; h: number }> = [];
+    const node: LayoutNode = {
+      style: {},
+      children: [
+        {
+          style: { width: 50, height: 30, paddingStart: 5, paddingEnd: 5 },
+          measure: (w, h) => {
+            measureCalls.push({ w, h });
+            return { width: 20, height: 10 };
+          },
+        },
+      ],
+    };
+    computeLayout(node, 80, 24);
+
+    // Node has explicit width 50 with padding 5+5, so available = 40
+    // Node has explicit height 30 with no top/bottom padding, so available = 30
+    assert.strictEqual(measureCalls.length, 1);
+    assert.strictEqual(measureCalls[0].w, 40);
+    assert.strictEqual(measureCalls[0].h, 30);
+  });
+
+  it("nested intrinsic sizes bubble up correctly", () => {
+    const node: LayoutNode = {
+      style: {},
+      children: [
+        {
+          style: { flexDirection: "column", paddingTop: 1, paddingBottom: 1 },
+          children: [
+            {
+              style: { flexDirection: "row", paddingStart: 2, paddingEnd: 2 },
+              children: [
+                { style: { width: 8, height: 4 } },
+                { style: { width: 6, height: 4 } },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Inner row: width = 8 + 6 + 4 (padding) = 18, height = 4
+    // Outer column: width = 18, height = 4 + 2 (padding) = 6
+    const outerColumn = result.children[0];
+    const innerRow = outerColumn.children[0];
+    assert.strictEqual(innerRow.width, 18);
+    assert.strictEqual(innerRow.height, 4);
+    assert.strictEqual(outerColumn.width, 18);
+    assert.strictEqual(outerColumn.height, 6);
+  });
+
+  it("root with auto size uses available space, not intrinsic", () => {
+    const node: LayoutNode = {
+      style: {},
+      children: [{ style: { width: 10, height: 5 } }],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Root uses available space even with children
+    assert.strictEqual(result.width, 80);
+    assert.strictEqual(result.height, 24);
+    // Child uses intrinsic
+    assert.strictEqual(result.children[0].width, 10);
+    assert.strictEqual(result.children[0].height, 5);
+  });
+});

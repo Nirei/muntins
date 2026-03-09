@@ -206,11 +206,160 @@ function buildTopDownQueue(root: LayoutBox): LayoutBox[] {
 }
 
 /**
- * Stub for Pass 2: resolves intrinsic sizes (implemented in Task 2.3).
- * Currently a no-op placeholder.
+ * Clamps a value between min and max bounds.
+ * maxBound can be null to indicate no upper constraint.
  */
-function resolveIntrinsicSize(_box: LayoutBox): void {
-  // Task 2.3 will implement this
+function clamp(
+  value: number,
+  minBound: number,
+  maxBound: number | null,
+): number {
+  const clamped = Math.max(minBound, value);
+  return maxBound !== null ? Math.min(maxBound, clamped) : clamped;
+}
+
+/**
+ * Calculates intrinsic width based on children sizes.
+ * Row: sum of children widths + gaps
+ * Column: max of children widths
+ */
+function calculateIntrinsicWidth(box: LayoutBox): number {
+  const style = box.style;
+  const paddingStart = style.paddingStart;
+  const paddingEnd = style.paddingEnd;
+
+  let contentWidth = 0;
+  let childCount = 0;
+
+  for (const child of box.children) {
+    if (child.style.display === "none") continue;
+
+    const marginStart = child.style.marginStart;
+    const marginEnd = child.style.marginEnd;
+    const childWidth = child.width + marginStart + marginEnd;
+
+    if (style.flexDirection === "row") {
+      // Row: sum of children widths
+      contentWidth += childWidth;
+      childCount++;
+    } else {
+      // Column: max of children widths
+      contentWidth = Math.max(contentWidth, childWidth);
+    }
+  }
+
+  // Add gaps between children (row direction only)
+  if (style.flexDirection === "row" && childCount > 1) {
+    contentWidth += (childCount - 1) * style.gap;
+  }
+
+  return contentWidth + paddingStart + paddingEnd;
+}
+
+/**
+ * Calculates intrinsic height based on children sizes.
+ * Column: sum of children heights + gaps
+ * Row: max of children heights
+ */
+function calculateIntrinsicHeight(box: LayoutBox): number {
+  const style = box.style;
+  const paddingTop = style.paddingTop;
+  const paddingBottom = style.paddingBottom;
+
+  let contentHeight = 0;
+  let childCount = 0;
+
+  for (const child of box.children) {
+    if (child.style.display === "none") continue;
+
+    const marginTop = child.style.marginTop;
+    const marginBottom = child.style.marginBottom;
+    const childHeight = child.height + marginTop + marginBottom;
+
+    if (style.flexDirection === "column") {
+      // Column: sum of children heights
+      contentHeight += childHeight;
+      childCount++;
+    } else {
+      // Row: max of children heights
+      contentHeight = Math.max(contentHeight, childHeight);
+    }
+  }
+
+  // Add gaps between children (column direction only)
+  if (style.flexDirection === "column" && childCount > 1) {
+    contentHeight += (childCount - 1) * style.gap;
+  }
+
+  return contentHeight + paddingTop + paddingBottom;
+}
+
+/**
+ * Pass 2: Resolves intrinsic sizes bottom-up.
+ *
+ * For each node, determines width and height based on:
+ * 1. Explicit size (if set in style)
+ * 2. Measure function (for leaf nodes like Text)
+ * 3. Children sizes (for containers)
+ *
+ * Finally clamps to min/max bounds.
+ *
+ * Note: Root node (parent === null) is handled specially in computeLayout
+ * where auto dimensions use available space, not intrinsic size.
+ */
+function resolveIntrinsicSize(box: LayoutBox): void {
+  const style = box.style;
+  const isRoot = box.parent === null;
+
+  // 1. If explicit size, use it
+  if (typeof style.width === "number") {
+    box.width = style.width;
+  }
+  if (typeof style.height === "number") {
+    box.height = style.height;
+  }
+
+  // 2. If measure function (leaf node like Text), use it
+  if (box.node.measure) {
+    // Calculate available space from parent's content area.
+    // If explicit size, use that minus padding. Otherwise Infinity (unconstrained).
+    const paddingStart = style.paddingStart;
+    const paddingEnd = style.paddingEnd;
+    const paddingTop = style.paddingTop;
+    const paddingBottom = style.paddingBottom;
+
+    const availW =
+      typeof style.width === "number"
+        ? Math.max(0, style.width - paddingStart - paddingEnd)
+        : Number.POSITIVE_INFINITY;
+    const availH =
+      typeof style.height === "number"
+        ? Math.max(0, style.height - paddingTop - paddingBottom)
+        : Number.POSITIVE_INFINITY;
+
+    const measured = box.node.measure(availW, availH);
+
+    if (style.width === "auto") box.width = measured.width;
+    if (style.height === "auto") box.height = measured.height;
+
+    // Clamp to min/max and return early
+    box.width = clamp(box.width, style.minWidth, style.maxWidth);
+    box.height = clamp(box.height, style.minHeight, style.maxHeight);
+    return;
+  }
+
+  // 3. Calculate from children (for containers)
+  // Root's auto dimensions use available space (set before this pass), not intrinsic size
+  if (style.width === "auto" && !isRoot) {
+    box.width = calculateIntrinsicWidth(box);
+  }
+  if (style.height === "auto" && !isRoot) {
+    box.height = calculateIntrinsicHeight(box);
+  }
+
+  // 4. Clamp to min/max
+  box.width = clamp(box.width, style.minWidth, style.maxWidth);
+  box.height = clamp(box.height, style.minHeight, style.maxHeight);
 }
 
 /**
