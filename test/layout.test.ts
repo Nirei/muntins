@@ -6,6 +6,7 @@ import {
   type LayoutNode,
   type LayoutResult,
   computeLayout,
+  distribute,
   resolveStyle,
 } from "../src/core/layout.ts";
 
@@ -595,5 +596,227 @@ describe("intrinsic size resolution", () => {
     // Child uses intrinsic
     assert.strictEqual(result.children[0].width, 10);
     assert.strictEqual(result.children[0].height, 5);
+  });
+});
+
+describe("distribute helper", () => {
+  it("distributes evenly with equal weights", () => {
+    const sizes = distribute(30, [1, 1, 1]);
+    assert.deepStrictEqual(sizes, [10, 10, 10]);
+  });
+
+  it("distributes proportionally with different weights", () => {
+    const sizes = distribute(30, [1, 2]);
+    // 1/3 * 30 = 10, 2/3 * 30 = 20
+    assert.deepStrictEqual(sizes, [10, 20]);
+  });
+
+  it("distributes remainder to first items", () => {
+    const sizes = distribute(10, [1, 1, 1]);
+    // 10/3 = 3.33, floor = 3 each = 9, remainder 1 goes to first
+    assert.deepStrictEqual(sizes, [4, 3, 3]);
+  });
+
+  it("returns zeros when total is zero", () => {
+    const sizes = distribute(0, [1, 2, 3]);
+    assert.deepStrictEqual(sizes, [0, 0, 0]);
+  });
+
+  it("returns zeros when total is negative", () => {
+    const sizes = distribute(-10, [1, 1]);
+    assert.deepStrictEqual(sizes, [0, 0]);
+  });
+
+  it("returns zeros when weights sum to zero", () => {
+    const sizes = distribute(100, [0, 0, 0]);
+    assert.deepStrictEqual(sizes, [0, 0, 0]);
+  });
+
+  it("handles single weight", () => {
+    const sizes = distribute(50, [1]);
+    assert.deepStrictEqual(sizes, [50]);
+  });
+});
+
+describe("flex distribution", () => {
+  it("two flex:1 items split space equally", () => {
+    const node: LayoutNode = {
+      style: { width: 20 },
+      children: [{ style: { flexGrow: 1 } }, { style: { flexGrow: 1 } }],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.children[0].width, 10);
+    assert.strictEqual(result.children[1].width, 10);
+  });
+
+  it("flex:2 gets twice as much as flex:1", () => {
+    const node: LayoutNode = {
+      style: { width: 30 },
+      children: [{ style: { flexGrow: 1 } }, { style: { flexGrow: 2 } }],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.children[0].width, 10);
+    assert.strictEqual(result.children[1].width, 20);
+  });
+
+  it("flex:0 items keep their size", () => {
+    const node: LayoutNode = {
+      style: { width: 30 },
+      children: [
+        { style: { width: 10, flexGrow: 0 } },
+        { style: { flexGrow: 1 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.children[0].width, 10);
+    assert.strictEqual(result.children[1].width, 20);
+  });
+
+  it("flexGrow adds to base size, not replaces", () => {
+    const node: LayoutNode = {
+      style: { width: 100 },
+      children: [
+        { style: { width: 20, flexGrow: 1 } },
+        { style: { width: 30, flexGrow: 1 } },
+      ],
+    };
+    const result = computeLayout(node, 100, 24);
+
+    // Available: 100, used: 50, remaining: 50
+    // Each gets 25 extra (50 / 2)
+    // Final: 20+25=45, 30+25=55
+    assert.strictEqual(result.children[0].width, 45);
+    assert.strictEqual(result.children[1].width, 55);
+  });
+
+  it("shrink reduces oversized items", () => {
+    const node: LayoutNode = {
+      style: { width: 20 },
+      children: [
+        { style: { width: 15, flexShrink: 1 } },
+        { style: { width: 15, flexShrink: 1 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Total 30 needs to fit in 20, shrink by 10
+    // Both shrink equally (same base size, same shrink factor)
+    assert.strictEqual(result.children[0].width, 10);
+    assert.strictEqual(result.children[1].width, 10);
+  });
+
+  it("shrink weighted by base size", () => {
+    const node: LayoutNode = {
+      style: { width: 20 },
+      children: [
+        { style: { width: 10, flexShrink: 1 } },
+        { style: { width: 20, flexShrink: 1 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Total 30 needs to fit in 20, overflow = 10
+    // Weights: 10*1=10, 20*1=20, total=30
+    // Item 1 shrinks: 10/30 * 10 = 3.33 -> 4 (gets remainder)
+    // Item 2 shrinks: 20/30 * 10 = 6.66 -> 6
+    assert.strictEqual(result.children[0].width, 6); // 10 - 4
+    assert.strictEqual(result.children[1].width, 14); // 20 - 6
+  });
+
+  it("shrink removes exact overflow amount", () => {
+    const node: LayoutNode = {
+      style: { width: 20 },
+      children: [
+        { style: { width: 15, flexShrink: 1 } },
+        { style: { width: 15, flexShrink: 1 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Children should sum to exactly the container width
+    const totalChildWidth = result.children[0].width + result.children[1].width;
+    assert.strictEqual(totalChildWidth, 20);
+  });
+
+  it("minWidth prevents over-shrinking", () => {
+    const node: LayoutNode = {
+      style: { width: 10 },
+      children: [
+        { style: { width: 15, flexShrink: 1, minWidth: 8 } },
+        { style: { width: 15, flexShrink: 1 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    assert.ok(result.children[0].width >= 8);
+  });
+
+  it("flexGrow works in column direction", () => {
+    const node: LayoutNode = {
+      style: { height: 30, flexDirection: "column" },
+      children: [{ style: { flexGrow: 1 } }, { style: { flexGrow: 2 } }],
+    };
+    const result = computeLayout(node, 80, 30);
+
+    assert.strictEqual(result.children[0].height, 10);
+    assert.strictEqual(result.children[1].height, 20);
+  });
+
+  it("flexShrink works in column direction", () => {
+    const node: LayoutNode = {
+      style: { height: 20, flexDirection: "column" },
+      children: [
+        { style: { height: 15, flexShrink: 1 } },
+        { style: { height: 15, flexShrink: 1 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Total 30 needs to fit in 20, shrink by 10
+    assert.strictEqual(result.children[0].height, 10);
+    assert.strictEqual(result.children[1].height, 10);
+  });
+
+  it("respects gap when calculating available space for grow", () => {
+    const node: LayoutNode = {
+      style: { width: 32, gap: 2 },
+      children: [{ style: { flexGrow: 1 } }, { style: { flexGrow: 1 } }],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // 32 - 2 gap = 30 available, split evenly
+    assert.strictEqual(result.children[0].width, 15);
+    assert.strictEqual(result.children[1].width, 15);
+  });
+
+  it("respects padding when calculating available space", () => {
+    const node: LayoutNode = {
+      style: { width: 30, paddingStart: 5, paddingEnd: 5 },
+      children: [{ style: { flexGrow: 1 } }, { style: { flexGrow: 1 } }],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // 30 - 10 padding = 20 available, split evenly
+    assert.strictEqual(result.children[0].width, 10);
+    assert.strictEqual(result.children[1].width, 10);
+  });
+
+  it("skips display:none children in flex distribution", () => {
+    const node: LayoutNode = {
+      style: { width: 30 },
+      children: [
+        { style: { flexGrow: 1 } },
+        { style: { flexGrow: 1, display: "none" } },
+        { style: { flexGrow: 1 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Only 2 visible children share 30
+    assert.strictEqual(result.children[0].width, 15);
+    assert.strictEqual(result.children[2].width, 15);
   });
 });

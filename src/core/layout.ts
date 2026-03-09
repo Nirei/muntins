@@ -219,6 +219,32 @@ function clamp(
 }
 
 /**
+ * Distributes a total amount proportionally among weights using integer arithmetic.
+ * Remainder is distributed to the first items.
+ *
+ * @param total - Total amount to distribute
+ * @param weights - Array of weights (e.g., flexGrow values)
+ * @returns Array of distributed amounts (same length as weights)
+ */
+export function distribute(total: number, weights: number[]): number[] {
+  const sum = weights.reduce((a, b) => a + b, 0);
+  if (sum === 0) return weights.map(() => 0);
+  if (total <= 0) return weights.map(() => 0);
+
+  // Calculate base amounts
+  const result = weights.map((w) => Math.floor((w / sum) * total));
+
+  // Distribute remainder to first items
+  let remainder = total - result.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < result.length && remainder > 0; i++) {
+    result[i]++;
+    remainder--;
+  }
+
+  return result;
+}
+
+/**
  * Calculates intrinsic size for a given axis based on children sizes.
  * Main axis: sum of children sizes + gaps
  * Cross axis: max of children sizes
@@ -332,11 +358,196 @@ function resolveIntrinsicSize(box: LayoutBox): void {
 }
 
 /**
- * Stub for Pass 3: resolves flex distribution and positions (Tasks 2.4, 2.5, 2.6).
- * Currently a no-op placeholder.
+ * Calculates available main-axis space after accounting for fixed-size children,
+ * padding, and gaps.
  */
-function resolveFlexAndPosition(_box: LayoutBox): void {
-  // Tasks 2.4, 2.5, 2.6 will implement this
+function calculateAvailableMainSpace(box: LayoutBox): number {
+  const style = box.style;
+  const isRow = style.flexDirection === "row";
+
+  // Start with container size minus padding
+  const paddingMain = isRow
+    ? style.paddingStart + style.paddingEnd
+    : style.paddingTop + style.paddingBottom;
+  let mainSpace = (isRow ? box.width : box.height) - paddingMain;
+
+  // Subtract children sizes and count visible children
+  let visibleChildCount = 0;
+  for (const child of box.children) {
+    if (child.style.display === "none") continue;
+    const childMainSize = isRow ? child.width : child.height;
+    const childMarginMain = isRow
+      ? child.style.marginStart + child.style.marginEnd
+      : child.style.marginTop + child.style.marginBottom;
+    mainSpace -= childMainSize + childMarginMain;
+    visibleChildCount++;
+  }
+
+  // Subtract gaps between visible children
+  if (visibleChildCount > 1) {
+    mainSpace -= (visibleChildCount - 1) * style.gap;
+  }
+
+  return mainSpace;
+}
+
+/**
+ * Distributes extra space among children with flexGrow > 0.
+ * Adds to existing child sizes rather than replacing them.
+ */
+function distributeGrow(box: LayoutBox, availableSpace: number): void {
+  if (availableSpace <= 0) return;
+
+  const isRow = box.style.flexDirection === "row";
+
+  // Collect flex children and their weights
+  const flexChildren: LayoutBox[] = [];
+  const weights: number[] = [];
+
+  for (const child of box.children) {
+    if (child.style.display === "none") continue;
+    if (child.style.flexGrow > 0) {
+      flexChildren.push(child);
+      weights.push(child.style.flexGrow);
+    }
+  }
+
+  if (flexChildren.length === 0) return;
+
+  // Distribute space proportionally
+  const growAmounts = distribute(availableSpace, weights);
+
+  // Add grow amount to existing size (not replace!)
+  for (let i = 0; i < flexChildren.length; i++) {
+    const child = flexChildren[i];
+    if (isRow) {
+      child.width += growAmounts[i];
+    } else {
+      child.height += growAmounts[i];
+    }
+  }
+}
+
+/**
+ * Shrinks children with flexShrink > 0 to fit overflow.
+ * Shrink is weighted by flexShrink * baseSize.
+ */
+function distributeShrink(box: LayoutBox, overflow: number): void {
+  if (overflow <= 0) return;
+
+  const isRow = box.style.flexDirection === "row";
+
+  // Collect shrinkable children and calculate weighted shrink factors
+  const shrinkChildren: LayoutBox[] = [];
+  const weights: number[] = [];
+
+  for (const child of box.children) {
+    if (child.style.display === "none") continue;
+    if (child.style.flexShrink > 0) {
+      const baseSize = isRow ? child.width : child.height;
+      const weight = child.style.flexShrink * baseSize;
+      shrinkChildren.push(child);
+      weights.push(weight);
+    }
+  }
+
+  if (shrinkChildren.length === 0) return;
+
+  // Distribute shrink amounts proportionally
+  const shrinkAmounts = distribute(overflow, weights);
+
+  for (let i = 0; i < shrinkChildren.length; i++) {
+    const child = shrinkChildren[i];
+    const baseSize = isRow ? child.width : child.height;
+    const minSize = isRow ? child.style.minWidth : child.style.minHeight;
+    const newSize = Math.max(baseSize - shrinkAmounts[i], minSize);
+
+    if (isRow) {
+      child.width = newSize;
+    } else {
+      child.height = newSize;
+    }
+  }
+}
+
+/**
+ * Pass 3: Resolves flex distribution and positions children.
+ *
+ * For each container:
+ * 1. Calculate available main-axis space
+ * 2. If positive, distribute with flexGrow
+ * 3. If negative, shrink with flexShrink
+ * 4. Clamp all children to min/max bounds
+ * 5. Position children (basic flex-start for now; alignment in Task 2.5)
+ */
+function resolveFlexAndPosition(box: LayoutBox): void {
+  if (box.children.length === 0) return;
+
+  const style = box.style;
+  const isRow = style.flexDirection === "row";
+
+  // 1. Calculate available space
+  const availableSpace = calculateAvailableMainSpace(box);
+
+  // 2. Distribute grow or shrink
+  if (availableSpace > 0) {
+    distributeGrow(box, availableSpace);
+  } else if (availableSpace < 0) {
+    distributeShrink(box, -availableSpace);
+  }
+
+  // 3. Clamp all children to min/max bounds
+  for (const child of box.children) {
+    if (child.style.display === "none") continue;
+    child.width = clamp(
+      child.width,
+      child.style.minWidth,
+      child.style.maxWidth,
+    );
+    child.height = clamp(
+      child.height,
+      child.style.minHeight,
+      child.style.maxHeight,
+    );
+  }
+
+  // 4. Position children (basic flex-start positioning)
+  // Full justifyContent/alignItems will be added in Task 2.5
+  let mainPos = isRow ? style.paddingStart : style.paddingTop;
+
+  for (const child of box.children) {
+    if (child.style.display === "none") continue;
+
+    const marginStart = isRow ? child.style.marginStart : child.style.marginTop;
+    const marginEnd = isRow ? child.style.marginEnd : child.style.marginBottom;
+    const childMainSize = isRow ? child.width : child.height;
+
+    // Set main-axis position
+    if (isRow) {
+      child.x = mainPos + marginStart;
+    } else {
+      child.y = mainPos + marginStart;
+    }
+
+    // Basic cross-axis positioning (flex-start)
+    // Full alignment will be added in Task 2.5
+    const crossStart = isRow ? style.paddingTop : style.paddingStart;
+    const crossMarginStart = isRow
+      ? child.style.marginTop
+      : child.style.marginStart;
+    if (isRow) {
+      child.y = crossStart + crossMarginStart;
+    } else {
+      child.x = crossStart + crossMarginStart;
+    }
+
+    // Calculate screen coordinates
+    child.screenX = (box.screenX ?? 0) + child.x;
+    child.screenY = (box.screenY ?? 0) + child.y;
+
+    // Advance main position
+    mainPos += marginStart + childMainSize + marginEnd + style.gap;
+  }
 }
 
 /**
