@@ -5,6 +5,7 @@ import {
   type FlexStyle,
   type LayoutNode,
   type LayoutResult,
+  computeLayout,
   resolveStyle,
 } from "../src/core/layout.ts";
 
@@ -175,5 +176,85 @@ describe("layout types", () => {
     assert.strictEqual(result.children.length, 2);
     assert.strictEqual(result.children[0].width, 40);
     assert.strictEqual(result.children[1].x, 40);
+  });
+});
+
+describe("computeLayout structure", () => {
+  it("single node gets full available space", () => {
+    const node: LayoutNode = { style: {} };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.x, 0);
+    assert.strictEqual(result.y, 0);
+    assert.strictEqual(result.width, 80);
+    assert.strictEqual(result.height, 24);
+    assert.deepStrictEqual(result.children, []);
+  });
+
+  it("node with explicit size respects it", () => {
+    const node: LayoutNode = { style: { width: 40, height: 10 } };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.width, 40);
+    assert.strictEqual(result.height, 10);
+  });
+
+  it("builds correct tree structure", () => {
+    const node: LayoutNode = {
+      style: {},
+      children: [{ style: { width: 10 } }, { style: { width: 20 } }],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.children.length, 2);
+  });
+
+  it("handles empty children array", () => {
+    const node: LayoutNode = { style: {}, children: [] };
+    const result = computeLayout(node, 80, 24);
+
+    assert.deepStrictEqual(result.children, []);
+  });
+
+  it("root screenX/screenY are zero", () => {
+    const node: LayoutNode = { style: {} };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.screenX, 0);
+    assert.strictEqual(result.screenY, 0);
+  });
+
+  it("explicit width overrides available space", () => {
+    const node: LayoutNode = { style: { width: 50 } };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.width, 50);
+    assert.strictEqual(result.height, 24); // height still uses available
+  });
+
+  it("explicit height overrides available space", () => {
+    const node: LayoutNode = { style: { height: 12 } };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.width, 80); // width still uses available
+    assert.strictEqual(result.height, 12);
+  });
+
+  it("deeply nested tree has correct structure", () => {
+    const node: LayoutNode = {
+      style: {},
+      children: [
+        {
+          style: {},
+          children: [{ style: {} }, { style: {} }],
+        },
+        { style: {} },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.children.length, 2);
+    assert.strictEqual(result.children[0].children.length, 2);
+    assert.strictEqual(result.children[1].children.length, 0);
   });
 });
