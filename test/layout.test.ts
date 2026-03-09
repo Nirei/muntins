@@ -5,6 +5,7 @@ import {
   type FlexStyle,
   type LayoutNode,
   type LayoutResult,
+  clearLayoutCache,
   computeLayout,
   distribute,
   resolveStyle,
@@ -1380,5 +1381,254 @@ describe("flex wrap", () => {
     assert.strictEqual(result.children[1].y, 0);
     assert.strictEqual(result.children[2].y, 0);
     assert.strictEqual(result.children[3].y, 5);
+  });
+});
+
+describe("nested containers", () => {
+  it("nested flex container computes correctly", () => {
+    const node: LayoutNode = {
+      style: { width: 40, height: 20 },
+      children: [
+        {
+          // Inner container: use flexGrow to take parent's full width
+          style: { flexDirection: "column", flexGrow: 1 },
+          children: [{ style: { height: 5 } }, { style: { flexGrow: 1 } }],
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Outer container: 40x20
+    // Inner container: grows to 40 width, stretches to 20 height
+    // Inner child 1: 5 height
+    // Inner child 2: grows to fill remaining 15
+    assert.strictEqual(result.children[0].width, 40);
+    assert.strictEqual(result.children[0].height, 20);
+    assert.strictEqual(result.children[0].children[0].height, 5);
+    assert.strictEqual(result.children[0].children[1].height, 15);
+  });
+
+  it("deeply nested (3 levels) works", () => {
+    const node: LayoutNode = {
+      style: { width: 60, height: 30 },
+      children: [
+        {
+          style: { flexGrow: 1 },
+          children: [
+            {
+              style: { flexGrow: 1 },
+              children: [{ style: { width: 10, height: 10 } }],
+            },
+          ],
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // All levels should fill available space
+    assert.strictEqual(result.children[0].width, 60);
+    assert.strictEqual(result.children[0].height, 30);
+    assert.strictEqual(result.children[0].children[0].width, 60);
+    assert.strictEqual(result.children[0].children[0].height, 30);
+  });
+
+  it("nested containers compute screen coordinates correctly", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 80,
+        height: 24,
+        paddingTop: 2,
+        paddingStart: 3,
+      },
+      children: [
+        {
+          style: {
+            width: 40,
+            height: 10,
+            paddingTop: 1,
+            paddingStart: 2,
+          },
+          children: [{ style: { width: 10, height: 5 } }],
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Root: screenX=0, screenY=0
+    // First child: relative x=0, y=0, screenX=0+3=3, screenY=0+2=2
+    // Nested child: relative x=0, y=0, screenX=3+2=5, screenY=2+1=3
+    assert.strictEqual(result.screenX, 0);
+    assert.strictEqual(result.screenY, 0);
+    assert.strictEqual(result.children[0].screenX, 3);
+    assert.strictEqual(result.children[0].screenY, 2);
+    assert.strictEqual(result.children[0].children[0].screenX, 5);
+    assert.strictEqual(result.children[0].children[0].screenY, 3);
+  });
+});
+
+describe("complete layout scenarios", () => {
+  it("toolbar with flexible middle", () => {
+    // [Logo] [-----Search-----] [Avatar]
+    const node: LayoutNode = {
+      style: { width: 80, height: 3 },
+      children: [
+        { style: { width: 10 } }, // Logo
+        { style: { flexGrow: 1 } }, // Search
+        { style: { width: 8 } }, // Avatar
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.children[0].width, 10);
+    assert.strictEqual(result.children[1].width, 62); // 80 - 10 - 8
+    assert.strictEqual(result.children[2].width, 8);
+    assert.strictEqual(result.children[2].x, 72); // 10 + 62
+  });
+
+  it("sidebar layout", () => {
+    // Sidebar | Main content
+    const node: LayoutNode = {
+      style: { width: 80, height: 24 },
+      children: [
+        { style: { width: 20 } }, // Sidebar
+        { style: { flexGrow: 1 } }, // Main
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.children[0].width, 20);
+    assert.strictEqual(result.children[0].height, 24); // stretch
+    assert.strictEqual(result.children[1].width, 60);
+    assert.strictEqual(result.children[1].x, 20);
+  });
+
+  it("centered modal", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 80,
+        height: 24,
+        justifyContent: "center",
+        alignItems: "center",
+      },
+      children: [{ style: { width: 40, height: 10 } }],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.children[0].x, 20); // (80-40)/2
+    assert.strictEqual(result.children[0].y, 7); // (24-10)/2
+  });
+
+  it("list with padding and gap", () => {
+    // Wrap in a parent to test intrinsic sizing (root uses available space)
+    const node: LayoutNode = {
+      style: { alignItems: "flex-start" },
+      children: [
+        {
+          style: {
+            flexDirection: "column",
+            paddingTop: 1,
+            paddingEnd: 2,
+            paddingBottom: 1,
+            paddingStart: 2,
+            gap: 1,
+          },
+          children: [
+            { style: { height: 3 } },
+            { style: { height: 3 } },
+            { style: { height: 3 } },
+          ],
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Intrinsic height: 1 + 3 + 1 + 3 + 1 + 3 + 1 = 13 (padding + items + gaps)
+    assert.strictEqual(result.children[0].height, 13);
+
+    // First item at y = 1 (top padding)
+    assert.strictEqual(result.children[0].children[0].y, 1);
+    // Second item at y = 1 + 3 + 1 = 5
+    assert.strictEqual(result.children[0].children[1].y, 5);
+  });
+
+  it("header-content-footer layout", () => {
+    const node: LayoutNode = {
+      style: { width: 80, height: 24, flexDirection: "column" },
+      children: [
+        { style: { height: 3 } }, // Header
+        { style: { flexGrow: 1 } }, // Content
+        { style: { height: 2 } }, // Footer
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(result.children[0].height, 3);
+    assert.strictEqual(result.children[1].height, 19); // 24 - 3 - 2
+    assert.strictEqual(result.children[2].height, 2);
+    assert.strictEqual(result.children[2].y, 22); // 3 + 19
+  });
+});
+
+describe("layout caching", () => {
+  it("returns cached result for same dimensions", () => {
+    const node: LayoutNode = {
+      style: {},
+      children: [{ style: { width: 10 } }],
+    };
+
+    const result1 = computeLayout(node, 80, 24);
+    const result2 = computeLayout(node, 80, 24);
+
+    // Same object reference (cached)
+    assert.strictEqual(result1, result2);
+  });
+
+  it("recomputes for different dimensions", () => {
+    const node: LayoutNode = {
+      style: {},
+      children: [{ style: { flexGrow: 1 } }],
+    };
+
+    const result1 = computeLayout(node, 80, 24);
+    const result2 = computeLayout(node, 100, 24);
+
+    assert.notStrictEqual(result1.children[0].width, result2.children[0].width);
+    assert.strictEqual(result1.children[0].width, 80);
+    assert.strictEqual(result2.children[0].width, 100);
+  });
+
+  it("new node object bypasses cache", () => {
+    const node1: LayoutNode = {
+      style: {},
+      children: [{ style: { width: 10 } }],
+    };
+    const node2: LayoutNode = {
+      style: {},
+      children: [{ style: { width: 10 } }],
+    };
+
+    const result1 = computeLayout(node1, 80, 24);
+    const result2 = computeLayout(node2, 80, 24);
+
+    // Different node objects = different cache entries
+    assert.notStrictEqual(result1, result2);
+    // But same computed values
+    assert.strictEqual(result1.children[0].width, result2.children[0].width);
+  });
+
+  it("clearLayoutCache removes cached results", () => {
+    const node: LayoutNode = {
+      style: {},
+      children: [{ style: { width: 10 } }],
+    };
+
+    const result1 = computeLayout(node, 80, 24);
+    clearLayoutCache(node);
+    const result2 = computeLayout(node, 80, 24);
+
+    // After clearing, we get a new result object
+    assert.notStrictEqual(result1, result2);
+    // But same computed values
+    assert.strictEqual(result1.children[0].width, result2.children[0].width);
   });
 });

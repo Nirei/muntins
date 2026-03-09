@@ -858,11 +858,7 @@ function resolveFlexAndPosition(box: LayoutBox): void {
     }
   }
 
-  // 5. Calculate screen coordinates for all children
-  for (const child of visibleChildren) {
-    child.screenX = (box.screenX ?? 0) + child.x;
-    child.screenY = (box.screenY ?? 0) + child.y;
-  }
+  // Note: Screen coordinates are computed by finalizePositions() after all passes
 }
 
 /**
@@ -881,12 +877,60 @@ function toLayoutResult(box: LayoutBox): LayoutResult {
 }
 
 /**
+ * Recursively computes absolute screen coordinates from relative positions.
+ *
+ * This function bridges relative and screen coordinates:
+ * - Input: box.x, box.y are relative to parent's border box (set by Pass 3)
+ * - Output: box.screenX, box.screenY are absolute screen positions
+ *
+ * Note: Children's x/y positions already include parent's padding offset
+ * (set by applyJustifyContentForLine), so we use the parent's screen position
+ * directly without adding padding again.
+ */
+function finalizePositions(
+  box: LayoutBox,
+  parentScreenX: number,
+  parentScreenY: number,
+): void {
+  // Compute screen position by adding parent's screen position to our relative position
+  box.screenX = parentScreenX + box.x;
+  box.screenY = parentScreenY + box.y;
+
+  // Children's x/y already account for this box's padding,
+  // so we pass our screen position directly
+  for (const child of box.children) {
+    finalizePositions(child, box.screenX, box.screenY);
+  }
+}
+
+/**
+ * Cache for layout results keyed on LayoutNode and available dimensions.
+ * Uses WeakMap so entries are garbage collected when nodes are no longer referenced.
+ */
+const layoutCache = new WeakMap<LayoutNode, Map<string, LayoutResult>>();
+
+/**
+ * Clears the layout cache for a specific node.
+ * Useful for testing or when forcing a recomputation.
+ */
+export function clearLayoutCache(node?: LayoutNode): void {
+  if (node) {
+    layoutCache.delete(node);
+  }
+}
+
+/**
  * Computes flexbox layout for a tree of nodes.
  *
  * Uses a 3-pass algorithm:
  * 1. Build internal tree with resolved styles
  * 2. Pass 2 (bottom-up): Resolve intrinsic sizes
- * 3. Pass 3 (top-down): Resolve flex values, alignment, final positions
+ * 3. Pass 3 (top-down): Resolve flex values, alignment, relative positions
+ * 4. Finalize absolute screen coordinates
+ *
+ * Results are cached keyed on the LayoutNode and available dimensions.
+ * Cache invalidation is automatic: when a node is recreated (different object
+ * identity), the old cache entry is garbage collected via WeakMap.
  *
  * @param node - Root of the layout tree
  * @param availableWidth - Available width in terminal cells
@@ -898,6 +942,14 @@ export function computeLayout(
   availableWidth: number,
   availableHeight: number,
 ): LayoutResult {
+  // Check cache first
+  const cacheKey = `${availableWidth},${availableHeight}`;
+  let nodeCache = layoutCache.get(node);
+  const cached = nodeCache?.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   // 1. Build internal tree with resolved styles
   const root = buildLayoutTree(node, null);
 
@@ -911,9 +963,6 @@ export function computeLayout(
     typeof rootStyle.height === "number" ? rootStyle.height : availableHeight;
   root.x = 0;
   root.y = 0;
-  // Root's screen position equals relative position (no parent offset)
-  root.screenX = 0;
-  root.screenY = 0;
 
   // 3. Build traversal queues (top-down computed once, bottom-up is reversed copy)
   const topDownQueue = buildTopDownQueue(root);
@@ -929,6 +978,19 @@ export function computeLayout(
     resolveFlexAndPosition(box);
   }
 
-  // 6. Convert to LayoutResult
-  return toLayoutResult(root);
+  // 6. Finalize absolute screen coordinates (top-down walk)
+  // Root starts at (0, 0) with no parent offset
+  finalizePositions(root, 0, 0);
+
+  // 7. Convert to LayoutResult
+  const result = toLayoutResult(root);
+
+  // Store in cache
+  if (!nodeCache) {
+    nodeCache = new Map();
+    layoutCache.set(node, nodeCache);
+  }
+  nodeCache.set(cacheKey, result);
+
+  return result;
 }
