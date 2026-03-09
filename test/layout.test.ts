@@ -1196,7 +1196,12 @@ describe("flex wrap", () => {
 
   it("wrap creates multiple lines", () => {
     const node: LayoutNode = {
-      style: { width: 20, flexWrap: "wrap", alignItems: "flex-start" },
+      style: {
+        width: 20,
+        flexWrap: "wrap",
+        alignItems: "flex-start",
+        alignContent: "flex-start",
+      },
       children: [
         { style: { width: 15, height: 5 } },
         { style: { width: 15, height: 5 } },
@@ -1211,7 +1216,12 @@ describe("flex wrap", () => {
 
   it("each line distributes flex independently", () => {
     const node: LayoutNode = {
-      style: { width: 20, flexWrap: "wrap", alignItems: "flex-start" },
+      style: {
+        width: 20,
+        flexWrap: "wrap",
+        alignItems: "flex-start",
+        alignContent: "flex-start",
+      },
       children: [
         { style: { width: 10, height: 5, flexGrow: 1 } }, // line 1
         { style: { width: 15, height: 5, flexGrow: 1 } }, // line 2
@@ -1227,7 +1237,13 @@ describe("flex wrap", () => {
 
   it("alignItems applies within each line", () => {
     const node: LayoutNode = {
-      style: { width: 20, height: 20, flexWrap: "wrap", alignItems: "center" },
+      style: {
+        width: 20,
+        height: 20,
+        flexWrap: "wrap",
+        alignItems: "center",
+        alignContent: "flex-start",
+      },
       children: [
         { style: { width: 15, height: 3 } },
         { style: { width: 15, height: 5 } },
@@ -1236,9 +1252,11 @@ describe("flex wrap", () => {
     const result = computeLayout(node, 80, 24);
 
     // Each item centered within its line's cross size
-    // Line 1 cross size = 3, Line 2 cross size = 5
-    // Item 1 centered in line 1 (at y=0 since it fills line)
+    // With alignContent: flex-start, line 1 cross size = 3, line 2 cross size = 5
+    // Item 1 (height 3) centered in line 1 = at y=0 (fills line)
+    // Item 2 (height 5) centered in line 2 = at y=3 (fills line)
     assert.strictEqual(result.children[0].y, 0);
+    assert.strictEqual(result.children[1].y, 3);
   });
 
   it("container auto-height with wrap = sum of lines", () => {
@@ -1290,7 +1308,12 @@ describe("flex wrap", () => {
 
   it("oversized item gets its own line (no infinite loop)", () => {
     const node: LayoutNode = {
-      style: { width: 20, flexWrap: "wrap", alignItems: "flex-start" },
+      style: {
+        width: 20,
+        flexWrap: "wrap",
+        alignItems: "flex-start",
+        alignContent: "flex-start",
+      },
       children: [
         { style: { width: 50, height: 5 } }, // larger than container!
         { style: { width: 10, height: 5 } },
@@ -1311,6 +1334,7 @@ describe("flex wrap", () => {
         flexDirection: "column",
         flexWrap: "wrap",
         alignItems: "flex-start",
+        alignContent: "flex-start",
       },
       children: [
         { style: { width: 5, height: 15 } },
@@ -1332,6 +1356,7 @@ describe("flex wrap", () => {
         paddingStart: 5,
         paddingEnd: 5,
         alignItems: "flex-start",
+        alignContent: "flex-start",
       },
       children: [
         { style: { width: 15, height: 5 } },
@@ -1350,7 +1375,12 @@ describe("flex wrap", () => {
 
   it("items with margins wrap correctly", () => {
     const node: LayoutNode = {
-      style: { width: 20, flexWrap: "wrap", alignItems: "flex-start" },
+      style: {
+        width: 20,
+        flexWrap: "wrap",
+        alignItems: "flex-start",
+        alignContent: "flex-start",
+      },
       children: [
         { style: { width: 8, height: 5, marginStart: 2, marginEnd: 2 } },
         { style: { width: 8, height: 5, marginStart: 2, marginEnd: 2 } },
@@ -1366,7 +1396,12 @@ describe("flex wrap", () => {
 
   it("multiple items fit on same line before wrapping", () => {
     const node: LayoutNode = {
-      style: { width: 30, flexWrap: "wrap", alignItems: "flex-start" },
+      style: {
+        width: 30,
+        flexWrap: "wrap",
+        alignItems: "flex-start",
+        alignContent: "flex-start",
+      },
       children: [
         { style: { width: 10, height: 5 } },
         { style: { width: 10, height: 5 } },
@@ -1630,5 +1665,713 @@ describe("layout caching", () => {
     assert.notStrictEqual(result1, result2);
     // But same computed values
     assert.strictEqual(result1.children[0].width, result2.children[0].width);
+  });
+});
+
+describe("flexBasis", () => {
+  it("numeric flexBasis sets initial width in row direction", () => {
+    const node: LayoutNode = {
+      style: { width: 100, flexDirection: "row" },
+      children: [{ style: { flexBasis: 30 } }, { style: { flexBasis: 20 } }],
+    };
+    const result = computeLayout(node, 100, 24);
+
+    assert.strictEqual(result.children[0].width, 30);
+    assert.strictEqual(result.children[1].width, 20);
+  });
+
+  it("numeric flexBasis sets initial height in column direction", () => {
+    const node: LayoutNode = {
+      style: { height: 100, flexDirection: "column" },
+      children: [{ style: { flexBasis: 30 } }, { style: { flexBasis: 20 } }],
+    };
+    const result = computeLayout(node, 80, 100);
+
+    assert.strictEqual(result.children[0].height, 30);
+    assert.strictEqual(result.children[1].height, 20);
+  });
+
+  it("flexBasis: 'auto' uses explicit width/height", () => {
+    const node: LayoutNode = {
+      style: { width: 100, flexDirection: "row" },
+      children: [
+        { style: { flexBasis: "auto", width: 25 } },
+        { style: { flexBasis: "auto", width: 15 } },
+      ],
+    };
+    const result = computeLayout(node, 100, 24);
+
+    assert.strictEqual(result.children[0].width, 25);
+    assert.strictEqual(result.children[1].width, 15);
+  });
+
+  it("flexBasis with flexGrow distributes extra space", () => {
+    const node: LayoutNode = {
+      style: { width: 100, flexDirection: "row" },
+      children: [
+        { style: { flexBasis: 20, flexGrow: 1 } },
+        { style: { flexBasis: 30, flexGrow: 1 } },
+      ],
+    };
+    const result = computeLayout(node, 100, 24);
+
+    // Basis: 20 + 30 = 50, remaining: 50, each gets 25 extra
+    assert.strictEqual(result.children[0].width, 45); // 20 + 25
+    assert.strictEqual(result.children[1].width, 55); // 30 + 25
+  });
+
+  it("flexBasis with flexShrink shrinks proportionally", () => {
+    const node: LayoutNode = {
+      style: { width: 50, flexDirection: "row" },
+      children: [
+        { style: { flexBasis: 40, flexShrink: 1 } },
+        { style: { flexBasis: 40, flexShrink: 1 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Basis: 40 + 40 = 80, overflow: 30, shrink equally (same basis, same factor)
+    assert.strictEqual(result.children[0].width, 25);
+    assert.strictEqual(result.children[1].width, 25);
+  });
+
+  it("flexBasis respects minWidth constraint", () => {
+    const node: LayoutNode = {
+      style: { width: 50, flexDirection: "row" },
+      children: [
+        { style: { flexBasis: 40, flexShrink: 1, minWidth: 30 } },
+        { style: { flexBasis: 40, flexShrink: 1 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // First child clamped to minWidth 30
+    assert.ok(result.children[0].width >= 30);
+  });
+
+  it("flexBasis respects maxWidth constraint", () => {
+    const node: LayoutNode = {
+      style: { width: 100, flexDirection: "row" },
+      children: [{ style: { flexBasis: 60, maxWidth: 40 } }],
+    };
+    const result = computeLayout(node, 100, 24);
+
+    assert.strictEqual(result.children[0].width, 40);
+  });
+
+  it("explicit width overrides flexBasis", () => {
+    const node: LayoutNode = {
+      style: { width: 100, flexDirection: "row" },
+      children: [{ style: { flexBasis: 50, width: 30 } }],
+    };
+    const result = computeLayout(node, 100, 24);
+
+    // Explicit width takes precedence
+    assert.strictEqual(result.children[0].width, 30);
+  });
+
+  it("flexBasis does not affect cross-axis sizing", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 100,
+        height: 50,
+        flexDirection: "row",
+        alignItems: "flex-start",
+      },
+      children: [{ style: { flexBasis: 30, height: 20 } }],
+    };
+    const result = computeLayout(node, 100, 50);
+
+    // flexBasis sets width, height is explicit
+    assert.strictEqual(result.children[0].width, 30);
+    assert.strictEqual(result.children[0].height, 20);
+  });
+
+  it("flexBasis with measure function for cross-axis", () => {
+    const node: LayoutNode = {
+      style: { width: 100, flexDirection: "row", alignItems: "flex-start" },
+      children: [
+        {
+          style: { flexBasis: 40 },
+          measure: () => ({ width: 10, height: 5 }),
+        },
+      ],
+    };
+    const result = computeLayout(node, 100, 24);
+
+    // flexBasis sets width to 40, measure provides height
+    assert.strictEqual(result.children[0].width, 40);
+    assert.strictEqual(result.children[0].height, 5);
+  });
+});
+
+describe("alignContent", () => {
+  // alignContent only affects wrapped containers with multiple lines
+
+  it("flex-start packs lines at start (default)", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 30,
+        height: 50,
+        flexWrap: "wrap",
+        alignContent: "flex-start",
+        alignItems: "flex-start",
+      },
+      children: [
+        { style: { width: 20, height: 10 } },
+        { style: { width: 20, height: 10 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 50);
+
+    // Lines at top: y=0, y=10
+    assert.strictEqual(result.children[0].y, 0);
+    assert.strictEqual(result.children[1].y, 10);
+  });
+
+  it("flex-end packs lines at end", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 30,
+        height: 50,
+        flexWrap: "wrap",
+        alignContent: "flex-end",
+        alignItems: "flex-start",
+      },
+      children: [
+        { style: { width: 20, height: 10 } },
+        { style: { width: 20, height: 10 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 50);
+
+    // Total lines height = 20, remaining = 30
+    // Lines packed at bottom: y=30, y=40
+    assert.strictEqual(result.children[0].y, 30);
+    assert.strictEqual(result.children[1].y, 40);
+  });
+
+  it("center centers lines", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 30,
+        height: 50,
+        flexWrap: "wrap",
+        alignContent: "center",
+        alignItems: "flex-start",
+      },
+      children: [
+        { style: { width: 20, height: 10 } },
+        { style: { width: 20, height: 10 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 50);
+
+    // Total lines height = 20, remaining = 30, offset = 15
+    // Lines: y=15, y=25
+    assert.strictEqual(result.children[0].y, 15);
+    assert.strictEqual(result.children[1].y, 25);
+  });
+
+  it("stretch distributes extra space to lines", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 30,
+        height: 50,
+        flexWrap: "wrap",
+        alignContent: "stretch",
+        alignItems: "flex-start",
+      },
+      children: [
+        { style: { width: 20, height: 10 } },
+        { style: { width: 20, height: 10 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 50);
+
+    // Total lines height = 20, remaining = 30, 15 per line
+    // Line 1: y=0, lineCrossSize=25 (10+15)
+    // Line 2: y=25, lineCrossSize=25
+    assert.strictEqual(result.children[0].y, 0);
+    assert.strictEqual(result.children[1].y, 25);
+  });
+
+  it("space-between distributes space between lines", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 30,
+        height: 50,
+        flexWrap: "wrap",
+        alignContent: "space-between",
+        alignItems: "flex-start",
+      },
+      children: [
+        { style: { width: 20, height: 10 } },
+        { style: { width: 20, height: 10 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 50);
+
+    // Total lines height = 20, remaining = 30
+    // First line at 0, last line at bottom (40)
+    assert.strictEqual(result.children[0].y, 0);
+    assert.strictEqual(result.children[1].y, 40);
+  });
+
+  it("space-around distributes equal space around lines", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 30,
+        height: 50,
+        flexWrap: "wrap",
+        alignContent: "space-around",
+        alignItems: "flex-start",
+      },
+      children: [
+        { style: { width: 20, height: 10 } },
+        { style: { width: 20, height: 10 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 50);
+
+    // Total lines height = 20, remaining = 30, 2 lines = 15 per line
+    // Half space before first = 7.5, then line 1 (10), then full space (15), then line 2 (10)
+    // Line 1: y = 7.5 rounded = 8
+    // Line 2: y = 7.5 + 10 + 15 = 32.5 rounded = 33
+    assert.strictEqual(result.children[0].y, 8);
+    assert.strictEqual(result.children[1].y, 33);
+  });
+
+  it("alignContent has no effect on single line", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 100,
+        height: 50,
+        flexWrap: "wrap",
+        alignContent: "flex-end",
+        alignItems: "flex-start",
+      },
+      children: [
+        { style: { width: 20, height: 10 } },
+        { style: { width: 20, height: 10 } },
+      ],
+    };
+    const result = computeLayout(node, 100, 50);
+
+    // Both items fit on one line, alignContent doesn't apply
+    // alignItems flex-start puts them at y=0
+    assert.strictEqual(result.children[0].y, 0);
+    assert.strictEqual(result.children[1].y, 0);
+  });
+
+  it("alignContent has no effect on nowrap", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 30,
+        height: 50,
+        flexWrap: "nowrap",
+        alignContent: "flex-end",
+        alignItems: "flex-start",
+      },
+      children: [
+        { style: { width: 20, height: 10 } },
+        { style: { width: 20, height: 10 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 50);
+
+    // nowrap: both on same line, alignContent doesn't apply
+    assert.strictEqual(result.children[0].y, 0);
+    assert.strictEqual(result.children[1].y, 0);
+  });
+
+  it("alignContent respects padding", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 30,
+        height: 60,
+        paddingTop: 5,
+        paddingBottom: 5,
+        flexWrap: "wrap",
+        alignContent: "flex-end",
+        alignItems: "flex-start",
+      },
+      children: [
+        { style: { width: 20, height: 10 } },
+        { style: { width: 20, height: 10 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 60);
+
+    // Content area = 50, lines = 20, remaining = 30
+    // flex-end: offset = 30, plus padding = 35
+    // Line 1: y = 5 + 30 = 35, Line 2: y = 45
+    assert.strictEqual(result.children[0].y, 35);
+    assert.strictEqual(result.children[1].y, 45);
+  });
+
+  it("alignContent with three lines", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 30,
+        height: 60,
+        flexWrap: "wrap",
+        alignContent: "space-between",
+        alignItems: "flex-start",
+      },
+      children: [
+        { style: { width: 20, height: 10 } },
+        { style: { width: 20, height: 10 } },
+        { style: { width: 20, height: 10 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 60);
+
+    // 3 lines of 10 each = 30, remaining = 30, 2 gaps = 15 each
+    // Line 1: y=0, Line 2: y=25, Line 3: y=50
+    assert.strictEqual(result.children[0].y, 0);
+    assert.strictEqual(result.children[1].y, 25);
+    assert.strictEqual(result.children[2].y, 50);
+  });
+
+  it("alignContent works with column direction", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 50,
+        height: 30,
+        flexDirection: "column",
+        flexWrap: "wrap",
+        alignContent: "flex-end",
+        alignItems: "flex-start",
+      },
+      children: [
+        { style: { width: 10, height: 20 } },
+        { style: { width: 10, height: 20 } },
+      ],
+    };
+    const result = computeLayout(node, 50, 80);
+
+    // Column wrap: cross axis is horizontal (x)
+    // Total lines width = 20, remaining = 30
+    // flex-end: lines packed at right (x=30, x=40)
+    assert.strictEqual(result.children[0].x, 30);
+    assert.strictEqual(result.children[1].x, 40);
+  });
+});
+
+describe("absolute positioning", () => {
+  it("position: absolute removes child from normal flow", () => {
+    const node: LayoutNode = {
+      style: { width: 100, height: 50 },
+      children: [
+        { style: { width: 20, height: 10 } },
+        { style: { width: 20, height: 10, position: "absolute" } },
+        { style: { width: 20, height: 10 } },
+      ],
+    };
+    const result = computeLayout(node, 100, 50);
+
+    // Absolute child is out of flow, so third child is at x=20 (not x=40)
+    assert.strictEqual(result.children[0].x, 0);
+    assert.strictEqual(result.children[2].x, 20);
+  });
+
+  it("absolute child positioned at top-left by default", () => {
+    const node: LayoutNode = {
+      style: { width: 100, height: 50 },
+      children: [{ style: { width: 20, height: 10, position: "absolute" } }],
+    };
+    const result = computeLayout(node, 100, 50);
+
+    assert.strictEqual(result.children[0].x, 0);
+    assert.strictEqual(result.children[0].y, 0);
+  });
+
+  it("top and start position from top-left", () => {
+    const node: LayoutNode = {
+      style: { width: 100, height: 50 },
+      children: [
+        {
+          style: {
+            width: 20,
+            height: 10,
+            position: "absolute",
+            top: 5,
+            start: 10,
+          },
+        },
+      ],
+    };
+    const result = computeLayout(node, 100, 50);
+
+    assert.strictEqual(result.children[0].x, 10);
+    assert.strictEqual(result.children[0].y, 5);
+  });
+
+  it("bottom and end position from bottom-right", () => {
+    const node: LayoutNode = {
+      style: { width: 100, height: 50 },
+      children: [
+        {
+          style: {
+            width: 20,
+            height: 10,
+            position: "absolute",
+            bottom: 5,
+            end: 10,
+          },
+        },
+      ],
+    };
+    const result = computeLayout(node, 100, 50);
+
+    // x = 100 - 20 - 10 = 70
+    // y = 50 - 10 - 5 = 35
+    assert.strictEqual(result.children[0].x, 70);
+    assert.strictEqual(result.children[0].y, 35);
+  });
+
+  it("top takes precedence over bottom", () => {
+    const node: LayoutNode = {
+      style: { width: 100, height: 50 },
+      children: [
+        {
+          style: {
+            width: 20,
+            height: 10,
+            position: "absolute",
+            top: 3,
+            bottom: 100,
+          },
+        },
+      ],
+    };
+    const result = computeLayout(node, 100, 50);
+
+    assert.strictEqual(result.children[0].y, 3);
+  });
+
+  it("start takes precedence over end", () => {
+    const node: LayoutNode = {
+      style: { width: 100, height: 50 },
+      children: [
+        {
+          style: {
+            width: 20,
+            height: 10,
+            position: "absolute",
+            start: 5,
+            end: 100,
+          },
+        },
+      ],
+    };
+    const result = computeLayout(node, 100, 50);
+
+    assert.strictEqual(result.children[0].x, 5);
+  });
+
+  it("absolute child respects parent padding", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 100,
+        height: 50,
+        paddingTop: 5,
+        paddingStart: 10,
+        paddingBottom: 5,
+        paddingEnd: 10,
+      },
+      children: [
+        {
+          style: {
+            width: 20,
+            height: 10,
+            position: "absolute",
+            top: 0,
+            start: 0,
+          },
+        },
+      ],
+    };
+    const result = computeLayout(node, 100, 50);
+
+    // Positioned relative to content area (after padding)
+    assert.strictEqual(result.children[0].x, 10);
+    assert.strictEqual(result.children[0].y, 5);
+  });
+
+  it("absolute child at bottom-end respects padding", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 100,
+        height: 50,
+        paddingTop: 5,
+        paddingStart: 10,
+        paddingBottom: 5,
+        paddingEnd: 10,
+      },
+      children: [
+        {
+          style: {
+            width: 20,
+            height: 10,
+            position: "absolute",
+            bottom: 0,
+            end: 0,
+          },
+        },
+      ],
+    };
+    const result = computeLayout(node, 100, 50);
+
+    // Content area: 80x40, child at bottom-right of content area
+    // x = 10 + (80 - 20 - 0) = 70
+    // y = 5 + (40 - 10 - 0) = 35
+    assert.strictEqual(result.children[0].x, 70);
+    assert.strictEqual(result.children[0].y, 35);
+  });
+
+  it("absolute child does not affect sibling positions", () => {
+    const node: LayoutNode = {
+      style: { width: 100, height: 50 },
+      children: [
+        { style: { width: 30 } },
+        {
+          style: {
+            width: 50,
+            height: 20,
+            position: "absolute",
+            top: 0,
+            start: 0,
+          },
+        },
+        { style: { width: 30 } },
+      ],
+    };
+    const result = computeLayout(node, 100, 50);
+
+    // First and third children are positioned as if absolute child doesn't exist
+    assert.strictEqual(result.children[0].x, 0);
+    assert.strictEqual(result.children[0].width, 30);
+    assert.strictEqual(result.children[2].x, 30);
+    assert.strictEqual(result.children[2].width, 30);
+  });
+
+  it("multiple absolute children can overlap", () => {
+    const node: LayoutNode = {
+      style: { width: 100, height: 50 },
+      children: [
+        {
+          style: {
+            width: 20,
+            height: 10,
+            position: "absolute",
+            top: 5,
+            start: 5,
+          },
+        },
+        {
+          style: {
+            width: 20,
+            height: 10,
+            position: "absolute",
+            top: 5,
+            start: 5,
+          },
+        },
+      ],
+    };
+    const result = computeLayout(node, 100, 50);
+
+    // Both at same position
+    assert.strictEqual(result.children[0].x, 5);
+    assert.strictEqual(result.children[0].y, 5);
+    assert.strictEqual(result.children[1].x, 5);
+    assert.strictEqual(result.children[1].y, 5);
+  });
+
+  it("absolute child does not contribute to parent intrinsic size", () => {
+    const node: LayoutNode = {
+      style: { alignItems: "flex-start" },
+      children: [
+        {
+          style: { flexDirection: "row" },
+          children: [
+            { style: { width: 10, height: 5 } },
+            { style: { width: 100, height: 50, position: "absolute" } },
+          ],
+        },
+      ],
+    };
+    const result = computeLayout(node, 200, 100);
+
+    // Parent width should be 10 (only from relative child), not 110
+    assert.strictEqual(result.children[0].width, 10);
+  });
+
+  it("absolute child with explicit size", () => {
+    const node: LayoutNode = {
+      style: { width: 100, height: 50 },
+      children: [
+        {
+          style: {
+            width: 30,
+            height: 20,
+            position: "absolute",
+            top: 10,
+            start: 15,
+          },
+        },
+      ],
+    };
+    const result = computeLayout(node, 100, 50);
+
+    assert.strictEqual(result.children[0].width, 30);
+    assert.strictEqual(result.children[0].height, 20);
+    assert.strictEqual(result.children[0].x, 15);
+    assert.strictEqual(result.children[0].y, 10);
+  });
+
+  it("absolute child with measure function", () => {
+    const node: LayoutNode = {
+      style: { width: 100, height: 50 },
+      children: [
+        {
+          style: { position: "absolute", top: 5, start: 5 },
+          measure: () => ({ width: 25, height: 8 }),
+        },
+      ],
+    };
+    const result = computeLayout(node, 100, 50);
+
+    assert.strictEqual(result.children[0].width, 25);
+    assert.strictEqual(result.children[0].height, 8);
+    assert.strictEqual(result.children[0].x, 5);
+    assert.strictEqual(result.children[0].y, 5);
+  });
+
+  it("absolute child screen coordinates are computed correctly", () => {
+    const node: LayoutNode = {
+      style: { width: 100, height: 50, paddingTop: 5, paddingStart: 10 },
+      children: [
+        {
+          style: {
+            width: 20,
+            height: 10,
+            position: "absolute",
+            top: 3,
+            start: 7,
+          },
+        },
+      ],
+    };
+    const result = computeLayout(node, 100, 50);
+
+    // Relative position: x = 10 + 7 = 17, y = 5 + 3 = 8
+    assert.strictEqual(result.children[0].x, 17);
+    assert.strictEqual(result.children[0].y, 8);
+    // Screen position should match for root's children
+    assert.strictEqual(result.children[0].screenX, 17);
+    assert.strictEqual(result.children[0].screenY, 8);
   });
 });
