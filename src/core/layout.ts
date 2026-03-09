@@ -156,6 +156,15 @@ interface LayoutBox {
 }
 
 /**
+ * A flex line contains items that fit on one line when wrapping.
+ */
+interface FlexLine {
+  items: LayoutBox[];
+  mainSize: number; // total main size of items + gaps
+  crossSize: number; // max cross size of items
+}
+
+/**
  * Recursively builds a LayoutBox tree from a LayoutNode tree.
  * All dimensions start at 0 and are resolved in subsequent passes.
  */
@@ -245,45 +254,166 @@ export function distribute(total: number, weights: number[]): number[] {
 }
 
 /**
+ * Creates a FlexLine from a list of items, computing main and cross sizes.
+ */
+function createLine(items: LayoutBox[], gap: number, isRow: boolean): FlexLine {
+  let mainSize = 0;
+  let crossSize = 0;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const marginMain = isRow
+      ? item.style.marginStart + item.style.marginEnd
+      : item.style.marginTop + item.style.marginBottom;
+    const marginCross = isRow
+      ? item.style.marginTop + item.style.marginBottom
+      : item.style.marginStart + item.style.marginEnd;
+
+    const itemMain = (isRow ? item.width : item.height) + marginMain;
+    const itemCross = (isRow ? item.height : item.width) + marginCross;
+
+    mainSize += itemMain + (i > 0 ? gap : 0);
+    crossSize = Math.max(crossSize, itemCross);
+  }
+
+  return { items, mainSize, crossSize };
+}
+
+/**
+ * Collects visible children into flex lines based on wrap setting.
+ * For nowrap, all items go on a single line.
+ * For wrap, items flow to new lines when they exceed available main space.
+ *
+ * IMPORTANT: For space-between/around/evenly justification, style.gap is ignored
+ * when determining line breaks, because the gap is computed dynamically.
+ */
+function collectLines(
+  box: LayoutBox,
+  visibleChildren: LayoutBox[],
+  isRow: boolean,
+): FlexLine[] {
+  const style = box.style;
+  const paddingMain = isRow
+    ? style.paddingStart + style.paddingEnd
+    : style.paddingTop + style.paddingBottom;
+
+  const availableMain = (isRow ? box.width : box.height) - paddingMain;
+
+  // For space-* justification, gap is computed dynamically, not from style.gap.
+  // Use 0 for line-break calculations and mainSize computation.
+  const isSpaceJustify =
+    style.justifyContent === "space-between" ||
+    style.justifyContent === "space-around" ||
+    style.justifyContent === "space-evenly";
+  const effectiveGap = isSpaceJustify ? 0 : style.gap;
+
+  // nowrap: single line with all children
+  if (style.flexWrap === "nowrap") {
+    return [createLine(visibleChildren, effectiveGap, isRow)];
+  }
+
+  // wrap: distribute items into multiple lines
+  const lines: FlexLine[] = [];
+  let currentItems: LayoutBox[] = [];
+  let currentMainSize = 0;
+
+  for (const child of visibleChildren) {
+    const marginMain = isRow
+      ? child.style.marginStart + child.style.marginEnd
+      : child.style.marginTop + child.style.marginBottom;
+    const childMainSize = isRow ? child.width : child.height;
+    const childTotalMain = childMainSize + marginMain;
+
+    // Gap before this item (if not first in line)
+    const gapBefore = currentItems.length > 0 ? effectiveGap : 0;
+
+    // IMPORTANT: Always allow at least one item per line, even if oversized.
+    // Without this check, an item larger than availableMain would cause an
+    // infinite loop (never fits, keeps trying to start new line).
+    const wouldOverflow =
+      currentMainSize + gapBefore + childTotalMain > availableMain;
+    const hasItemsOnLine = currentItems.length > 0;
+
+    if (wouldOverflow && hasItemsOnLine) {
+      // Start new line
+      lines.push(createLine(currentItems, effectiveGap, isRow));
+      currentItems = [child];
+      currentMainSize = childTotalMain;
+    } else {
+      // Either fits, or this is the first item on the line (must accept it)
+      currentItems.push(child);
+      currentMainSize += gapBefore + childTotalMain;
+    }
+  }
+
+  // Don't forget the last line
+  if (currentItems.length > 0) {
+    lines.push(createLine(currentItems, effectiveGap, isRow));
+  }
+
+  return lines;
+}
+
+/**
  * Calculates intrinsic size for a given axis based on children sizes.
- * Main axis: sum of children sizes + gaps
- * Cross axis: max of children sizes
+ * Main axis: sum of children sizes + gaps (or max line main size if wrapping)
+ * Cross axis: max of children sizes (or sum of line cross sizes if wrapping)
  */
 function calculateIntrinsicSize(
   box: LayoutBox,
   axis: "width" | "height",
 ): number {
   const style = box.style;
+  const isRow = style.flexDirection === "row";
   const isMainAxis =
-    (axis === "width" && style.flexDirection === "row") ||
-    (axis === "height" && style.flexDirection === "column");
+    (axis === "width" && isRow) || (axis === "height" && !isRow);
 
-  // Select padding and margin properties based on axis
-  const [paddingBefore, paddingAfter, marginBefore, marginAfter] =
+  // Select padding properties based on axis
+  const [paddingBefore, paddingAfter] =
     axis === "width"
-      ? (["paddingStart", "paddingEnd", "marginStart", "marginEnd"] as const)
-      : (["paddingTop", "paddingBottom", "marginTop", "marginBottom"] as const);
+      ? (["paddingStart", "paddingEnd"] as const)
+      : (["paddingTop", "paddingBottom"] as const);
 
-  let contentSize = 0;
-  let childCount = 0;
-
+  // Collect visible children
+  const visibleChildren: LayoutBox[] = [];
   for (const child of box.children) {
     if (child.style.display === "none") continue;
-
-    const childSize =
-      child[axis] + child.style[marginBefore] + child.style[marginAfter];
-
-    if (isMainAxis) {
-      contentSize += childSize;
-      childCount++;
-    } else {
-      contentSize = Math.max(contentSize, childSize);
-    }
+    visibleChildren.push(child);
   }
 
-  // Add gaps between children (main axis only)
-  if (isMainAxis && childCount > 1) {
-    contentSize += (childCount - 1) * style.gap;
+  if (visibleChildren.length === 0) {
+    return style[paddingBefore] + style[paddingAfter];
+  }
+
+  // Handle wrapping: need to calculate lines to determine cross-axis intrinsic size
+  if (style.flexWrap === "wrap" && !isMainAxis) {
+    // For cross-axis with wrap, we need to compute lines.
+    // However, we don't know the main-axis size yet, so for intrinsic sizing
+    // of cross-axis with wrap, we assume nowrap behavior for simplicity.
+    // The actual line-based cross size is computed after dimensions are set.
+    // This means intrinsic cross size uses max of children (single line assumption).
+  }
+
+  let contentSize = 0;
+
+  if (isMainAxis) {
+    // Main axis: sum of children sizes + gaps
+    for (let i = 0; i < visibleChildren.length; i++) {
+      const child = visibleChildren[i];
+      const marginMain = isRow
+        ? child.style.marginStart + child.style.marginEnd
+        : child.style.marginTop + child.style.marginBottom;
+      contentSize += child[axis] + marginMain;
+      if (i > 0) contentSize += style.gap;
+    }
+  } else {
+    // Cross axis: max of children sizes
+    for (const child of visibleChildren) {
+      const marginCross = isRow
+        ? child.style.marginTop + child.style.marginBottom
+        : child.style.marginStart + child.style.marginEnd;
+      contentSize = Math.max(contentSize, child[axis] + marginCross);
+    }
   }
 
   return contentSize + style[paddingBefore] + style[paddingAfter];
@@ -358,63 +488,21 @@ function resolveIntrinsicSize(box: LayoutBox): void {
 }
 
 /**
- * Calculates available main-axis space after accounting for fixed-size children,
- * padding, and gaps.
- *
- * IMPORTANT: For space-between/around/evenly justification, style.gap is ignored
- * because the gap is computed dynamically from remaining space.
+ * Distributes extra space among items in a line with flexGrow > 0.
+ * Adds to existing item sizes rather than replacing them.
  */
-function calculateAvailableMainSpace(box: LayoutBox): number {
-  const style = box.style;
-  const isRow = style.flexDirection === "row";
-
-  // Start with container size minus padding
-  const paddingMain = isRow
-    ? style.paddingStart + style.paddingEnd
-    : style.paddingTop + style.paddingBottom;
-  let mainSpace = (isRow ? box.width : box.height) - paddingMain;
-
-  // Subtract children sizes and count visible children
-  let visibleChildCount = 0;
-  for (const child of box.children) {
-    if (child.style.display === "none") continue;
-    const childMainSize = isRow ? child.width : child.height;
-    const childMarginMain = isRow
-      ? child.style.marginStart + child.style.marginEnd
-      : child.style.marginTop + child.style.marginBottom;
-    mainSpace -= childMainSize + childMarginMain;
-    visibleChildCount++;
-  }
-
-  // Subtract gaps between visible children
-  // For space-* justification, gap is computed dynamically, not from style.gap
-  const isSpaceJustify =
-    style.justifyContent === "space-between" ||
-    style.justifyContent === "space-around" ||
-    style.justifyContent === "space-evenly";
-
-  if (visibleChildCount > 1 && !isSpaceJustify) {
-    mainSpace -= (visibleChildCount - 1) * style.gap;
-  }
-
-  return mainSpace;
-}
-
-/**
- * Distributes extra space among children with flexGrow > 0.
- * Adds to existing child sizes rather than replacing them.
- */
-function distributeGrow(box: LayoutBox, availableSpace: number): void {
+function distributeGrowForLine(
+  items: LayoutBox[],
+  availableSpace: number,
+  isRow: boolean,
+): void {
   if (availableSpace <= 0) return;
-
-  const isRow = box.style.flexDirection === "row";
 
   // Collect flex children and their weights
   const flexChildren: LayoutBox[] = [];
   const weights: number[] = [];
 
-  for (const child of box.children) {
-    if (child.style.display === "none") continue;
+  for (const child of items) {
     if (child.style.flexGrow > 0) {
       flexChildren.push(child);
       weights.push(child.style.flexGrow);
@@ -438,20 +526,21 @@ function distributeGrow(box: LayoutBox, availableSpace: number): void {
 }
 
 /**
- * Shrinks children with flexShrink > 0 to fit overflow.
+ * Shrinks items in a line with flexShrink > 0 to fit overflow.
  * Shrink is weighted by flexShrink * baseSize.
  */
-function distributeShrink(box: LayoutBox, overflow: number): void {
+function distributeShrinkForLine(
+  items: LayoutBox[],
+  overflow: number,
+  isRow: boolean,
+): void {
   if (overflow <= 0) return;
-
-  const isRow = box.style.flexDirection === "row";
 
   // Collect shrinkable children and calculate weighted shrink factors
   const shrinkChildren: LayoutBox[] = [];
   const weights: number[] = [];
 
-  for (const child of box.children) {
-    if (child.style.display === "none") continue;
+  for (const child of items) {
     if (child.style.flexShrink > 0) {
       const baseSize = isRow ? child.width : child.height;
       const weight = child.style.flexShrink * baseSize;
@@ -480,68 +569,44 @@ function distributeShrink(box: LayoutBox, overflow: number): void {
 }
 
 /**
- * Calculates the remaining space after subtracting children sizes.
- * Used for justifyContent spacing calculations.
+ * Calculates available main-axis space for a single line.
  */
-function calculateRemainingSpace(
+function calculateAvailableMainSpaceForLine(
   box: LayoutBox,
-  visibleChildren: LayoutBox[],
+  line: FlexLine,
 ): number {
   const style = box.style;
   const isRow = style.flexDirection === "row";
 
-  // Container size minus padding
   const paddingMain = isRow
     ? style.paddingStart + style.paddingEnd
     : style.paddingTop + style.paddingBottom;
-  let remaining = (isRow ? box.width : box.height) - paddingMain;
+  const availableMain = (isRow ? box.width : box.height) - paddingMain;
 
-  // Subtract children sizes and margins
-  for (const child of visibleChildren) {
-    const childMainSize = isRow ? child.width : child.height;
-    const childMarginMain = isRow
-      ? child.style.marginStart + child.style.marginEnd
-      : child.style.marginTop + child.style.marginBottom;
-    remaining -= childMainSize + childMarginMain;
-  }
-
-  // Note: For space-* justification, we ignore style.gap entirely.
-  // For other justification values, gaps are added during positioning.
-  // We DO NOT subtract gaps here; that happens in applyJustifyContent.
-
-  return Math.max(0, remaining);
+  // Calculate remaining space after line items
+  return availableMain - line.mainSize;
 }
 
 /**
- * Positions children along the main axis based on justifyContent.
- *
- * IMPORTANT: For space-between/around/evenly, the gap is computed dynamically
- * from available space. style.gap is only used for flex-start/end/center.
- * This prevents the double-counting bug where both computed and explicit gaps
- * would be applied.
+ * Positions items within a line along the main axis using justifyContent.
+ * Uses pre-computed line mainSize to avoid redundant iteration.
  */
-function applyJustifyContent(
+function applyJustifyContentForLine(
   box: LayoutBox,
-  visibleChildren: LayoutBox[],
+  line: FlexLine,
+  isRow: boolean,
 ): void {
   const style = box.style;
-  const isRow = style.flexDirection === "row";
-  const count = visibleChildren.length;
+  const count = line.items.length;
 
   if (count === 0) return;
 
-  // For non-space justification, subtract gaps from remaining space
-  const isSpaceJustify =
-    style.justifyContent === "space-between" ||
-    style.justifyContent === "space-around" ||
-    style.justifyContent === "space-evenly";
+  const paddingMain = isRow
+    ? style.paddingStart + style.paddingEnd
+    : style.paddingTop + style.paddingBottom;
+  const availableMain = (isRow ? box.width : box.height) - paddingMain;
 
-  let remaining = calculateRemainingSpace(box, visibleChildren);
-
-  // For non-space justification, subtract explicit gaps
-  if (!isSpaceJustify && count > 1) {
-    remaining -= (count - 1) * style.gap;
-  }
+  const remaining = availableMain - line.mainSize;
 
   // Starting position (after padding)
   let pos = isRow ? style.paddingStart : style.paddingTop;
@@ -549,25 +614,18 @@ function applyJustifyContent(
   // Adjust starting position based on justifyContent
   switch (style.justifyContent) {
     case "flex-start":
-      // Default: items at start
       break;
-
     case "flex-end":
       pos += remaining;
       break;
-
     case "center":
       pos += remaining / 2;
       break;
-
     case "space-between":
-      // No initial offset, gaps between items
       break;
-
     case "space-around":
       pos += remaining / count / 2;
       break;
-
     case "space-evenly":
       pos += remaining / (count + 1);
       break;
@@ -583,21 +641,18 @@ function applyJustifyContent(
   } else if (style.justifyContent === "space-evenly") {
     gap = remaining / (count + 1);
   } else {
-    // flex-start, flex-end, center: use explicit gap
     gap = style.gap;
   }
 
-  // Position each child along main axis.
-  // We compute positions from index rather than accumulating, to avoid
-  // fractional drift when gap is not an integer.
-  for (let i = 0; i < visibleChildren.length; i++) {
-    const child = visibleChildren[i];
+  // Position each item along main axis
+  for (let i = 0; i < line.items.length; i++) {
+    const child = line.items[i];
     const marginStart = isRow ? child.style.marginStart : child.style.marginTop;
 
     // Sum sizes of all preceding children (including their margins)
     let precedingSize = 0;
     for (let j = 0; j < i; j++) {
-      const prev = visibleChildren[j];
+      const prev = line.items[j];
       const prevMainSize = isRow ? prev.width : prev.height;
       const prevMarginStart = isRow
         ? prev.style.marginStart
@@ -608,7 +663,6 @@ function applyJustifyContent(
       precedingSize += prevMarginStart + prevMainSize + prevMarginEnd;
     }
 
-    // Position = start offset + preceding children + (i gaps)
     const childPos = pos + precedingSize + i * gap + marginStart;
 
     if (isRow) {
@@ -620,21 +674,21 @@ function applyJustifyContent(
 }
 
 /**
- * Positions children along the cross axis based on alignItems/alignSelf.
- * Also handles stretch when child cross-axis dimension is "auto".
+ * Positions items within a line along the cross axis using alignItems.
+ * crossStart is the starting position of this line on the cross axis.
+ * lineCrossSize is the cross-axis size to use for alignment (may be line's
+ * intrinsic size or container's full cross size for nowrap single line).
  */
-function applyAlignItems(box: LayoutBox, visibleChildren: LayoutBox[]): void {
+function applyAlignItemsForLine(
+  box: LayoutBox,
+  line: FlexLine,
+  crossStart: number,
+  lineCrossSize: number,
+  isRow: boolean,
+): void {
   const style = box.style;
-  const isRow = style.flexDirection === "row";
 
-  // Cross-axis available space (after padding)
-  const crossStart = isRow ? style.paddingTop : style.paddingStart;
-  const crossSize = isRow
-    ? box.height - style.paddingTop - style.paddingBottom
-    : box.width - style.paddingStart - style.paddingEnd;
-
-  for (const child of visibleChildren) {
-    // Check for alignSelf override
+  for (const child of line.items) {
     const align =
       child.style.alignSelf === "auto"
         ? style.alignItems
@@ -652,20 +706,19 @@ function applyAlignItems(box: LayoutBox, visibleChildren: LayoutBox[]): void {
         break;
 
       case "flex-end":
-        crossPos = crossStart + crossSize - childCrossSize - marginEnd;
+        crossPos = crossStart + lineCrossSize - childCrossSize - marginEnd;
         break;
 
       case "center":
-        crossPos = crossStart + (crossSize - childCrossSize) / 2;
+        crossPos = crossStart + (lineCrossSize - childCrossSize) / 2;
         break;
 
       case "stretch":
         crossPos = crossStart + marginStart;
-        // Only stretch if dimension is "auto" (not explicit number)
         if (isRow && child.style.height === "auto") {
-          child.height = crossSize - marginStart - marginEnd;
+          child.height = lineCrossSize - marginStart - marginEnd;
         } else if (!isRow && child.style.width === "auto") {
-          child.width = crossSize - marginStart - marginEnd;
+          child.width = lineCrossSize - marginStart - marginEnd;
         }
         break;
 
@@ -685,11 +738,11 @@ function applyAlignItems(box: LayoutBox, visibleChildren: LayoutBox[]): void {
  * Pass 3: Resolves flex distribution and positions children.
  *
  * For each container:
- * 1. Calculate available main-axis space
- * 2. If positive, distribute with flexGrow
- * 3. If negative, shrink with flexShrink
- * 4. Clamp all children to min/max bounds
- * 5. Position children using justifyContent and alignItems
+ * 1. Collect visible children
+ * 2. Collect items into lines (based on wrap)
+ * 3. For each line: distribute flex grow/shrink, position main axis
+ * 4. Position lines on cross axis, apply alignItems within each line
+ * 5. Calculate screen coordinates
  */
 function resolveFlexAndPosition(box: LayoutBox): void {
   if (box.children.length === 0) return;
@@ -697,17 +750,7 @@ function resolveFlexAndPosition(box: LayoutBox): void {
   const style = box.style;
   const isRow = style.flexDirection === "row";
 
-  // 1. Calculate available space
-  const availableSpace = calculateAvailableMainSpace(box);
-
-  // 2. Distribute grow or shrink
-  if (availableSpace > 0) {
-    distributeGrow(box, availableSpace);
-  } else if (availableSpace < 0) {
-    distributeShrink(box, -availableSpace);
-  }
-
-  // 3. Collect visible children and clamp to min/max bounds
+  // 1. Collect visible children and clamp to min/max bounds
   const visibleChildren: LayoutBox[] = [];
   for (const child of box.children) {
     if (child.style.display === "none") continue;
@@ -724,9 +767,96 @@ function resolveFlexAndPosition(box: LayoutBox): void {
     visibleChildren.push(child);
   }
 
-  // 4. Position children using justifyContent and alignItems
-  applyJustifyContent(box, visibleChildren);
-  applyAlignItems(box, visibleChildren);
+  if (visibleChildren.length === 0) return;
+
+  // 2. Collect items into lines
+  const lines = collectLines(box, visibleChildren, isRow);
+
+  // 3. For each line: distribute flex grow/shrink
+  for (const line of lines) {
+    const availableSpace = calculateAvailableMainSpaceForLine(box, line);
+
+    if (availableSpace > 0) {
+      distributeGrowForLine(line.items, availableSpace, isRow);
+    } else if (availableSpace < 0) {
+      distributeShrinkForLine(line.items, -availableSpace, isRow);
+    }
+
+    // Clamp again after flex distribution
+    for (const child of line.items) {
+      child.width = clamp(
+        child.width,
+        child.style.minWidth,
+        child.style.maxWidth,
+      );
+      child.height = clamp(
+        child.height,
+        child.style.minHeight,
+        child.style.maxHeight,
+      );
+    }
+  }
+
+  // 4. Position items within each line (main axis) and lines on cross axis
+  const paddingCrossStart = isRow ? style.paddingTop : style.paddingStart;
+  const paddingCrossEnd = isRow ? style.paddingBottom : style.paddingEnd;
+  let crossPos = paddingCrossStart;
+
+  // Calculate container's cross-axis content size (used for nowrap single line)
+  const containerCrossSize = isRow
+    ? box.height - paddingCrossStart - paddingCrossEnd
+    : box.width - paddingCrossStart - paddingCrossEnd;
+
+  // Track total cross size for auto-sizing containers with wrap
+  let totalCrossSize = 0;
+
+  // For space-* justification, gap is computed dynamically, not from style.gap
+  const isSpaceJustify =
+    style.justifyContent === "space-between" ||
+    style.justifyContent === "space-around" ||
+    style.justifyContent === "space-evenly";
+  const justifyGap = isSpaceJustify ? 0 : style.gap;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Recalculate line sizes after flex distribution.
+    // Use justifyGap for mainSize (space-* uses 0), style.gap for crossSize.
+    const updatedLine = createLine(line.items, justifyGap, isRow);
+
+    // Position items along main axis
+    applyJustifyContentForLine(box, updatedLine, isRow);
+
+    // For nowrap (single line), use container's full cross size for alignment.
+    // For wrap with multiple lines, use each line's intrinsic cross size.
+    const lineCrossSize =
+      style.flexWrap === "nowrap" || lines.length === 1
+        ? containerCrossSize
+        : updatedLine.crossSize;
+
+    // Position items along cross axis within this line
+    applyAlignItemsForLine(box, updatedLine, crossPos, lineCrossSize, isRow);
+
+    // Track total cross size
+    totalCrossSize += updatedLine.crossSize;
+    if (i > 0) {
+      totalCrossSize += style.gap;
+    }
+
+    // Move to next line position (add gap between lines if not first)
+    crossPos += updatedLine.crossSize;
+    if (i < lines.length - 1) {
+      crossPos += style.gap;
+    }
+  }
+
+  // 4b. Update container cross-axis size if auto and wrapping
+  if (style.flexWrap === "wrap" && lines.length > 1) {
+    const crossSizeProp = isRow ? "height" : "width";
+    if (style[crossSizeProp] === "auto") {
+      box[crossSizeProp] = totalCrossSize + paddingCrossStart + paddingCrossEnd;
+    }
+  }
 
   // 5. Calculate screen coordinates for all children
   for (const child of visibleChildren) {

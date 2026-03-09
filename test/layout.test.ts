@@ -1180,3 +1180,205 @@ describe("alignItems", () => {
     assert.strictEqual(result.children[0].y, 2);
   });
 });
+
+describe("flex wrap", () => {
+  it("nowrap keeps all items on one line", () => {
+    const node: LayoutNode = {
+      style: { width: 20, flexWrap: "nowrap" },
+      children: [{ style: { width: 15 } }, { style: { width: 15 } }],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Items should overflow, not wrap (same y position)
+    assert.strictEqual(result.children[0].y, result.children[1].y);
+  });
+
+  it("wrap creates multiple lines", () => {
+    const node: LayoutNode = {
+      style: { width: 20, flexWrap: "wrap", alignItems: "flex-start" },
+      children: [
+        { style: { width: 15, height: 5 } },
+        { style: { width: 15, height: 5 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Second item should be on a new line (different y)
+    assert.strictEqual(result.children[0].y, 0);
+    assert.strictEqual(result.children[1].y, 5);
+  });
+
+  it("each line distributes flex independently", () => {
+    const node: LayoutNode = {
+      style: { width: 20, flexWrap: "wrap", alignItems: "flex-start" },
+      children: [
+        { style: { width: 10, height: 5, flexGrow: 1 } }, // line 1
+        { style: { width: 15, height: 5, flexGrow: 1 } }, // line 2
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // First item grows to fill line 1
+    assert.strictEqual(result.children[0].width, 20);
+    // Second item grows to fill line 2
+    assert.strictEqual(result.children[1].width, 20);
+  });
+
+  it("alignItems applies within each line", () => {
+    const node: LayoutNode = {
+      style: { width: 20, height: 20, flexWrap: "wrap", alignItems: "center" },
+      children: [
+        { style: { width: 15, height: 3 } },
+        { style: { width: 15, height: 5 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Each item centered within its line's cross size
+    // Line 1 cross size = 3, Line 2 cross size = 5
+    // Item 1 centered in line 1 (at y=0 since it fills line)
+    assert.strictEqual(result.children[0].y, 0);
+  });
+
+  it("container auto-height with wrap = sum of lines", () => {
+    const node: LayoutNode = {
+      style: { alignItems: "flex-start" },
+      children: [
+        {
+          style: { width: 20, flexWrap: "wrap", alignItems: "flex-start" },
+          children: [
+            { style: { width: 15, height: 5 } },
+            { style: { width: 15, height: 10 } },
+          ],
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Container height = 5 + 10 = 15
+    assert.strictEqual(result.children[0].height, 15);
+  });
+
+  it("gap applies between wrapped lines", () => {
+    const node: LayoutNode = {
+      style: { alignItems: "flex-start" },
+      children: [
+        {
+          style: {
+            width: 20,
+            flexWrap: "wrap",
+            gap: 2,
+            alignItems: "flex-start",
+          },
+          children: [
+            { style: { width: 15, height: 5 } },
+            { style: { width: 15, height: 5 } },
+          ],
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Line 1 at y=0, Line 2 at y=5+2(gap)=7
+    assert.strictEqual(result.children[0].children[0].y, 0);
+    assert.strictEqual(result.children[0].children[1].y, 7);
+
+    // Container height = 5 + 2 + 5 = 12
+    assert.strictEqual(result.children[0].height, 12);
+  });
+
+  it("oversized item gets its own line (no infinite loop)", () => {
+    const node: LayoutNode = {
+      style: { width: 20, flexWrap: "wrap", alignItems: "flex-start" },
+      children: [
+        { style: { width: 50, height: 5 } }, // larger than container!
+        { style: { width: 10, height: 5 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Should complete without hanging
+    // First item on line 1 (overflows), second on line 2
+    assert.strictEqual(result.children[0].y, 0);
+    assert.strictEqual(result.children[1].y, 5);
+  });
+
+  it("wrap with column direction wraps vertically", () => {
+    const node: LayoutNode = {
+      style: {
+        height: 20,
+        flexDirection: "column",
+        flexWrap: "wrap",
+        alignItems: "flex-start",
+      },
+      children: [
+        { style: { width: 5, height: 15 } },
+        { style: { width: 5, height: 15 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Second item should be on a new column (different x)
+    assert.strictEqual(result.children[0].x, 0);
+    assert.strictEqual(result.children[1].x, 5);
+  });
+
+  it("wrap respects padding", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 30,
+        flexWrap: "wrap",
+        paddingStart: 5,
+        paddingEnd: 5,
+        alignItems: "flex-start",
+      },
+      children: [
+        { style: { width: 15, height: 5 } },
+        { style: { width: 15, height: 5 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Available main space = 30 - 5 - 5 = 20
+    // First item fits, second wraps
+    assert.strictEqual(result.children[0].y, 0);
+    assert.strictEqual(result.children[1].y, 5);
+    // First item positioned after padding
+    assert.strictEqual(result.children[0].x, 5);
+  });
+
+  it("items with margins wrap correctly", () => {
+    const node: LayoutNode = {
+      style: { width: 20, flexWrap: "wrap", alignItems: "flex-start" },
+      children: [
+        { style: { width: 8, height: 5, marginStart: 2, marginEnd: 2 } },
+        { style: { width: 8, height: 5, marginStart: 2, marginEnd: 2 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Each item with margins takes 12 (8 + 2 + 2)
+    // 12 + 12 = 24 > 20, so second wraps
+    assert.strictEqual(result.children[0].y, 0);
+    assert.strictEqual(result.children[1].y, 5);
+  });
+
+  it("multiple items fit on same line before wrapping", () => {
+    const node: LayoutNode = {
+      style: { width: 30, flexWrap: "wrap", alignItems: "flex-start" },
+      children: [
+        { style: { width: 10, height: 5 } },
+        { style: { width: 10, height: 5 } },
+        { style: { width: 10, height: 5 } },
+        { style: { width: 10, height: 5 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // First 3 fit on line 1 (10*3=30), fourth wraps
+    assert.strictEqual(result.children[0].y, 0);
+    assert.strictEqual(result.children[1].y, 0);
+    assert.strictEqual(result.children[2].y, 0);
+    assert.strictEqual(result.children[3].y, 5);
+  });
+});
