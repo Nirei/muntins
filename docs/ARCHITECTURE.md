@@ -1,6 +1,6 @@
 # Building a reactive terminal UI from scratch
 
-**A signals-driven, flexbox-powered TUI library in TypeScript needs exactly five subsystems: a fine-grained reactivity core, a flexbox layout engine, a double-buffered cell grid with differential rendering, a state-machine input parser, and a three-phase render pipeline that ties them together.** This architecture avoids the heavyweight dependencies of Ink (React + Yoga WASM) while achieving better update granularity than Ratatui's full-redraw model. The key insight is that SolidJS-style signals can surgically invalidate only the dirty portions of the component tree, layout, and cell buffer — giving you the declarative ergonomics of React with the performance profile of immediate-mode rendering.
+**A signals-driven, flexbox-powered TUI library in TypeScript needs exactly five subsystems: a fine-grained reactivity core, a flexbox layout engine, a double-buffered cell grid with differential rendering, a state-machine input parser, and a three-phase render pipeline that ties them together.** This architecture avoids the heavyweight dependencies of Ink (React + Yoga WASM) while achieving better update granularity than Ratatui's full-redraw model. The key insight is that SolidJS-style signals can surgically invalidate only the dirty portions of the component tree, layout, and cell buffer, giving you the declarative ergonomics of React with the performance profile of immediate-mode rendering.
 
 What follows is a complete architectural blueprint, covering every subsystem's internals, data structures, algorithms, and how they interconnect.
 
@@ -10,13 +10,13 @@ What follows is a complete architectural blueprint, covering every subsystem's i
 
 The entire system flows through three phases on every update cycle: **build → layout → paint**. Signals make this pipeline incremental rather than wholesale.
 
-**Phase 1 — Build virtual tree.** Application code declares a tree of UI nodes using reactive primitives. Each node carries a `FlexStyle` (flexbox properties) and either child nodes or a text-measurement function. Signals wrap dynamic values — when a signal changes, only the nodes reading that signal are marked dirty. The tree is *not* rebuilt from scratch on every update; instead, structural changes (conditional rendering, list items) use `createRoot` scopes that can be individually disposed and recreated.
+**Phase 1, Build virtual tree.** Application code declares a tree of UI nodes using reactive primitives. Each node carries a `FlexStyle` (flexbox properties) and either child nodes or a text-measurement function. Signals wrap dynamic values, when a signal changes, only the nodes reading that signal are marked dirty. The tree is *not* rebuilt from scratch on every update; instead, structural changes (conditional rendering, list items) use `createRoot` scopes that can be individually disposed and recreated.
 
-**Phase 2 — Layout.** The flexbox algorithm walks the tree top-down, resolving flex-basis/grow/shrink per line, then positions children along main and cross axes. In a fully naive system (like Ratatui), layout runs over the *entire* tree every frame. With signals, you can skip subtrees whose inputs haven't changed — a node's layout only needs recomputation if its own style, its parent's allocated size, or its children's intrinsic sizes changed. Cache each node's last `(inputWidth, inputHeight) → LayoutResult` and invalidate via signals.
+**Phase 2, Layout.** The flexbox algorithm walks the tree top-down, resolving flex-basis/grow/shrink per line, then positions children along main and cross axes. In a fully naive system (like Ratatui), layout runs over the *entire* tree every frame. With signals, you can skip subtrees whose inputs haven't changed, a node's layout only needs recomputation if its own style, its parent's allocated size, or its children's intrinsic sizes changed. Cache each node's last `(inputWidth, inputHeight) → LayoutResult` and invalidate via signals.
 
-**Phase 3 — Paint.** Each leaf node writes its content (characters + styles) into a 2D cell buffer at the coordinates computed by layout. A separate `createEffect` per visible node handles painting — when a node's content signal or layout position changes, only that node's cells are rewritten in the buffer. After all effects flush, the buffer is diffed against the previous frame and minimal ANSI sequences are emitted.
+**Phase 3, Paint.** Each leaf node writes its content (characters + styles) into a 2D cell buffer at the coordinates computed by layout. A separate `createEffect` per visible node handles painting, when a node's content signal or layout position changes, only that node's cells are rewritten in the buffer. After all effects flush, the buffer is diffed against the previous frame and minimal ANSI sequences are emitted.
 
-The critical architectural difference from Ink is that **there is no virtual DOM reconciler**. Components are plain functions that run once (like SolidJS), creating signals and effects that persist. There is no diffing of component trees — signals handle targeted updates directly. The critical difference from Ratatui is that **you don't repaint the entire buffer every frame** — effects only repaint the specific regions that changed.
+The critical architectural difference from Ink is that **there is no virtual DOM reconciler**. Components are plain functions that run once (like SolidJS), creating signals and effects that persist. There is no diffing of component trees, signals handle targeted updates directly. The critical difference from Ratatui is that **you don't repaint the entire buffer every frame**, effects only repaint the specific regions that changed.
 
 ---
 
@@ -24,7 +24,7 @@ The critical architectural difference from Ink is that **there is no virtual DOM
 
 The reactive core needs six primitives: `createSignal`, `createEffect`, `createMemo`, `batch`, `untrack`, and `createRoot`. The entire mechanism rests on **automatic dependency tracking via a global observer stack**.
 
-When an effect or memo executes, it pushes itself onto a global `currentObserver` variable. Any signal getter called during that execution checks `currentObserver` and registers a bidirectional subscription: the signal adds the observer to its subscriber set, and the observer adds the signal's subscriber set to its dependency list. This bidirectional link enables cleanup — when an effect re-runs, it first removes itself from every signal's subscriber set before re-executing and collecting fresh dependencies.
+When an effect or memo executes, it pushes itself onto a global `currentObserver` variable. Any signal getter called during that execution checks `currentObserver` and registers a bidirectional subscription: the signal adds the observer to its subscriber set, and the observer adds the signal's subscriber set to its dependency list. This bidirectional link enables cleanup, when an effect re-runs, it first removes itself from every signal's subscriber set before re-executing and collecting fresh dependencies.
 
 ```typescript
 interface Computation {
@@ -36,13 +36,13 @@ interface Computation {
 }
 ```
 
-**The state flags solve the diamond problem.** A naive push-based approach causes glitches: if signal A feeds both memo B and memo C, and effect D reads both B and C, a change to A would trigger D twice — once with stale C. The solution is a push-pull algorithm with three flags per node: `Clean`, `Check`, and `Dirty`. On signal write, mark direct dependents as `Dirty` and their transitive dependents as `Check`. When an effect is about to run, it walks its sources — any `Check` node recursively verifies whether *its* sources actually changed. If a memo recomputes and produces the same value, it marks itself `Clean` and propagation stops. **Effect D runs exactly once, only after both B and C have settled.**
+**The state flags solve the diamond problem.** A naive push-based approach causes glitches: if signal A feeds both memo B and memo C, and effect D reads both B and C, a change to A would trigger D twice, once with stale C. The solution is a push-pull algorithm with three flags per node: `Clean`, `Check`, and `Dirty`. On signal write, mark direct dependents as `Dirty` and their transitive dependents as `Check`. When an effect is about to run, it walks its sources, any `Check` node recursively verifies whether *its* sources actually changed. If a memo recomputes and produces the same value, it marks itself `Clean` and propagation stops. **Effect D runs exactly once, only after both B and C have settled.**
 
-**Batching** wraps multiple signal writes in a single flush. Increment a `batchDepth` counter on entry; signal writes during the batch queue affected subscribers rather than executing them immediately. On batch exit (depth returns to 0), flush all queued effects. SolidJS implicitly batches event handlers and render calls — your TUI should batch all input event processing and any programmatic state updates.
+**Batching** wraps multiple signal writes in a single flush. Increment a `batchDepth` counter on entry; signal writes during the batch queue affected subscribers rather than executing them immediately. On batch exit (depth returns to 0), flush all queued effects. SolidJS implicitly batches event handlers and render calls, your TUI should batch all input event processing and any programmatic state updates.
 
-**The ownership tree prevents memory leaks.** Every computation created during another computation's execution becomes its child. When a parent effect re-runs, it disposes all children first (removing their subscriptions, running their cleanup callbacks, recursively disposing their children). `createRoot` creates an explicit ownership boundary with a `dispose` function — essential for conditional rendering (`<Show>`) and list rendering (`<For>`), where sub-trees must be cleanly torn down when conditions change or items are removed.
+**The ownership tree prevents memory leaks.** Every computation created during another computation's execution becomes its child. When a parent effect re-runs, it disposes all children first (removing their subscriptions, running their cleanup callbacks, recursively disposing their children). `createRoot` creates an explicit ownership boundary with a `dispose` function, essential for conditional rendering (`<Show>`) and list rendering (`<For>`), where sub-trees must be cleanly torn down when conditions change or items are removed.
 
-**`untrack` reads a signal without subscribing** — simply sets `currentObserver = null` during the callback. This is critical for avoiding infinite loops when an effect needs to read a signal it also writes to (though this pattern should be rare).
+**`untrack` reads a signal without subscribing**, simply sets `currentObserver = null` during the callback. This is critical for avoiding infinite loops when an effect needs to read a signal it also writes to (though this pattern should be rare).
 
 ---
 
@@ -78,7 +78,7 @@ interface LayoutResult {
 }
 ```
 
-**The resolve-flexible-lengths loop is the heart of the algorithm.** For each flex line: calculate each item's flex base size (from `flex-basis` or content measurement), determine whether free space is positive (grow) or negative (shrink), then iteratively distribute space. Items whose computed size violates their min/max constraints are "frozen" at the clamped value, free space is recalculated, and the loop continues with unfrozen items. A critical detail: **shrink is weighted by `flex-shrink × flex-base-size`**, not just `flex-shrink` — larger items absorb more shrinkage, preventing small items from collapsing to zero.
+**The resolve-flexible-lengths loop is the heart of the algorithm.** For each flex line: calculate each item's flex base size (from `flex-basis` or content measurement), determine whether free space is positive (grow) or negative (shrink), then iteratively distribute space. Items whose computed size violates their min/max constraints are "frozen" at the clamped value, free space is recalculated, and the loop continues with unfrozen items. A critical detail: **shrink is weighted by `flex-shrink × flex-base-size`**, not just `flex-shrink`, larger items absorb more shrinkage, preventing small items from collapsing to zero.
 
 **TUI-specific simplifications** that eliminate complexity:
 
@@ -96,7 +96,7 @@ Reference implementations to study: the **ColinEberhardt/css-layout-agentic** re
 
 ## Cell buffer and differential rendering
 
-The terminal's rendering target is a `Buffer` class that manages a double-buffered cell grid internally. Each cell stores a grapheme cluster, foreground color, background color, and style modifier flags. The cell structure is internal to Buffer — external code writes via primitive arguments to avoid allocation:
+The terminal's rendering target is a `Buffer` class that manages a double-buffered cell grid internally. Each cell stores a grapheme cluster, foreground color, background color, and style modifier flags. The cell structure is internal to Buffer, external code writes via primitive arguments to avoid allocation:
 
 ```typescript
 // Writing to the buffer (zero allocation)
@@ -107,7 +107,7 @@ buffer.writeText(x, y, "hello", fg, bg, modifiers);
 const ansiOutput = buffer.flush();  // diff + serialize + sync
 ```
 
-**Double-buffering with copy-on-flush.** The class maintains two cell arrays: `front` (what's on screen) and `back` (the render target). The runtime clears `back`, paints into it, then calls `flush()` which compares `back` vs `front`, emits ANSI sequences for differences, and copies changed cells from `back` to `front`. After flush, both buffers contain the same state — the next frame's `clear()` writes to `back`, and only cells that actually differ from `front` generate output.
+**Double-buffering with copy-on-flush.** The class maintains two cell arrays: `front` (what's on screen) and `back` (the render target). The runtime clears `back`, paints into it, then calls `flush()` which compares `back` vs `front`, emits ANSI sequences for differences, and copies changed cells from `back` to `front`. After flush, both buffers contain the same state, the next frame's `clear()` writes to `back`, and only cells that actually differ from `front` generate output.
 
 **Zero-allocation design.** Cells are allocated once at Buffer construction and mutated in place. The `set()` method takes primitive arguments (symbol, fg, bg, modifiers) rather than a Cell object, avoiding per-call object allocation. The diff/serialize step is merged into a single `flush()` method with no intermediate `CellChange[]` array.
 
@@ -123,15 +123,15 @@ const ansiOutput = buffer.flush();  // diff + serialize + sync
 
 This allows the internal `cellsEqual()` to compare colors with `a.fg === b.fg` rather than deep equality checks on discriminated unions.
 
-**Style state persists across frames.** Buffer tracks the terminal's current style (foreground, background, modifiers) and cursor position across `flush()` calls. This minimizes ANSI output — only emit SGR codes when the style actually changes from the previous cell. When removing modifiers, emit `SGR 0` followed by the remaining styles. Use `forceFullRedraw()` if the terminal gets desynchronized (e.g., external process wrote to stdout).
+**Style state persists across frames.** Buffer tracks the terminal's current style (foreground, background, modifiers) and cursor position across `flush()` calls. This minimizes ANSI output, only emit SGR codes when the style actually changes from the previous cell. When removing modifiers, emit `SGR 0` followed by the remaining styles. Use `forceFullRedraw()` if the terminal gets desynchronized (e.g., external process wrote to stdout).
 
-**Cursor positioning is the other major optimization.** When consecutive cells in a row all changed, the cursor naturally advances — no repositioning needed. Only emit `\x1b[row;colH` when there's a gap of unchanged cells.
+**Cursor positioning is the other major optimization.** When consecutive cells in a row all changed, the cursor naturally advances, no repositioning needed. Only emit `\x1b[row;colH` when there's a gap of unchanged cells.
 
-**Dirty region tracking limits the diff scan.** Buffer tracks a bounding rectangle of modified cells. On `flush()`, only cells within this dirty region are compared. The `clear()` method does NOT mark cells dirty — the dirty region comes from actual `set()` calls during painting. This means clearing then painting a small region only scans that region, not the entire buffer.
+**Dirty region tracking limits the diff scan.** Buffer tracks a bounding rectangle of modified cells. On `flush()`, only cells within this dirty region are compared. The `clear()` method does NOT mark cells dirty, the dirty region comes from actual `set()` calls during painting. This means clearing then painting a small region only scans that region, not the entire buffer.
 
 **All output goes into a single string, flushed with one `process.stdout.write()` call.** Multiple small writes cause syscall overhead and visual tearing. Bracket the entire output with cursor-hide (`\x1b[?25l`) and cursor-show (`\x1b[?25h`) to prevent flicker. On startup, enter the alternate screen buffer (`\x1b[?1049h`) to preserve the user's scrollback; on exit, restore it (`\x1b[?1049l`).
 
-**Double-width characters require special handling.** CJK ideographs and many emoji occupy two terminal columns. When placing one at column `x`, set `cells[x].symbol` to the character and `cells[x+1].symbol` to `''` (a continuation marker). The `writeText()` method handles this automatically. During rendering, skip continuation cells — the terminal has already advanced the cursor past them. A `wcwidth` lookup table (Unicode East Asian Width property, binary-searched over sorted intervals) determines display width.
+**Double-width characters require special handling.** CJK ideographs and many emoji occupy two terminal columns. When placing one at column `x`, set `cells[x].symbol` to the character and `cells[x+1].symbol` to `''` (a continuation marker). The `writeText()` method handles this automatically. During rendering, skip continuation cells, the terminal has already advanced the cursor past them. A `wcwidth` lookup table (Unicode East Asian Width property, binary-searched over sorted intervals) determines display width.
 
 ---
 
@@ -139,7 +139,7 @@ This allows the internal `cellsEqual()` to compare colors with `a.fg === b.fg` r
 
 Terminal input arrives as a byte stream on `process.stdin` in raw mode. A state-machine parser transforms this into typed events.
 
-**Setup requires four steps**: enable raw mode (`stdin.setRawMode(true)`), enable SGR mouse tracking (`\x1b[?1000h\x1b[?1002h\x1b[?1006h`), enable focus reporting (`\x1b[?1004h`), and enable bracketed paste (`\x1b[?2004h`). All must be reversed on exit — register handlers for `exit`, `SIGINT`, `SIGTERM`, and `uncaughtException` to guarantee cleanup. A terminal left in raw mode without mouse tracking disabled is unusable.
+**Setup requires four steps**: enable raw mode (`stdin.setRawMode(true)`), enable SGR mouse tracking (`\x1b[?1000h\x1b[?1002h\x1b[?1006h`), enable focus reporting (`\x1b[?1004h`), and enable bracketed paste (`\x1b[?2004h`). All must be reversed on exit, register handlers for `exit`, `SIGINT`, `SIGTERM`, and `uncaughtException` to guarantee cleanup. A terminal left in raw mode without mouse tracking disabled is unusable.
 
 **The parser state machine has five states**: `GROUND` (normal characters), `ESCAPE` (received `0x1B`, waiting for disambiguation), `CSI` (inside a `\x1b[` sequence, collecting parameters), `SS3` (inside `\x1b O` sequence for F1-F4), and `SGR_MOUSE` (inside `\x1b[<` mouse sequence).
 
@@ -189,23 +189,23 @@ function Counter() {
 
 **Layout invalidation uses a dirty flag propagated via signals.** Each layout node stores a `needsLayout` signal. When a node's style or content size changes, `needsLayout` is set to `true`. A top-level layout effect watches this flag; when it fires, it re-runs the flexbox algorithm starting from the highest dirty node (not necessarily the root). Subtrees with clean inputs skip entirely.
 
-**Painting is per-node effects.** Each visible leaf node has a `createEffect` that reads its layout position (x, y, width, height — stored as signals by the layout phase) and its content, then writes cells into the buffer. When only a text content signal changes (not position or size), only that node's cells are rewritten. When a layout change shifts a node's position, the effect clears the old cells and writes to the new position.
+**Painting is per-node effects.** Each visible leaf node has a `createEffect` that reads its layout position (x, y, width, height, stored as signals by the layout phase) and its content, then writes cells into the buffer. When only a text content signal changes (not position or size), only that node's cells are rewritten. When a layout change shifts a node's position, the effect clears the old cells and writes to the new position.
 
 **The render cycle is batched.** Input events are processed inside a `batch()` call, so all state mutations from a single keypress or mouse event produce one coordinated update. After the batch flushes, layout effects run (if needed), then paint effects run (if needed), then the buffer is diffed and flushed to stdout. This guarantees **at most one terminal write per input event**, with only the minimum necessary cells updated.
 
-**Conditional and list rendering use ownership scopes.** A `Show(condition, () => child)` primitive creates a `createRoot` scope for the child. When the condition becomes false, the root is disposed — cleaning up all child effects, removing the subtree from the layout tree, and clearing its cells from the buffer. `For(items, (item) => child)` maps each item to its own root, enabling efficient add/remove/reorder without rebuilding the entire list.
+**Conditional and list rendering use ownership scopes.** A `Show(condition, () => child)` primitive creates a `createRoot` scope for the child. When the condition becomes false, the root is disposed, cleaning up all child effects, removing the subtree from the layout tree, and clearing its cells from the buffer. `For(items, (item) => child)` maps each item to its own root, enabling efficient add/remove/reorder without rebuilding the entire list.
 
 ---
 
 ## Lessons from existing libraries and what to avoid
 
-**Ink proves that declarative UI works for terminals** but pays a steep tax: React's reconciler + Yoga's WASM binary add ~100ms startup time, ~1.5MB binary weight, and a full-repaint-by-default strategy. The `<Static>` component — rendering completed items once above the dynamic UI — is a pattern worth borrowing. Ink's `react-reconciler` bridge, which maps React's `createInstance`/`appendChild`/`commitUpdate` to a Yoga node tree, is architecturally elegant but heavy.
+**Ink proves that declarative UI works for terminals** but pays a steep tax: React's reconciler + Yoga's WASM binary add ~100ms startup time, ~1.5MB binary weight, and a full-repaint-by-default strategy. The `<Static>` component, rendering completed items once above the dynamic UI, is a pattern worth borrowing. Ink's `react-reconciler` bridge, which maps React's `createInstance`/`appendChild`/`commitUpdate` to a Yoga node tree, is architecturally elegant but heavy.
 
 **Ratatui demonstrates the power of buffer diffing** with sub-millisecond render times in Rust. Its immediate-mode model (no retained widget state) prevents stale-state bugs but forces manual state management and full-tree redraw every frame. Its Cassowary-based constraint layout is lighter than flexbox but less expressive. The `Widget` trait (`render(self, area, buf)`) is clean but consumes the widget on render, complicating reuse.
 
 **Blessed achieved remarkable terminal optimization** with CSR (Change Scroll Region) for efficient scrolling and BCE (Back-Color Erase) for background handling. Its damage-buffer approach with smart cursor movement is the gold standard for minimizing terminal I/O. However, its 16,000-line monolithic codebase, lack of modern reactivity, and abandoned maintenance make it a cautionary tale about complexity accumulation.
 
-**Bubble Tea (Go) validates the Elm Architecture for TUI** — its Model-Update-View cycle produces extremely clean application code. But returning raw strings from `View()` with no structured layout system is limiting for complex UIs. **Textual (Python) proves CSS-like styling works for terminals** — its TCSS engine with reactive attributes and hot-reload is excellent developer experience, though Python's performance ceiling limits it.
+**Bubble Tea (Go) validates the Elm Architecture for TUI**, its Model-Update-View cycle produces extremely clean application code. But returning raw strings from `View()` with no structured layout system is limiting for complex UIs. **Textual (Python) proves CSS-like styling works for terminals**, its TCSS engine with reactive attributes and hot-reload is excellent developer experience, though Python's performance ceiling limits it.
 
 The synthesis: **use signals (not React) for reactivity, flexbox (not Cassowary) for layout, buffer diffing (from Ratatui/Blessed) for rendering, and SolidJS-style one-time component execution (not Elm's full-view-rebuild) for the component model.** This combination gives declarative ergonomics, fine-grained updates, familiar layout semantics, and minimal terminal I/O.
 
@@ -215,14 +215,14 @@ The synthesis: **use signals (not React) for reactivity, flexbox (not Cassowary)
 
 The library decomposes into five independent modules with clean interfaces between them. No module depends on more than one other.
 
-- **`core/signals.ts`** — `createSignal`, `createEffect`, `createMemo`, `batch`, `untrack`, `createRoot`, `onCleanup`. Zero dependencies. Fully self-contained push-pull reactive core.
-- **`core/layout.ts`** — `computeLayout(node, availableWidth, availableHeight) → LayoutResult`. Pure function, no side effects, no dependency on signals. Takes a tree of `{style, children, measure?}` nodes, returns a tree of `{x, y, width, height}` results.
-- **`core/buffer.ts`** — `Buffer` class with internal double-buffering. Provides `set()`, `writeText()`, `clear()`, `fillRect()` for painting, and `flush()` which diffs, serializes ANSI, and syncs buffers in one call. Handles double-width characters, style state tracking across frames, cursor optimization, and dirty region tracking. Colors are stored internally as packed integers for zero-allocation comparison.
-- **`core/input.ts`** — State-machine parser, terminal mode setup/teardown, event type definitions. Converts raw stdin bytes into typed `InputEvent` objects.
-- **`core/runtime.ts`** — The glue layer. Manages the render cycle: processes input events in a batch, runs layout if dirty, paints into the buffer, calls `buffer.flush()`. Provides the component primitives (`Box`, `Text`, `Show`, `For`) that wire signals to layout nodes and buffer writes.
+- **`core/signals.ts`**, `createSignal`, `createEffect`, `createMemo`, `batch`, `untrack`, `createRoot`, `onCleanup`. Zero dependencies. Fully self-contained push-pull reactive core.
+- **`core/layout.ts`**, `computeLayout(node, availableWidth, availableHeight) → LayoutResult`. Pure function, no side effects, no dependency on signals. Takes a tree of `{style, children, measure?}` nodes, returns a tree of `{x, y, width, height}` results.
+- **`core/buffer.ts`**, `Buffer` class with internal double-buffering. Provides `set()`, `writeText()`, `clear()`, `fillRect()` for painting, and `flush()` which diffs, serializes ANSI, and syncs buffers in one call. Handles double-width characters, style state tracking across frames, cursor optimization, and dirty region tracking. Colors are stored internally as packed integers for zero-allocation comparison.
+- **`core/input.ts`**, State-machine parser, terminal mode setup/teardown, event type definitions. Converts raw stdin bytes into typed `InputEvent` objects.
+- **`core/runtime.ts`**, The glue layer. Manages the render cycle: processes input events in a batch, runs layout if dirty, paints into the buffer, calls `buffer.flush()`. Provides the component primitives (`Box`, `Text`, `Show`, `For`) that wire signals to layout nodes and buffer writes.
 
 ## Conclusion
 
-The architecture rests on one non-obvious insight: **signals eliminate the need for both a virtual DOM reconciler and full-frame redraws.** In Ink's model, React diffs the component tree to find what changed, then Yoga re-layouts, then the full output is regenerated. In Ratatui's model, the entire UI is redrawn into a fresh buffer every frame, then diffed against the previous frame. Signals cut through both approaches — state changes propagate directly to the exact layout nodes and buffer cells affected, skipping everything else.
+The architecture rests on one non-obvious insight: **signals eliminate the need for both a virtual DOM reconciler and full-frame redraws.** In Ink's model, React diffs the component tree to find what changed, then Yoga re-layouts, then the full output is regenerated. In Ratatui's model, the entire UI is redrawn into a fresh buffer every frame, then diffed against the previous frame. Signals cut through both approaches, state changes propagate directly to the exact layout nodes and buffer cells affected, skipping everything else.
 
-The priority ordering of **Simplicity > Performance > Features** maps to concrete decisions: use integer arithmetic everywhere (simpler than float), implement only the flexbox subset that TUIs actually need (row, column, grow, shrink, wrap, alignment — skip `order`, reverse, baseline), start with push-based signals and upgrade to push-pull only if diamond glitches prove problematic in practice, and implement mouse support as opt-in (most TUI apps are keyboard-first). Build the five modules independently with clear interfaces, write each one test-first against known-good reference outputs, and resist the temptation to add features until the core pipeline is rock-solid.
+The priority ordering of **Simplicity > Performance > Features** maps to concrete decisions: use integer arithmetic everywhere (simpler than float), implement only the flexbox subset that TUIs actually need (row, column, grow, shrink, wrap, alignment, skip `order`, reverse, baseline), start with push-based signals and upgrade to push-pull only if diamond glitches prove problematic in practice, and implement mouse support as opt-in (most TUI apps are keyboard-first). Build the five modules independently with clear interfaces, write each one test-first against known-good reference outputs, and resist the temptation to add features until the core pipeline is rock-solid.

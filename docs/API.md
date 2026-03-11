@@ -1,4 +1,4 @@
-# Muntins — Public API (vision)
+# Muntins, Public API (vision)
 
 ## Philosophy
 
@@ -153,7 +153,7 @@ For({
 ```
 
 Each element has its own reactive scope. Adding or removing items does not recreate the others.
-`item` and `index` are **getters** — they update if the list mutates rather than being replaced.
+`item` and `index` are **getters**, they update if the list mutates rather than being replaced.
 
 Use the `key` prop when item identity isn't based on object reference:
 
@@ -215,7 +215,7 @@ focus.set(ref);         // focus a specific node
 focus.current();        // signal → currently focused node
 ```
 
-For targeting a specific node imperatively — e.g. focusing a search box when the user presses `/`:
+For targeting a specific node imperatively, e.g. focusing a search box when the user presses `/`:
 
 ```typescript
 const searchRef = createRef();
@@ -233,7 +233,7 @@ Box({
 ### Focus navigation as a pluggable component
 
 There is no hardcoded key for cycling focus. Instead, Muntins ships `TabFocus` as a
-convenience component — a plain `Box` that calls `focus.next()` / `focus.prev()` on Tab:
+convenience component, a plain `Box` that calls `focus.next()` / `focus.prev()` on Tab:
 
 ```typescript
 import { TabFocus } from 'muntins';
@@ -244,7 +244,7 @@ mount(() =>
 );
 ```
 
-`TabFocus` is just a regular component — it has no special privileges:
+`TabFocus` is just a regular component, it has no special privileges:
 
 ```typescript
 function TabFocus(props: { children: Node[] }) {
@@ -260,7 +260,7 @@ function TabFocus(props: { children: Node[] }) {
 }
 ```
 
-You can write your own variant — arrow keys, vi-style `j`/`k`, anything — and plug it in the same way.
+You can write your own variant, arrow keys, vi-style `j`/`k`, anything, and plug it in the same way.
 
 Use `TabFocus({ trap: true, ... })` to trap focus within a scope (useful for modals).
 
@@ -301,7 +301,7 @@ The mouse system automatically computes whether the cursor is inside a node's bo
 ## 8. Composite components: a real example
 
 Higher-level components are built **purely as compositions** of `Box` and `Text`.
-Muntins provides none of them — but here is what they would look like:
+Muntins provides none of them, but here is what they would look like:
 
 ```typescript
 // Button.ts
@@ -374,7 +374,7 @@ function App() {
   });
 
   onCleanup(() => {
-    // called on exit — muntins restores the terminal automatically
+    // called on exit, muntins restores the terminal automatically
   });
 
   return Box({ children: [/* ... */] });
@@ -459,12 +459,12 @@ ScrollEvent { x, y, direction, ctrl, alt, shift }
 
 These are examples of what someone would build **on top of** Muntins:
 
-- `TextInput` — a `Box` that maintains an editable text buffer
-- `Select` / `Dropdown` — a list using `For` + focus management
-- `ProgressBar` — a `Box` whose `width` is a reactive percentage
-- `Spinner` — a `Text` whose content is an animation frame driven by `setInterval`
-- `Table` — nested `For` with calculated column widths
-- `Tabs` — `Show` + array of conditions
-- Image rendering — a `Box` that paints cells with braille characters
+- `TextInput`, a `Box` that maintains an editable text buffer
+- `Select` / `Dropdown`, a list using `For` + focus management
+- `ProgressBar`, a `Box` whose `width` is a reactive percentage
+- `Spinner`, a `Text` whose content is an animation frame driven by `setInterval`
+- `Table`, nested `For` with calculated column widths
+- `Tabs`, `Show` + array of conditions
+- Image rendering, a `Box` that paints cells with braille characters
 
 The library is deliberately **minimal in components but maximal in composability**.
