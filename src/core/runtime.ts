@@ -220,10 +220,6 @@ export function flushFrame(stdout: NodeJS.WriteStream, content: string): void {
   stdout.write(content);
 }
 
-// ============================================================================
-// Box and Text Component Types
-// ============================================================================
-
 /** Props for Box component. */
 export interface BoxProps extends Partial<FlexStyle> {
   children?: Node[];
@@ -255,10 +251,6 @@ export interface TextProps {
   onKeyPress?: (key: KeyEvent) => boolean | undefined;
   onMousePress?: (event: MouseEvent) => void;
 }
-
-// ============================================================================
-// Text Measurement and Rendering Helpers
-// ============================================================================
 
 /**
  * Calculates the display width of a line of text.
@@ -461,10 +453,6 @@ function renderText(
   }
 }
 
-// ============================================================================
-// Box and Text Components
-// ============================================================================
-
 /**
  * Creates a Box node - a layout container that supports reactive styles and event handlers.
  *
@@ -571,10 +559,6 @@ export function Text(props: TextProps): Node {
 
   return node;
 }
-
-// ============================================================================
-// Show and For Conditional Components
-// ============================================================================
 
 /** Props for Show component. */
 export interface ShowProps<T> {
@@ -805,10 +789,6 @@ export function For<T>(props: ForProps<T>): Node {
 
   return container;
 }
-
-// ============================================================================
-// Render Cycle and Mount (Task 5.4)
-// ============================================================================
 
 /**
  * Convert runtime Node to layout system's LayoutNode.
