@@ -1,6 +1,10 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { DEFAULT_FLEX_STYLE } from "../src/core/layout.ts";
+import {
+  DEFAULT_FLEX_STYLE,
+  type LayoutNode,
+  computeLayout,
+} from "../src/core/layout.ts";
 import {
   Box,
   DEFAULT_MOUNT_OPTIONS,
@@ -503,6 +507,57 @@ describe("Show", () => {
       return dispose;
     });
   });
+
+  it("does not affect parent flex distribution", () => {
+    createRoot((dispose) => {
+      const [cond] = createSignal(true);
+
+      // Three children with flexGrow: 1 should split space equally
+      const parent = Box({
+        flexDirection: "row",
+        width: 90,
+        height: 1,
+        children: [
+          Box({ flexGrow: 1, children: [Text({ content: "A" })] }),
+          Show({
+            when: cond,
+            children: () =>
+              Box({ flexGrow: 1, children: [Text({ content: "B" })] }),
+          }),
+          Box({ flexGrow: 1, children: [Text({ content: "C" })] }),
+        ],
+      });
+
+      // Helper to recursively resolve styles for layout
+      const toLayoutNode = (node: Node): LayoutNode => ({
+        style: typeof node.style === "function" ? node.style() : node.style,
+        children: node.children?.map(toLayoutNode),
+        measure: node.measure,
+      });
+
+      const layout = computeLayout(toLayoutNode(parent), 90, 1);
+
+      // With display: "contents", Show is transparent — its child (Box B) is
+      // hoisted to be a direct child of the parent for layout purposes.
+      // All three boxes should have equal width (90 / 3 = 30)
+      assert.strictEqual(
+        layout.children.length,
+        3,
+        "Should have 3 layout children",
+      );
+
+      const boxALayout = layout.children[0];
+      const boxBLayout = layout.children[1]; // Hoisted from Show
+      const boxCLayout = layout.children[2];
+
+      assert.strictEqual(boxALayout.width, 30, "Box A should be 30 wide");
+      assert.strictEqual(boxBLayout.width, 30, "Box B should be 30 wide");
+      assert.strictEqual(boxCLayout.width, 30, "Box C should be 30 wide");
+
+      dispose();
+      return dispose;
+    });
+  });
 });
 
 // ============================================================================
@@ -693,7 +748,7 @@ describe("For", () => {
     });
   });
 
-  it("duplicate items share the same node", () => {
+  it("duplicate items get separate nodes", () => {
     createRoot((dispose) => {
       const obj = { id: 1 };
       const [items, _setItems] = createSignal([obj, obj]);
@@ -702,9 +757,81 @@ describe("For", () => {
         render: (item) => Text({ content: () => String(item().id) }),
       });
 
-      // Both array positions render the same node
+      // Each occurrence gets its own node
       assert.strictEqual(node.children?.length, 2);
-      assert.strictEqual(node.children?.[0], node.children?.[1]);
+      assert.notStrictEqual(node.children?.[0], node.children?.[1]);
+      dispose();
+      return dispose;
+    });
+  });
+
+  it("updates item signal when same key maps to new object", () => {
+    createRoot((dispose) => {
+      interface Item {
+        id: number;
+        name: string;
+      }
+      const observedNames: string[] = [];
+      const [items, setItems] = createSignal<Item[]>([
+        { id: 1, name: "a" },
+        { id: 2, name: "b" },
+      ]);
+
+      For({
+        each: items,
+        key: (item) => item.id,
+        render: (item) => {
+          createEffect(() => {
+            observedNames.push(item().name);
+          });
+          return Text({ content: () => item().name });
+        },
+      });
+
+      // Initial render
+      assert.deepStrictEqual(observedNames, ["a", "b"]);
+
+      // Replace with new objects but same IDs
+      setItems([
+        { id: 1, name: "a-updated" },
+        { id: 2, name: "b-updated" },
+      ]);
+
+      // Item signals should have updated
+      assert.deepStrictEqual(observedNames, [
+        "a",
+        "b",
+        "a-updated",
+        "b-updated",
+      ]);
+      dispose();
+      return dispose;
+    });
+  });
+
+  it("disposes excess duplicate entries when count decreases", () => {
+    createRoot((dispose) => {
+      const cleanupCalls: number[] = [];
+      const obj = { id: 1 };
+      const [items, setItems] = createSignal([obj, obj, obj]);
+
+      For({
+        each: items,
+        render: (item, index) => {
+          onCleanup(() => {
+            cleanupCalls.push(index());
+          });
+          return Text({ content: () => String(item().id) });
+        },
+      });
+
+      assert.deepStrictEqual(cleanupCalls, []);
+
+      // Reduce to one occurrence
+      setItems([obj]);
+
+      // Indices 1 and 2 should have been disposed
+      assert.deepStrictEqual(cleanupCalls, [1, 2]);
       dispose();
       return dispose;
     });

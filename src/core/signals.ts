@@ -578,6 +578,18 @@ export function createMemo<T>(fn: () => T): Accessor<T> {
   return getter;
 }
 
+interface CreateRootOptions {
+  /**
+   * When true, the root is not registered as a child of the current owner.
+   * This means the root won't be automatically disposed when its parent is
+   * disposed - the caller must manually call the dispose function.
+   *
+   * Useful for creating roots inside effects that should persist across
+   * effect re-runs (e.g., For component item roots).
+   */
+  detached?: boolean;
+}
+
 /**
  * Creates an ownership boundary for reactive computations.
  *
@@ -587,8 +599,15 @@ export function createMemo<T>(fn: () => T): Accessor<T> {
  * The dispose function is passed to the callback and can be called to clean
  * up the entire subtree. The caller is responsible for calling dispose;
  * it is not automatic.
+ *
+ * @param options.detached - When true, root is not registered with parent owner
  */
-export function createRoot<T>(fn: (dispose: () => void) => T): T {
+export function createRoot<T>(
+  fn: (dispose: () => void) => T,
+  options?: CreateRootOptions,
+): T {
+  const detached = options?.detached ?? false;
+
   const root: Computation = {
     fn: undefined, // Roots have no fn
     value: undefined,
@@ -602,8 +621,8 @@ export function createRoot<T>(fn: (dispose: () => void) => T): T {
     effect: false,
   };
 
-  // Register with parent owner if exists
-  if (currentOwner) {
+  // Register with parent owner if exists (unless detached)
+  if (currentOwner && !detached) {
     currentOwner.children.push(root);
   }
 

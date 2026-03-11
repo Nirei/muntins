@@ -588,9 +588,10 @@ export function Show<T>(props: ShowProps<T>): Node {
   const children: Node[] = [];
   let currentDispose: (() => void) | null = null;
 
-  // Define container first so children can reference it
+  // Define container first so children can reference it.
+  // Use display: "contents" so Show doesn't affect parent layout.
   const container: Node = {
-    style: { ...DEFAULT_FLEX_STYLE, display: "flex" },
+    style: { ...DEFAULT_FLEX_STYLE, display: "contents" },
     get children() {
       return children;
     },
@@ -645,10 +646,11 @@ export interface ForProps<T> {
   key?: (item: T) => unknown;
 }
 
-interface ForItemEntry {
+interface ForItemEntry<T> {
   dispose: () => void;
   node: Node;
-  setIndex: (i: number) => void;
+  setItem: (item: T) => void;
+  setIndex: (index: number) => void;
 }
 
 /**
@@ -658,10 +660,11 @@ interface ForItemEntry {
  * changes:
  * - New items create new roots with reactive item/index getters
  * - Removed items have their roots disposed
- * - Reordered items update their index signals, keeping nodes alive
+ * - Reordered items update their index and item signals, keeping nodes alive
  *
- * The render function receives getter functions for item and index, enabling
- * reactive updates when items are reordered.
+ * Duplicate keys are supported: each occurrence gets its own node. The render
+ * function receives getter functions for item and index, enabling reactive
+ * updates when items change or reorder.
  *
  * Must be called within a mounted component context for proper effect ownership.
  */
@@ -669,31 +672,68 @@ export function For<T>(props: ForProps<T>): Node {
   const { each: items, render, key: keyFn } = props;
 
   const children: Node[] = [];
-  const itemRoots: Map<unknown, ForItemEntry> = new Map();
+  // Map from key to array of entries (supports duplicates)
+  const itemRoots: Map<unknown, ForItemEntry<T>[]> = new Map();
 
   // Key function defaults to identity
   const getKey = keyFn ?? ((item: T) => item);
 
-  // Define container first so children can reference it
+  // Define container first so children can reference it.
+  // Use display: "contents" so For doesn't affect parent layout.
   const container: Node = {
-    style: { ...DEFAULT_FLEX_STYLE, display: "flex" },
+    style: { ...DEFAULT_FLEX_STYLE, display: "contents" },
     get children() {
       return children;
     },
   };
 
+  // Helper to create a new entry with its own detached root.
+  // Detached roots are not children of the effect, so they persist across
+  // effect re-runs. We manage their lifecycle manually via dispose().
+  const createEntry = (
+    item: T,
+    index: number,
+    key: unknown,
+  ): ForItemEntry<T> => {
+    const [getItem, setItem] = createSignal(item);
+    const [getIndex, setIndex] = createSignal(index);
+
+    let entry!: ForItemEntry<T>;
+
+    createRoot(
+      (dispose) => {
+        const node = render(getItem, getIndex);
+        node._parent = container;
+        entry = { dispose, node, setItem, setIndex };
+
+        // Add to entries array for this key
+        const existing = itemRoots.get(key);
+        if (existing) {
+          existing.push(entry);
+        } else {
+          itemRoots.set(key, [entry]);
+        }
+
+        return dispose;
+      },
+      { detached: true },
+    );
+
+    return entry;
+  };
+
   createEffect(() => {
     const currentItems = items();
-    const currentKeys = new Set(currentItems.map(getKey));
 
-    // Remove items whose keys no longer exist
-    for (const [key, entry] of itemRoots) {
-      if (!currentKeys.has(key)) {
-        entry.node._parent = undefined;
-        entry.dispose();
-        itemRoots.delete(key);
-      }
+    // Count how many times each key appears in the new array
+    const keyCounts = new Map<unknown, number>();
+    for (const item of currentItems) {
+      const key = getKey(item);
+      keyCounts.set(key, (keyCounts.get(key) ?? 0) + 1);
     }
+
+    // Track how many entries we've used per key
+    const keyUsed = new Map<unknown, number>();
 
     // Update children array in new order
     children.length = 0;
@@ -702,33 +742,51 @@ export function For<T>(props: ForProps<T>): Node {
       const item = currentItems[i];
       const key = getKey(item);
 
-      const existingEntry = itemRoots.get(key);
+      const entries = itemRoots.get(key);
+      const usedCount = keyUsed.get(key) ?? 0;
 
-      if (existingEntry) {
-        // Existing item — update index
-        existingEntry.setIndex(i);
-        children.push(existingEntry.node);
+      if (entries && usedCount < entries.length) {
+        // Reuse existing entry
+        const entry = entries[usedCount];
+        entry.setItem(item);
+        entry.setIndex(i);
+        children.push(entry.node);
       } else {
-        // New item — create root
-        const [getItem, _setItem] = createSignal(item);
-        const [getIndex, setIndex] = createSignal(i);
+        // Create new entry (outside effect ownership)
+        const entry = createEntry(item, i, key);
+        children.push(entry.node);
+      }
 
-        createRoot((dispose) => {
-          const node = render(getItem, getIndex);
-          node._parent = container;
-          const newEntry: ForItemEntry = { dispose, node, setIndex };
-          itemRoots.set(key, newEntry);
-          children.push(node);
-          return dispose;
-        });
+      keyUsed.set(key, usedCount + 1);
+    }
+
+    // Dispose entries that are no longer needed
+    for (const [key, entries] of itemRoots) {
+      const needed = keyCounts.get(key) ?? 0;
+      if (needed === 0) {
+        // Key no longer exists — dispose all entries
+        for (const entry of entries) {
+          entry.node._parent = undefined;
+          entry.dispose();
+        }
+        itemRoots.delete(key);
+      } else if (entries.length > needed) {
+        // More entries than needed — dispose excess
+        const excess = entries.splice(needed);
+        for (const entry of excess) {
+          entry.node._parent = undefined;
+          entry.dispose();
+        }
       }
     }
   });
 
   // Ensure we clean up all item roots when For itself is disposed
   onCleanup(() => {
-    for (const entry of itemRoots.values()) {
-      entry.dispose();
+    for (const entries of itemRoots.values()) {
+      for (const entry of entries) {
+        entry.dispose();
+      }
     }
     itemRoots.clear();
   });

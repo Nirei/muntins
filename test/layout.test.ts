@@ -2375,3 +2375,199 @@ describe("absolute positioning", () => {
     assert.strictEqual(result.children[0].screenY, 8);
   });
 });
+
+describe("display contents", () => {
+  it("hoists children to parent for layout", () => {
+    const node: LayoutNode = {
+      style: { width: 90, height: 10, flexDirection: "row" },
+      children: [
+        { style: { width: 10, height: 10 } },
+        {
+          style: { display: "contents" },
+          children: [
+            { style: { width: 20, height: 10 } },
+            { style: { width: 30, height: 10 } },
+          ],
+        },
+        { style: { width: 10, height: 10 } },
+      ],
+    };
+    const result = computeLayout(node, 90, 10);
+
+    // Contents node is skipped, its children hoisted
+    // Layout should have 4 children: 10, 20, 30, 10
+    assert.strictEqual(result.children.length, 4);
+    assert.strictEqual(result.children[0].width, 10);
+    assert.strictEqual(result.children[1].width, 20);
+    assert.strictEqual(result.children[2].width, 30);
+    assert.strictEqual(result.children[3].width, 10);
+
+    // Positions should be sequential
+    assert.strictEqual(result.children[0].x, 0);
+    assert.strictEqual(result.children[1].x, 10);
+    assert.strictEqual(result.children[2].x, 30);
+    assert.strictEqual(result.children[3].x, 60);
+  });
+
+  it("nested contents nodes hoist recursively", () => {
+    const node: LayoutNode = {
+      style: { width: 60, height: 10, flexDirection: "row" },
+      children: [
+        {
+          style: { display: "contents" },
+          children: [
+            {
+              style: { display: "contents" },
+              children: [{ style: { width: 20, height: 10 } }],
+            },
+            { style: { width: 20, height: 10 } },
+          ],
+        },
+        { style: { width: 20, height: 10 } },
+      ],
+    };
+    const result = computeLayout(node, 60, 10);
+
+    // All contents nodes skipped, grandchildren hoisted
+    assert.strictEqual(result.children.length, 3);
+    assert.strictEqual(result.children[0].x, 0);
+    assert.strictEqual(result.children[1].x, 20);
+    assert.strictEqual(result.children[2].x, 40);
+  });
+
+  it("hoisted children participate in flex distribution", () => {
+    const node: LayoutNode = {
+      style: { width: 90, height: 10, flexDirection: "row" },
+      children: [
+        { style: { flexGrow: 1 } },
+        {
+          style: { display: "contents" },
+          children: [{ style: { flexGrow: 1 } }],
+        },
+        { style: { flexGrow: 1 } },
+      ],
+    };
+    const result = computeLayout(node, 90, 10);
+
+    // Three children with flexGrow: 1 each get 30
+    assert.strictEqual(result.children.length, 3);
+    assert.strictEqual(result.children[0].width, 30);
+    assert.strictEqual(result.children[1].width, 30);
+    assert.strictEqual(result.children[2].width, 30);
+  });
+
+  it("gap applies between hoisted children", () => {
+    // 4 children × 20 + 3 gaps × 10 = 110 total
+    const node: LayoutNode = {
+      style: { width: 110, height: 10, flexDirection: "row", gap: 10 },
+      children: [
+        { style: { width: 20, height: 10 } },
+        {
+          style: { display: "contents" },
+          children: [
+            { style: { width: 20, height: 10 } },
+            { style: { width: 20, height: 10 } },
+          ],
+        },
+        { style: { width: 20, height: 10 } },
+      ],
+    };
+    const result = computeLayout(node, 110, 10);
+
+    // 4 children with gap 10 between each: positions at 0, 30, 60, 90
+    assert.strictEqual(result.children.length, 4);
+    assert.strictEqual(result.children[0].x, 0);
+    assert.strictEqual(result.children[1].x, 30);
+    assert.strictEqual(result.children[2].x, 60);
+    assert.strictEqual(result.children[3].x, 90);
+  });
+
+  it("hoisted children respect parent alignItems", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 60,
+        height: 20,
+        flexDirection: "row",
+        alignItems: "center",
+      },
+      children: [
+        { style: { width: 20, height: 10 } },
+        {
+          style: { display: "contents" },
+          children: [{ style: { width: 20, height: 10 } }],
+        },
+        { style: { width: 20, height: 10 } },
+      ],
+    };
+    const result = computeLayout(node, 60, 20);
+
+    // All children centered: y = (20 - 10) / 2 = 5
+    assert.strictEqual(result.children.length, 3);
+    assert.strictEqual(result.children[0].y, 5);
+    assert.strictEqual(result.children[1].y, 5);
+    assert.strictEqual(result.children[2].y, 5);
+  });
+
+  it("hoisted children respect parent alignItems stretch", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 60,
+        height: 20,
+        flexDirection: "row",
+        alignItems: "stretch",
+      },
+      children: [
+        { style: { width: 20 } },
+        {
+          style: { display: "contents" },
+          children: [{ style: { width: 20 } }],
+        },
+        { style: { width: 20 } },
+      ],
+    };
+    const result = computeLayout(node, 60, 20);
+
+    // All children stretched to parent height
+    assert.strictEqual(result.children.length, 3);
+    assert.strictEqual(result.children[0].height, 20);
+    assert.strictEqual(result.children[1].height, 20);
+    assert.strictEqual(result.children[2].height, 20);
+  });
+
+  it("contents with no children contributes nothing", () => {
+    const node: LayoutNode = {
+      style: { width: 40, height: 10, flexDirection: "row" },
+      children: [
+        { style: { width: 20, height: 10 } },
+        { style: { display: "contents" } }, // No children
+        { style: { width: 20, height: 10 } },
+      ],
+    };
+    const result = computeLayout(node, 40, 10);
+
+    // Empty contents node contributes nothing
+    assert.strictEqual(result.children.length, 2);
+    assert.strictEqual(result.children[0].x, 0);
+    assert.strictEqual(result.children[1].x, 20);
+  });
+
+  it("contents in column direction", () => {
+    const node: LayoutNode = {
+      style: { width: 10, height: 60, flexDirection: "column" },
+      children: [
+        { style: { width: 10, height: 20 } },
+        {
+          style: { display: "contents" },
+          children: [{ style: { width: 10, height: 20 } }],
+        },
+        { style: { width: 10, height: 20 } },
+      ],
+    };
+    const result = computeLayout(node, 10, 60);
+
+    assert.strictEqual(result.children.length, 3);
+    assert.strictEqual(result.children[0].y, 0);
+    assert.strictEqual(result.children[1].y, 20);
+    assert.strictEqual(result.children[2].y, 40);
+  });
+});

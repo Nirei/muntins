@@ -9,7 +9,7 @@
  * to enable future RTL support. In LTR mode: start=left, end=right.
  */
 export interface FlexStyle {
-  display: "flex" | "none";
+  display: "flex" | "none" | "contents";
   flexDirection: "row" | "column";
   flexWrap: "nowrap" | "wrap";
   justifyContent:
@@ -164,6 +164,29 @@ interface FlexLine {
   crossSize: number; // max cross size of items
 }
 
+/**
+ * Collects children for a layout box, hoisting children of `display: "contents"`
+ * nodes to be direct children of the box.
+ */
+function collectLayoutChildren(
+  children: LayoutNode[],
+  parent: LayoutBox,
+): void {
+  for (const child of children) {
+    const style = resolveStyle(child.style);
+
+    if (style.display === "contents") {
+      // Hoist this node's children directly to parent
+      if (child.children) {
+        collectLayoutChildren(child.children, parent);
+      }
+    } else {
+      // Normal child — create a box
+      parent.children.push(buildLayoutTree(child, parent));
+    }
+  }
+}
+
 function buildLayoutTree(
   node: LayoutNode,
   parent: LayoutBox | null,
@@ -182,9 +205,7 @@ function buildLayoutTree(
   };
 
   if (node.children) {
-    for (const child of node.children) {
-      box.children.push(buildLayoutTree(child, box));
-    }
+    collectLayoutChildren(node.children, box);
   }
 
   return box;
