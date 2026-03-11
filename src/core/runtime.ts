@@ -1,9 +1,21 @@
 // Render pipeline and component primitives
-// TODO: Implement mount, Box, Text, Show, For, useFocus, TabFocus
+// TODO: Implement mount, Show, For, useFocus, TabFocus
 
-import type { Buffer } from "./buffer.ts";
-import type { InputEvent, KeyEvent, MouseEvent, ScrollEvent } from "./input.ts";
-import type { FlexStyle } from "./layout.ts";
+import {
+  BOLD,
+  type Buffer,
+  type Color,
+  DEFAULT_COLOR,
+  DIM,
+  INVERSE,
+  ITALIC,
+  STRIKETHROUGH,
+  UNDERLINE,
+  graphemeDisplayWidth,
+  graphemes,
+} from "./buffer.js";
+import type { InputEvent, KeyEvent, MouseEvent, ScrollEvent } from "./input.js";
+import { DEFAULT_FLEX_STYLE, type FlexStyle } from "./layout.js";
 
 /**
  * The central data structure representing a UI element.
@@ -55,7 +67,7 @@ export interface Ref {
 /**
  * Create a mutable reference to a node.
  *
- * Refs are bound during node creation (see Task 5.6).
+ * Refs are bound during node creation by Box/Text components.
  * When a node is disposed (e.g., via Show/For), the ref still holds
  * the stale reference. Users should check node validity before use,
  * or set ref.current = null in an onCleanup callback if needed.
@@ -93,32 +105,30 @@ export interface App {
   unmount(): void;
 }
 
-// Internal interfaces (not exported, used within runtime.ts and referenced by later tasks)
+// Internal interfaces (not exported, scaffolded for mount/render cycle implementation)
 
-/**
- * Internal state for a mounted application.
- * Defined here for reference; used across Tasks 5.4-5.6.
- */
+/** Internal state for a mounted application. */
 interface RuntimeState {
-  // Core tree (Task 5.4)
+  // Core tree
   root: Node;
   rootDispose: () => void;
 
-  // Rendering (Task 5.4)
+  // Rendering
   buffer: Buffer;
   layoutResult: import("./layout.ts").LayoutResult | null;
   frameInterval: ReturnType<typeof setInterval> | null;
   options: Required<MountOptions>;
 
-  // Input (Task 5.4)
+  // Input
+  stdin: NodeJS.ReadStream;
   inputParser: { destroy: () => void };
   pendingEvents: InputEvent[];
 
-  // Focus (Task 5.6)
+  // Focus
   focusedNode: Node | null;
   rootScope: FocusScope;
 
-  // Hover and terminal focus (Task 5.5)
+  // Hover and terminal focus
   hoverState: HoverState;
   terminalFocused: boolean;
 }
@@ -133,12 +143,6 @@ interface FocusScope {
 interface HoverState {
   currentNode: Node | null;
 }
-
-// Suppress unused variable warnings for internal interfaces
-// These are referenced by later tasks
-void (0 as unknown as RuntimeState);
-void (0 as unknown as FocusScope);
-void (0 as unknown as HoverState);
 
 // Screen control functions
 
@@ -186,13 +190,366 @@ export function exitTuiMode(
 }
 
 /**
- * Write frame content with cursor bracketing.
+ * Write frame content to stdout.
  *
- * Hides cursor during write to prevent flicker, then restores it.
+ * The cursor is already hidden by enterTuiMode and restored by exitTuiMode,
+ * so this function simply writes the content without cursor manipulation.
  * No-op for empty content.
  */
 export function flushFrame(stdout: NodeJS.WriteStream, content: string): void {
   if (content.length === 0) return;
 
-  stdout.write(`\x1b[?25l${content}\x1b[?25h`);
+  stdout.write(content);
+}
+
+// ============================================================================
+// Box and Text Component Types
+// ============================================================================
+
+/** Props for Box component. */
+export interface BoxProps extends Partial<FlexStyle> {
+  children?: Node[];
+  focusable?: boolean;
+  autoFocus?: boolean;
+  ref?: Ref;
+  onKeyPress?: (key: KeyEvent) => boolean | undefined;
+  onMousePress?: (event: MouseEvent) => void;
+  onMouseRelease?: (event: MouseEvent) => void;
+  onScroll?: (event: ScrollEvent) => void;
+  onHover?: (hovering: boolean) => void;
+}
+
+/** Props for Text component. */
+export interface TextProps {
+  content: string | (() => string);
+  color?: Color | (() => Color);
+  backgroundColor?: Color | (() => Color);
+  bold?: boolean | (() => boolean);
+  italic?: boolean | (() => boolean);
+  underline?: boolean | (() => boolean);
+  dim?: boolean | (() => boolean);
+  strikethrough?: boolean | (() => boolean);
+  inverse?: boolean | (() => boolean);
+  wrap?: "wrap" | "truncate" | "truncate-end" | "truncate-start";
+  focusable?: boolean;
+  autoFocus?: boolean;
+  ref?: Ref;
+  onKeyPress?: (key: KeyEvent) => boolean | undefined;
+  onMousePress?: (event: MouseEvent) => void;
+}
+
+// ============================================================================
+// Text Measurement and Rendering Helpers
+// ============================================================================
+
+/**
+ * Calculates the display width of a line of text.
+ */
+export function lineDisplayWidth(line: string): number {
+  let width = 0;
+  for (const grapheme of graphemes(line)) {
+    width += graphemeDisplayWidth(grapheme);
+  }
+  return width;
+}
+
+/**
+ * Wraps a single line of text at grapheme boundaries to fit within maxWidth.
+ * Returns an array of wrapped line segments.
+ */
+export function wrapLine(line: string, maxWidth: number): string[] {
+  if (maxWidth <= 0) return [line];
+
+  const result: string[] = [];
+  let current = "";
+  let currentWidth = 0;
+
+  for (const grapheme of graphemes(line)) {
+    const w = graphemeDisplayWidth(grapheme);
+
+    if (currentWidth + w > maxWidth && current.length > 0) {
+      result.push(current);
+      current = "";
+      currentWidth = 0;
+    }
+
+    current += grapheme;
+    currentWidth += w;
+  }
+
+  if (current.length > 0) {
+    result.push(current);
+  }
+
+  return result.length > 0 ? result : [""];
+}
+
+/**
+ * Measures text for layout purposes.
+ * Returns the width and height needed to display the text.
+ *
+ * @param text - The text to measure
+ * @param availableWidth - Available width for wrapping
+ * @param wrap - Wrapping mode: "wrap" for line wrapping, or truncate modes for single line
+ */
+export function measureText(
+  text: string,
+  availableWidth: number,
+  wrap: "wrap" | "truncate" | "truncate-end" | "truncate-start",
+): { width: number; height: number } {
+  if (text.length === 0) {
+    return { width: 0, height: 0 };
+  }
+
+  const lines = text.split("\n");
+
+  if (wrap === "wrap") {
+    // Wrap lines to available width
+    const wrappedLines = lines.flatMap((line) =>
+      wrapLine(line, availableWidth),
+    );
+    const maxWidth = Math.max(
+      ...wrappedLines.map((line) => lineDisplayWidth(line)),
+    );
+    return {
+      width: Math.min(maxWidth, availableWidth),
+      height: wrappedLines.length,
+    };
+  }
+
+  // No wrapping — single line per input line
+  const maxWidth = Math.max(...lines.map((line) => lineDisplayWidth(line)));
+  return {
+    width: Math.min(maxWidth, availableWidth),
+    height: lines.length,
+  };
+}
+
+/**
+ * Truncates a line from the end, adding ellipsis.
+ */
+function truncateEnd(line: string, maxWidth: number): string {
+  const ellipsis = "…";
+  const ellipsisWidth = 1;
+  const targetWidth = maxWidth - ellipsisWidth;
+
+  if (targetWidth <= 0) return ellipsis.slice(0, maxWidth);
+
+  let result = "";
+  let width = 0;
+
+  for (const grapheme of graphemes(line)) {
+    const w = graphemeDisplayWidth(grapheme);
+    if (width + w > targetWidth) break;
+    result += grapheme;
+    width += w;
+  }
+
+  return result + ellipsis;
+}
+
+/**
+ * Truncates a line from the start, adding ellipsis.
+ */
+function truncateStart(line: string, maxWidth: number): string {
+  const ellipsis = "…";
+  const ellipsisWidth = 1;
+  const targetWidth = maxWidth - ellipsisWidth;
+
+  if (targetWidth <= 0) return ellipsis.slice(0, maxWidth);
+
+  // Collect graphemes in reverse
+  const chars = [...graphemes(line)];
+  let result = "";
+  let width = 0;
+
+  for (let i = chars.length - 1; i >= 0; i--) {
+    const w = graphemeDisplayWidth(chars[i]);
+    if (width + w > targetWidth) break;
+    result = chars[i] + result;
+    width += w;
+  }
+
+  return ellipsis + result;
+}
+
+/**
+ * Truncates a line to fit within maxWidth, using the specified mode.
+ * Returns the line unchanged if it already fits.
+ */
+export function truncateLine(
+  line: string,
+  maxWidth: number,
+  mode: "truncate" | "truncate-end" | "truncate-start",
+): string {
+  const width = lineDisplayWidth(line);
+  if (width <= maxWidth) return line;
+
+  if (mode === "truncate" || mode === "truncate-end") {
+    return truncateEnd(line, maxWidth);
+  }
+
+  return truncateStart(line, maxWidth);
+}
+
+/**
+ * Resolves a value that may be static or a getter function.
+ */
+function resolveValue<T>(value: T | (() => T) | undefined): T | undefined {
+  return typeof value === "function" ? (value as () => T)() : value;
+}
+
+/**
+ * Computes the modifier bitmask from TextProps.
+ */
+function computeModifiers(props: TextProps): number {
+  let mods = 0;
+  if (resolveValue(props.bold)) mods |= BOLD;
+  if (resolveValue(props.dim)) mods |= DIM;
+  if (resolveValue(props.italic)) mods |= ITALIC;
+  if (resolveValue(props.underline)) mods |= UNDERLINE;
+  if (resolveValue(props.strikethrough)) mods |= STRIKETHROUGH;
+  if (resolveValue(props.inverse)) mods |= INVERSE;
+  return mods;
+}
+
+/**
+ * Renders text into the buffer with styling and wrapping/truncation.
+ */
+function renderText(
+  buffer: Buffer,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  text: string,
+  props: TextProps,
+): void {
+  // Resolve reactive props
+  const fg = resolveValue(props.color) ?? DEFAULT_COLOR;
+  const bg = resolveValue(props.backgroundColor) ?? DEFAULT_COLOR;
+  const modifiers = computeModifiers(props);
+  const wrap = props.wrap ?? "wrap";
+
+  const lines = text.split("\n");
+  const displayLines =
+    wrap === "wrap"
+      ? lines.flatMap((line) => wrapLine(line, width))
+      : lines.map((line) => truncateLine(line, width, wrap));
+
+  for (let row = 0; row < Math.min(displayLines.length, height); row++) {
+    const line = displayLines[row];
+    buffer.writeText(x, y + row, line, fg, bg, modifiers);
+  }
+}
+
+// ============================================================================
+// Box and Text Components
+// ============================================================================
+
+/**
+ * Creates a Box node - a layout container that supports reactive styles and event handlers.
+ *
+ * Box is the fundamental container primitive. It has no measure or render functions;
+ * its size is determined by flexbox layout based on its children.
+ */
+export function Box(props: BoxProps): Node {
+  const {
+    children = [],
+    focusable,
+    autoFocus,
+    ref,
+    onKeyPress,
+    onMousePress,
+    onMouseRelease,
+    onScroll,
+    onHover,
+    ...styleProps
+  } = props;
+
+  const node: Node = {
+    get style() {
+      // Resolve any reactive style props
+      const resolved: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(styleProps)) {
+        resolved[key] =
+          typeof value === "function" ? (value as () => unknown)() : value;
+      }
+      return { ...DEFAULT_FLEX_STYLE, ...resolved } as FlexStyle;
+    },
+    children,
+    focusable,
+    autoFocus,
+    onKeyPress,
+    onMousePress,
+    onMouseRelease,
+    onScroll,
+    onHover,
+  };
+
+  // Bind ref
+  if (ref) {
+    ref.current = node;
+  }
+
+  // Set parent references on children for O(depth) tree traversal
+  for (const child of children) {
+    child._parent = node;
+  }
+
+  return node;
+}
+
+/**
+ * Creates a Text node - a leaf node that displays text content.
+ *
+ * Text is measured based on its content and renders text with styling.
+ * Content and style props can be static values or reactive getters.
+ */
+export function Text(props: TextProps): Node {
+  const {
+    content,
+    focusable,
+    autoFocus,
+    ref,
+    onKeyPress,
+    onMousePress,
+    wrap = "wrap",
+    ...styleProps
+  } = props;
+
+  const getContent = typeof content === "function" ? content : () => content;
+
+  const node: Node = {
+    style: DEFAULT_FLEX_STYLE,
+    focusable,
+    autoFocus,
+    onKeyPress,
+    onMousePress,
+
+    measure(availableWidth: number, _availableHeight: number) {
+      return measureText(getContent(), availableWidth, wrap);
+    },
+
+    render(
+      x: number,
+      y: number,
+      width: number,
+      height: number,
+      buffer: Buffer,
+    ) {
+      renderText(buffer, x, y, width, height, getContent(), {
+        ...styleProps,
+        content,
+        wrap,
+      });
+    },
+  };
+
+  // Bind ref
+  if (ref) {
+    ref.current = node;
+  }
+
+  return node;
 }
