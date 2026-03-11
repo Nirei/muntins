@@ -115,7 +115,7 @@ describe("graphemeDisplayWidth", () => {
     assert.strictEqual(graphemeDisplayWidth("👩‍🔬"), 2);
   });
 
-  it("keycap sequences = width 2", () => {
+  it("keycap sequences = width 1", () => {
     // Digit + variation selector + combining enclosing keycap
     const keycap1 = "1\uFE0F\u20E3";
     assert.strictEqual(graphemeDisplayWidth(keycap1), 1);
@@ -810,6 +810,14 @@ describe("ANSI output correctness", () => {
 });
 
 describe("edge cases", () => {
+  it("empty buffer (0x0) handles flush gracefully", () => {
+    const buf = new Buffer(0, 0);
+    assert.strictEqual(buf.width, 0);
+    assert.strictEqual(buf.height, 0);
+    const output = buf.flush();
+    assert.strictEqual(output, "");
+  });
+
   it("1x1 buffer works correctly", () => {
     const buf = new Buffer(1, 1);
     buf.set(0, 0, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
