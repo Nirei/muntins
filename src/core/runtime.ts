@@ -1,5 +1,5 @@
 // Render pipeline and component primitives
-// TODO: Implement mount, Show, For, useFocus, TabFocus
+// TODO: Implement mount, useFocus, TabFocus
 
 import {
   BOLD,
@@ -13,9 +13,15 @@ import {
   UNDERLINE,
   graphemeDisplayWidth,
   graphemes,
-} from "./buffer.js";
-import type { InputEvent, KeyEvent, MouseEvent, ScrollEvent } from "./input.js";
-import { DEFAULT_FLEX_STYLE, type FlexStyle } from "./layout.js";
+} from "./buffer.ts";
+import type { InputEvent, KeyEvent, MouseEvent, ScrollEvent } from "./input.ts";
+import { DEFAULT_FLEX_STYLE, type FlexStyle } from "./layout.ts";
+import {
+  createEffect,
+  createRoot,
+  createSignal,
+  onCleanup,
+} from "./signals.ts";
 
 /**
  * The central data structure representing a UI element.
@@ -552,4 +558,180 @@ export function Text(props: TextProps): Node {
   }
 
   return node;
+}
+
+// ============================================================================
+// Show and For Conditional Components
+// ============================================================================
+
+/** Props for Show component. */
+export interface ShowProps<T> {
+  when: () => T;
+  children: (value: T) => Node;
+  fallback?: () => Node;
+}
+
+/**
+ * Conditionally renders one of two branches based on a reactive condition.
+ *
+ * When the condition is truthy, renders the `children` branch with the truthy value.
+ * When falsy, renders the `fallback` branch if provided, otherwise renders nothing.
+ * Branch changes dispose the previous subtree and create a new one with proper
+ * ownership tracking.
+ *
+ * Must be called within a mounted component context (inside mount()'s component
+ * function or a child thereof) for proper effect ownership.
+ */
+export function Show<T>(props: ShowProps<T>): Node {
+  const { when: condition, children: childrenBranch, fallback } = props;
+
+  const children: Node[] = [];
+  let currentDispose: (() => void) | null = null;
+
+  // Define container first so children can reference it
+  const container: Node = {
+    style: { ...DEFAULT_FLEX_STYLE, display: "flex" },
+    get children() {
+      return children;
+    },
+  };
+
+  // Create a reactive effect that updates the child
+  createEffect(() => {
+    const value = condition();
+
+    // Dispose previous subtree
+    if (currentDispose) {
+      currentDispose();
+      currentDispose = null;
+    }
+
+    // Clear children array
+    children.length = 0;
+
+    // Create new subtree in a fresh root
+    if (value) {
+      currentDispose = createRoot((dispose) => {
+        const node = childrenBranch(value);
+        node._parent = container;
+        children.push(node);
+        return dispose;
+      });
+    } else if (fallback) {
+      currentDispose = createRoot((dispose) => {
+        const node = fallback();
+        node._parent = container;
+        children.push(node);
+        return dispose;
+      });
+    }
+  });
+
+  // Ensure we clean up when Show itself is disposed
+  onCleanup(() => {
+    if (currentDispose) {
+      currentDispose();
+      currentDispose = null;
+    }
+  });
+
+  return container;
+}
+
+/** Props for For component. */
+export interface ForProps<T> {
+  each: () => T[];
+  render: (item: () => T, index: () => number) => Node;
+  key?: (item: T) => unknown;
+}
+
+interface ForItemEntry {
+  dispose: () => void;
+  node: Node;
+  setIndex: (i: number) => void;
+}
+
+/**
+ * Renders a list of items with efficient updates using keyed reconciliation.
+ *
+ * Items are identified by key (defaults to object identity). When the array
+ * changes:
+ * - New items create new roots with reactive item/index getters
+ * - Removed items have their roots disposed
+ * - Reordered items update their index signals, keeping nodes alive
+ *
+ * The render function receives getter functions for item and index, enabling
+ * reactive updates when items are reordered.
+ *
+ * Must be called within a mounted component context for proper effect ownership.
+ */
+export function For<T>(props: ForProps<T>): Node {
+  const { each: items, render, key: keyFn } = props;
+
+  const children: Node[] = [];
+  const itemRoots: Map<unknown, ForItemEntry> = new Map();
+
+  // Key function defaults to identity
+  const getKey = keyFn ?? ((item: T) => item);
+
+  // Define container first so children can reference it
+  const container: Node = {
+    style: { ...DEFAULT_FLEX_STYLE, display: "flex" },
+    get children() {
+      return children;
+    },
+  };
+
+  createEffect(() => {
+    const currentItems = items();
+    const currentKeys = new Set(currentItems.map(getKey));
+
+    // Remove items whose keys no longer exist
+    for (const [key, entry] of itemRoots) {
+      if (!currentKeys.has(key)) {
+        entry.node._parent = undefined;
+        entry.dispose();
+        itemRoots.delete(key);
+      }
+    }
+
+    // Update children array in new order
+    children.length = 0;
+
+    for (let i = 0; i < currentItems.length; i++) {
+      const item = currentItems[i];
+      const key = getKey(item);
+
+      const existingEntry = itemRoots.get(key);
+
+      if (existingEntry) {
+        // Existing item — update index
+        existingEntry.setIndex(i);
+        children.push(existingEntry.node);
+      } else {
+        // New item — create root
+        const [getItem, _setItem] = createSignal(item);
+        const [getIndex, setIndex] = createSignal(i);
+
+        createRoot((dispose) => {
+          const node = render(getItem, getIndex);
+          node._parent = container;
+          const newEntry: ForItemEntry = { dispose, node, setIndex };
+          itemRoots.set(key, newEntry);
+          children.push(node);
+          return dispose;
+        });
+      }
+    }
+  });
+
+  // Ensure we clean up all item roots when For itself is disposed
+  onCleanup(() => {
+    for (const entry of itemRoots.values()) {
+      entry.dispose();
+    }
+    itemRoots.clear();
+  });
+
+  return container;
 }

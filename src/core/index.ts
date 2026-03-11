@@ -12,10 +12,10 @@ export {
   untrack,
   type Accessor,
   type Setter,
-} from "./signals.js";
+} from "./signals.ts";
 
 // Layout
-export { computeLayout, DEFAULT_FLEX_STYLE, type FlexStyle } from "./layout.js";
+export { computeLayout, DEFAULT_FLEX_STYLE, type FlexStyle } from "./layout.ts";
 
 // Buffer (rendering)
 export {
@@ -33,7 +33,7 @@ export {
   graphemes,
   graphemeDisplayWidth,
   displayWidth,
-} from "./buffer.js";
+} from "./buffer.ts";
 
 // Input
 export {
@@ -47,7 +47,7 @@ export {
   createInputParser,
   setupTerminal,
   teardownTerminal,
-} from "./input.js";
+} from "./input.ts";
 
 // Runtime (components and mount)
 export {
@@ -68,4 +68,8 @@ export {
   type MountOptions,
   type App,
   DEFAULT_MOUNT_OPTIONS,
-} from "./runtime.js";
+  Show,
+  For,
+  type ShowProps,
+  type ForProps,
+} from "./runtime.ts";

@@ -4,7 +4,9 @@ import { DEFAULT_FLEX_STYLE } from "../src/core/layout.ts";
 import {
   Box,
   DEFAULT_MOUNT_OPTIONS,
+  For,
   type Node,
+  Show,
   Text,
   createRef,
   enterTuiMode,
@@ -15,7 +17,12 @@ import {
   truncateLine,
   wrapLine,
 } from "../src/core/runtime.ts";
-import { createSignal } from "../src/core/signals.ts";
+import {
+  createEffect,
+  createRoot,
+  createSignal,
+  onCleanup,
+} from "../src/core/signals.ts";
 
 describe("runtime core types", () => {
   it("createRef returns object with null current", () => {
@@ -344,5 +351,362 @@ describe("wrapLine", () => {
   it("handles maxWidth of 0 or less", () => {
     const lines = wrapLine("hello", 0);
     assert.deepStrictEqual(lines, ["hello"]);
+  });
+});
+
+// ============================================================================
+// Show Tests
+// ============================================================================
+
+describe("Show", () => {
+  it("renders children branch when truthy", () => {
+    createRoot((dispose) => {
+      const [cond, _setCond] = createSignal(true);
+      const node = Show({
+        when: cond,
+        children: () => Text({ content: "yes" }),
+        fallback: () => Text({ content: "no" }),
+      });
+
+      assert.strictEqual(node.children?.length, 1);
+      dispose();
+      return dispose;
+    });
+  });
+
+  it("renders fallback branch when falsy", () => {
+    createRoot((dispose) => {
+      const [cond, _setCond] = createSignal(false);
+      const node = Show({
+        when: cond,
+        children: () => Text({ content: "yes" }),
+        fallback: () => Text({ content: "no" }),
+      });
+
+      assert.strictEqual(node.children?.length, 1);
+      dispose();
+      return dispose;
+    });
+  });
+
+  it("renders nothing when falsy and no fallback", () => {
+    createRoot((dispose) => {
+      const [cond, _setCond] = createSignal(false);
+      const node = Show({
+        when: cond,
+        children: () => Text({ content: "yes" }),
+      });
+
+      assert.strictEqual(node.children?.length, 0);
+      dispose();
+      return dispose;
+    });
+  });
+
+  it("narrows type for nullable condition", () => {
+    createRoot((dispose) => {
+      const [value, setValue] = createSignal<string | null>("hello");
+      let receivedType: string | null = null;
+
+      Show({
+        when: value,
+        children: (v) => {
+          // TypeScript should narrow v to string (not string | null)
+          receivedType = v;
+          // Use a Box instead of Text to avoid type issues with nullable content
+          return Box({});
+        },
+      });
+
+      assert.strictEqual(receivedType, "hello");
+
+      setValue(null);
+      // Now the fallback branch runs (if provided)
+      dispose();
+      return dispose;
+    });
+  });
+
+  it("switches branch on condition change", () => {
+    createRoot((dispose) => {
+      const [cond, setCond] = createSignal(true);
+      const node = Show({
+        when: cond,
+        children: () => Text({ content: "yes" }),
+        fallback: () => Text({ content: "no" }),
+      });
+
+      const firstChild = node.children?.[0];
+      setCond(false);
+      const secondChild = node.children?.[0];
+
+      assert.notStrictEqual(firstChild, secondChild);
+      dispose();
+      return dispose;
+    });
+  });
+
+  it("passes value to children branch", () => {
+    createRoot((dispose) => {
+      const [cond, _setCond] = createSignal<string | null>("hello");
+      let receivedValue: string | null = null;
+
+      Show({
+        when: cond,
+        children: (value) => {
+          receivedValue = value;
+          // Use a Box instead of Text to avoid type issues with nullable content
+          return Box({});
+        },
+      });
+
+      assert.strictEqual(receivedValue, "hello");
+      dispose();
+      return dispose;
+    });
+  });
+
+  it("disposes previous branch on change", () => {
+    createRoot((dispose) => {
+      let cleanupCalled = false;
+      const [cond, setCond] = createSignal(true);
+
+      Show({
+        when: cond,
+        children: () => {
+          onCleanup(() => {
+            cleanupCalled = true;
+          });
+          return Text({ content: "yes" });
+        },
+      });
+
+      assert.strictEqual(cleanupCalled, false);
+      setCond(false);
+      assert.strictEqual(cleanupCalled, true);
+      dispose();
+      return dispose;
+    });
+  });
+
+  it("sets _parent on children", () => {
+    createRoot((dispose) => {
+      const [cond, _setCond] = createSignal(true);
+      const node = Show({
+        when: cond,
+        children: () => Text({ content: "yes" }),
+      });
+
+      const child = node.children?.[0];
+      assert.strictEqual(child?._parent, node);
+      dispose();
+      return dispose;
+    });
+  });
+});
+
+// ============================================================================
+// For Tests
+// ============================================================================
+
+describe("For", () => {
+  it("renders items in order", () => {
+    createRoot((dispose) => {
+      const [items, _setItems] = createSignal(["a", "b", "c"]);
+      const node = For({
+        each: items,
+        render: (item) => Text({ content: item }),
+      });
+
+      assert.strictEqual(node.children?.length, 3);
+      dispose();
+      return dispose;
+    });
+  });
+
+  it("adds new items", () => {
+    createRoot((dispose) => {
+      const [items, setItems] = createSignal(["a", "b"]);
+      const node = For({
+        each: items,
+        render: (item) => Text({ content: item }),
+      });
+
+      assert.strictEqual(node.children?.length, 2);
+
+      setItems(["a", "b", "c"]);
+      assert.strictEqual(node.children?.length, 3);
+      dispose();
+      return dispose;
+    });
+  });
+
+  it("removes items", () => {
+    createRoot((dispose) => {
+      const [items, setItems] = createSignal(["a", "b", "c"]);
+      const node = For({
+        each: items,
+        render: (item) => Text({ content: item }),
+      });
+
+      setItems(["a", "c"]);
+      assert.strictEqual(node.children?.length, 2);
+      dispose();
+      return dispose;
+    });
+  });
+
+  it("disposes removed item roots", () => {
+    createRoot((dispose) => {
+      let cleanupCalled = false;
+      const [items, setItems] = createSignal(["a", "b"]);
+
+      For({
+        each: items,
+        render: (item) => {
+          if (item() === "b") {
+            onCleanup(() => {
+              cleanupCalled = true;
+            });
+          }
+          return Text({ content: item });
+        },
+      });
+
+      setItems(["a"]);
+      assert.strictEqual(cleanupCalled, true);
+      dispose();
+      return dispose;
+    });
+  });
+
+  it("reuses nodes for same items", () => {
+    createRoot((dispose) => {
+      const [items, setItems] = createSignal(["a", "b", "c"]);
+      const node = For({
+        each: items,
+        render: (item) => Text({ content: item }),
+      });
+
+      const originalNodes = [...(node.children ?? [])];
+
+      setItems(["c", "b", "a"]); // Reorder
+
+      // Same nodes, different order
+      assert.strictEqual(node.children?.length, 3);
+      for (const orig of originalNodes) {
+        assert.ok(node.children?.includes(orig));
+      }
+      dispose();
+      return dispose;
+    });
+  });
+
+  it("provides reactive index", () => {
+    createRoot((dispose) => {
+      const indices: number[] = [];
+      const [items, setItems] = createSignal(["a", "b"]);
+
+      For({
+        each: items,
+        render: (item, index) => {
+          createEffect(() => {
+            if (item() === "b") {
+              indices.push(index());
+            }
+          });
+          return Text({ content: item });
+        },
+      });
+
+      assert.deepStrictEqual(indices, [1]);
+
+      setItems(["b", "a"]); // Move "b" to index 0
+      assert.deepStrictEqual(indices, [1, 0]);
+      dispose();
+      return dispose;
+    });
+  });
+
+  it("handles empty array", () => {
+    createRoot((dispose) => {
+      const [items, _setItems] = createSignal<string[]>([]);
+      const node = For({
+        each: items,
+        render: (item) => Text({ content: item }),
+      });
+
+      assert.strictEqual(node.children?.length, 0);
+      dispose();
+      return dispose;
+    });
+  });
+
+  it("supports custom key function", () => {
+    createRoot((dispose) => {
+      interface Item {
+        id: number;
+        name: string;
+      }
+      const [items, setItems] = createSignal<Item[]>([
+        { id: 1, name: "a" },
+        { id: 2, name: "b" },
+      ]);
+
+      const node = For({
+        each: items,
+        key: (item) => item.id,
+        render: (item) => Text({ content: () => item().name }),
+      });
+
+      const originalNodes = [...(node.children ?? [])];
+
+      // Replace with new objects but same IDs
+      setItems([
+        { id: 2, name: "b-updated" },
+        { id: 1, name: "a-updated" },
+      ]);
+
+      // Same nodes (by key), different order
+      assert.strictEqual(node.children?.length, 2);
+      for (const orig of originalNodes) {
+        assert.ok(node.children?.includes(orig));
+      }
+      dispose();
+      return dispose;
+    });
+  });
+
+  it("sets _parent on children", () => {
+    createRoot((dispose) => {
+      const [items, _setItems] = createSignal(["a", "b"]);
+      const node = For({
+        each: items,
+        render: (item) => Text({ content: item }),
+      });
+
+      for (const child of node.children ?? []) {
+        assert.strictEqual(child._parent, node);
+      }
+      dispose();
+      return dispose;
+    });
+  });
+
+  it("duplicate items share the same node", () => {
+    createRoot((dispose) => {
+      const obj = { id: 1 };
+      const [items, _setItems] = createSignal([obj, obj]);
+      const node = For({
+        each: items,
+        render: (item) => Text({ content: () => String(item().id) }),
+      });
+
+      // Both array positions render the same node
+      assert.strictEqual(node.children?.length, 2);
+      assert.strictEqual(node.children?.[0], node.children?.[1]);
+      dispose();
+      return dispose;
+    });
   });
 });
