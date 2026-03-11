@@ -585,6 +585,31 @@ describe("SequenceParser state machine", () => {
     assert.strictEqual(events.length, 1);
   });
 
+  it("does not lose ESC when invalid sequence ends with ESC", () => {
+    const parser = new SequenceParser();
+
+    // Partial mouse sequence interrupted by new mouse sequence
+    // \x1b[<0;10 is incomplete, then \x1b starts new sequence
+    const events = parser.feed("\x1b[<0;10\x1b[<0;5;3M");
+
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual(events[0].type, "mouse");
+    assert.strictEqual((events[0] as MouseEvent).x, 4); // 5-1 = 4
+    assert.strictEqual((events[0] as MouseEvent).y, 2); // 3-1 = 2
+  });
+
+  it("does not lose ESC in CSI state", () => {
+    const parser = new SequenceParser();
+
+    // Unknown CSI sequence followed by focus event
+    // \x1b[X is unknown, then \x1b[I is focus
+    const events = parser.feed("\x1b[X\x1b[I");
+
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual(events[0].type, "focus");
+    assert.strictEqual((events[0] as FocusEvent).focused, true);
+  });
+
   it("parses focus in event", () => {
     const parser = new SequenceParser();
     const events = parser.feed("\x1b[I");
@@ -695,6 +720,43 @@ describe("paste parser", () => {
     result = parser.feed("\x1b[200~second\x1b[201~");
     assert.strictEqual(result.text, "second");
   });
+
+  it("handles split end marker across chunks", () => {
+    const parser = new PasteParser();
+
+    // First chunk has partial end marker
+    let result = parser.feed("\x1b[200~hello\x1b[201");
+    assert.strictEqual(result.text, null);
+
+    // Second chunk completes the marker
+    result = parser.feed("~");
+    assert.strictEqual(result.text, "hello");
+  });
+
+  it("handles split end marker at different positions", () => {
+    const parser = new PasteParser();
+
+    // Split after \x1b
+    let result = parser.feed("\x1b[200~test\x1b");
+    assert.strictEqual(result.text, null);
+
+    result = parser.feed("[201~");
+    assert.strictEqual(result.text, "test");
+  });
+
+  it("handles false end marker prefix followed by real end", () => {
+    const parser = new PasteParser();
+
+    // First chunk ends with what looks like start of end marker
+    let result = parser.feed("\x1b[200~data\x1b[20");
+    assert.strictEqual(result.text, null);
+
+    // But next chunk has different continuation, then real end marker
+    result = parser.feed("0~more\x1b[201~");
+    // The \x1b[200~ in the middle is paste content (another start marker)
+    // This tests that false positives are handled
+    assert.strictEqual(result.text, "data\x1b[200~more");
+  });
 });
 
 describe("resize handler", () => {
@@ -765,6 +827,41 @@ describe("createInputParser", () => {
 
     assert.ok(typeof parser.destroy === "function");
     parser.destroy();
+  });
+
+  it("destroy can be called multiple times safely", () => {
+    let teardownCount = 0;
+    const mockStdin = {
+      isTTY: true,
+      setRawMode: () => {},
+      on: () => {},
+      off: () => {},
+      listenerCount: () => 0,
+    } as unknown as NodeJS.ReadStream;
+    const mockStdout = {
+      write: () => {
+        teardownCount++;
+        return true;
+      },
+      columns: 80,
+      rows: 24,
+      on: () => {},
+      off: () => {},
+    } as unknown as NodeJS.WriteStream;
+
+    const parser = createInputParser(mockStdin, mockStdout, () => {});
+
+    // Reset count after setup (which also writes)
+    const setupWrites = teardownCount;
+
+    parser.destroy();
+    const afterFirstDestroy = teardownCount - setupWrites;
+
+    parser.destroy();
+    const afterSecondDestroy = teardownCount - setupWrites;
+
+    // Second destroy should not cause additional writes
+    assert.strictEqual(afterFirstDestroy, afterSecondDestroy);
   });
 
   it("calls onEvent for keyboard input", () => {

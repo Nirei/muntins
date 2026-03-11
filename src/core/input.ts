@@ -392,6 +392,9 @@ export class SequenceParser {
       case ParserState.Escape:
         if (char === "[") {
           this.state = ParserState.Csi;
+        } else if (char === "\x1b") {
+          // Stay in Escape state for consecutive ESC
+          this.state = ParserState.Escape;
         } else {
           this.state = ParserState.Ground;
         }
@@ -409,6 +412,9 @@ export class SequenceParser {
           // Focus out: \x1b[O
           this.state = ParserState.Ground;
           return { type: "focus", focused: false };
+        } else if (char === "\x1b") {
+          // New escape sequence starting, don't lose it
+          this.state = ParserState.Escape;
         } else {
           // Not a recognized sequence, reset
           this.state = ParserState.Ground;
@@ -425,6 +431,10 @@ export class SequenceParser {
         }
         if ((char >= "0" && char <= "9") || char === ";") {
           this.buffer += char;
+        } else if (char === "\x1b") {
+          // New escape sequence starting, don't lose it
+          this.state = ParserState.Escape;
+          this.buffer = "";
         } else {
           // Invalid sequence, reset
           this.state = ParserState.Ground;
@@ -453,11 +463,17 @@ interface PasteResult {
  * - End marker: \x1b[201~
  *
  * Handles split markers across chunks and preserves data before paste.
+ *
+ * NOTE: This parser trusts the terminal to comply with the bracketed paste
+ * protocol. If pasted content contains a literal end marker (\x1b[201~), the
+ * paste will terminate early. Terminals are responsible for ensuring the end
+ * marker is not present in paste content (typically by filtering or escaping).
  */
 export class PasteParser {
   private inPaste = false;
   private pasteBuffer = "";
   private prefixBuffer = ""; // Buffer for incomplete start marker
+  private suffixBuffer = ""; // Buffer for incomplete end marker
 
   /**
    * Feed input data and extract any paste content.
@@ -503,10 +519,25 @@ export class PasteParser {
       remaining = remaining.slice(startIdx + startMarker.length);
     }
 
+    // Handle potential split end marker from previous chunk
+    if (this.suffixBuffer.length > 0) {
+      remaining = this.suffixBuffer + remaining;
+      this.suffixBuffer = "";
+    }
+
     // Look for end marker
     const endMarker = "\x1b[201~";
     const endIdx = remaining.indexOf(endMarker);
     if (endIdx === -1) {
+      // Check if data ends with a prefix of the end marker
+      for (let i = 1; i < endMarker.length; i++) {
+        const suffix = remaining.slice(-i);
+        if (endMarker.startsWith(suffix)) {
+          this.suffixBuffer = suffix;
+          this.pasteBuffer += remaining.slice(0, -i);
+          return { text: null, remaining: "", beforePaste };
+        }
+      }
       // Incomplete paste, buffer it
       this.pasteBuffer += remaining;
       return { text: null, remaining: "", beforePaste };
@@ -628,8 +659,11 @@ export function createInputParser(
   });
   cleanups.push(resizeCleanup);
 
-  // Create cleanup function
+  // Create cleanup function with guard against double execution
+  let destroyed = false;
   const cleanup = () => {
+    if (destroyed) return;
+    destroyed = true;
     for (const fn of cleanups) {
       fn();
     }
