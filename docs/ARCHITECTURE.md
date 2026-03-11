@@ -96,26 +96,30 @@ Reference implementations to study: the **ColinEberhardt/css-layout-agentic** re
 
 ## Cell buffer and differential rendering
 
-The terminal's rendering target is a flat array of cells in row-major order. Each cell stores a grapheme cluster (the character), foreground color, background color, and style modifier flags packed into a bitmask:
+The terminal's rendering target is a `Buffer` class that manages a double-buffered cell grid internally. Each cell stores a grapheme cluster, foreground color, background color, and style modifier flags. The cell structure is internal to Buffer — external code writes via primitive arguments to avoid allocation:
 
 ```typescript
-interface Cell {
-  symbol: string;           // grapheme cluster; '' for continuation of double-width char
-  fg: Color;                // default | named(0-7) | bright(0-7) | palette(0-255) | rgb(r,g,b)
-  bg: Color;
-  modifiers: number;        // bitmask: BOLD=1, DIM=2, ITALIC=4, UNDERLINE=8, ...
-}
+// Writing to the buffer (zero allocation)
+buffer.set(x, y, symbol, fg, bg, modifiers);
+buffer.writeText(x, y, "hello", fg, bg, modifiers);
+
+// Frame lifecycle
+const ansiOutput = buffer.flush();  // diff + serialize + sync
 ```
 
-**Double-buffering drives differential rendering.** Maintain two buffers: `current` (the render target for this frame) and `previous` (what's on screen). After painting, iterate both buffers cell-by-cell. For each position where `current[i] !== previous[i]`, emit the ANSI sequences to update that cell. Then swap: `previous` becomes `current`, and `current` is reset for the next frame.
+**Double-buffering with copy-on-flush.** The class maintains two cell arrays: `front` (what's on screen) and `back` (the render target). The runtime clears `back`, paints into it, then calls `flush()` which compares `back` vs `front`, emits ANSI sequences for differences, and copies changed cells from `back` to `front`. After flush, both buffers contain the same state — the next frame's `clear()` writes to `back`, and only cells that actually differ from `front` generate output.
 
-**Style diffing minimizes ANSI output.** Track a "current style state" as you emit cells left-to-right. Only emit SGR (Select Graphic Rendition) codes when the style actually changes. When removing modifiers (transitioning from bold+italic to plain), a full reset (`SGR 0`) plus re-application of the new style is typically cheaper than individual removal codes. When only adding modifiers or changing colors, emit only the delta. Colors use three encoding formats: **16-color** (`\x1b[31m` for red foreground), **256-color** (`\x1b[38;5;196m`), and **24-bit true color** (`\x1b[38;2;255;0;0m`).
+**Zero-allocation design.** Cells are allocated once at Buffer construction and mutated in place. The `set()` method takes primitive arguments (symbol, fg, bg, modifiers) rather than a Cell object, avoiding per-call object allocation. Colors are converted internally to packed 32-bit integers for efficient comparison (no object allocation or deep equality checks). The diff/serialize step is merged into a single `flush()` method with no intermediate `CellChange[]` array.
 
-**Cursor positioning is the other major optimization.** When consecutive cells in a row all changed, the cursor naturally advances — no repositioning needed. Only emit `\x1b[row;colH` when there's a gap of unchanged cells. For rows where >60% of cells changed, it's often cheaper to erase the line (`\x1b[2K`) and rewrite it entirely rather than patching individual cells.
+**Style state persists across frames.** Buffer tracks the terminal's current style (foreground, background, modifiers) and cursor position across `flush()` calls. This minimizes ANSI output — only emit SGR codes when the style actually changes from the previous cell. When removing modifiers, emit `SGR 0` followed by the remaining styles. Use `forceFullRedraw()` if the terminal gets desynchronized (e.g., external process wrote to stdout).
+
+**Cursor positioning is the other major optimization.** When consecutive cells in a row all changed, the cursor naturally advances — no repositioning needed. Only emit `\x1b[row;colH` when there's a gap of unchanged cells.
+
+**Dirty region tracking limits the diff scan.** Buffer tracks a bounding rectangle of modified cells. On `flush()`, only cells within this dirty region are compared. The `clear()` method does NOT mark cells dirty — the dirty region comes from actual `set()` calls during painting. This means clearing then painting a small region only scans that region, not the entire buffer.
 
 **All output goes into a single string, flushed with one `process.stdout.write()` call.** Multiple small writes cause syscall overhead and visual tearing. Bracket the entire output with cursor-hide (`\x1b[?25l`) and cursor-show (`\x1b[?25h`) to prevent flicker. On startup, enter the alternate screen buffer (`\x1b[?1049h`) to preserve the user's scrollback; on exit, restore it (`\x1b[?1049l`).
 
-**Double-width characters require special handling.** CJK ideographs and many emoji occupy two terminal columns. When placing one at column `x`, set `cells[x].symbol` to the character and `cells[x+1].symbol` to `''` (a continuation marker). During rendering, skip continuation cells — the terminal has already advanced the cursor past them. A `wcwidth` lookup table (Unicode East Asian Width property, binary-searched over sorted intervals) determines display width. This is the primary performance bottleneck for CJK-heavy content — Ratatui's `Buffer::diff()` reportedly spends **half its frame time** on Unicode width calculations for complex screens.
+**Double-width characters require special handling.** CJK ideographs and many emoji occupy two terminal columns. When placing one at column `x`, set `cells[x].symbol` to the character and `cells[x+1].symbol` to `''` (a continuation marker). The `writeText()` method handles this automatically. During rendering, skip continuation cells — the terminal has already advanced the cursor past them. A `wcwidth` lookup table (Unicode East Asian Width property, binary-searched over sorted intervals) determines display width.
 
 ---
 
@@ -201,9 +205,9 @@ The library decomposes into five independent modules with clean interfaces betwe
 
 - **`core/signals.ts`** — `createSignal`, `createEffect`, `createMemo`, `batch`, `untrack`, `createRoot`, `onCleanup`. Zero dependencies. Fully self-contained push-pull reactive core.
 - **`core/layout.ts`** — `computeLayout(node, availableWidth, availableHeight) → LayoutResult`. Pure function, no side effects, no dependency on signals. Takes a tree of `{style, children, measure?}` nodes, returns a tree of `{x, y, width, height}` results.
-- **`core/buffer.ts`** — `Buffer` class (cell grid), `diff(current, previous)` function, `flush(updates) → string` ANSI serializer. The buffer handles double-width characters, style diffing, and cursor optimization.
+- **`core/buffer.ts`** — `Buffer` class with internal double-buffering. Provides `set()`, `writeText()`, `clear()`, `fillRect()` for painting, and `flush()` which diffs, serializes ANSI, and syncs buffers in one call. Handles double-width characters, style state tracking across frames, cursor optimization, and dirty region tracking. Colors are stored internally as packed integers for zero-allocation comparison.
 - **`core/input.ts`** — State-machine parser, terminal mode setup/teardown, event type definitions. Converts raw stdin bytes into typed `InputEvent` objects.
-- **`core/runtime.ts`** — The glue layer. Manages the render cycle: processes input events in a batch, runs layout if dirty, runs paint effects, diffs and flushes the buffer. Provides the component primitives (`Box`, `Text`, `Show`, `For`) that wire signals to layout nodes and buffer writes.
+- **`core/runtime.ts`** — The glue layer. Manages the render cycle: processes input events in a batch, runs layout if dirty, paints into the buffer, calls `buffer.flush()`. Provides the component primitives (`Box`, `Text`, `Show`, `For`) that wire signals to layout nodes and buffer writes.
 
 ## Conclusion
 
