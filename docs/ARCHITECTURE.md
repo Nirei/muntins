@@ -147,7 +147,7 @@ Terminal input arrives as a byte stream on `process.stdin` in raw mode. A state-
 
 **Keyboard events** decompose into: regular characters (single bytes or UTF-8 multi-byte), control characters (Ctrl+A through Ctrl+Z, mapped from byte values 1–26), special keys (arrows as `\x1b[A-D`, function keys as `\x1b[15~` through `\x1b[24~`, with modifiers encoded as `\x1b[1;{mod}A` where mod = 1+bitmask for shift/alt/ctrl), and Alt combinations (ESC prefix followed by the key).
 
-**SGR mouse events** use format `\x1b[<button;col;rowM` for press and `\x1b[<button;col;rowm` for release. Button values encode: 0=left, 1=middle, 2=right, 64=scroll-up, 65=scroll-down, with modifier bits added (4=shift, 8=alt, 16=ctrl). Motion events add 32 to the button value. SGR is strongly preferred over the legacy X10 protocol because it supports coordinates beyond column 223 and distinguishes press from release.
+**SGR mouse events** use format `\x1b[<button;col;rowM` for press and `\x1b[<button;col;rowm` for release. Button values encode: 0=left, 1=middle, 2=right, 64=scroll-up, 65=scroll-down, 66=scroll-left, 67=scroll-right, with modifier bits added (4=shift, 8=alt, 16=ctrl). Motion events add 32 to the button value. SGR is strongly preferred over the legacy X10 protocol because it supports coordinates beyond column 223 and distinguishes press from release.
 
 **Window resize** arrives via `SIGWINCH` signal, not stdin. Listen on both `process.on('SIGWINCH')` and `process.stdout.on('resize')`, then read `process.stdout.columns` and `process.stdout.rows` for the new dimensions. On resize, reallocate both cell buffers and trigger a full re-layout.
 

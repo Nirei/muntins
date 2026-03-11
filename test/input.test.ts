@@ -11,8 +11,10 @@ import {
   type PasteEvent,
   type ResizeEvent,
   type ScrollEvent,
+  SequenceParser,
   isPrintable,
   mapKeypressToEvent,
+  parseMouseSequence,
   registerCleanup,
   setupKeyboardInput,
   setupTerminal,
@@ -415,5 +417,168 @@ describe("keyboard input", () => {
     cleanup();
 
     assert.ok(offCalled);
+  });
+});
+
+describe("mouse parser", () => {
+  it("parses left button press", () => {
+    const event = parseMouseSequence("0;10;5", true);
+
+    assert.strictEqual(event?.type, "mouse");
+    assert.strictEqual((event as MouseEvent).action, "press");
+    assert.strictEqual((event as MouseEvent).button, 0);
+    assert.strictEqual(event?.x, 9); // 0-indexed
+    assert.strictEqual(event?.y, 4); // 0-indexed
+  });
+
+  it("parses left button release", () => {
+    const event = parseMouseSequence("0;10;5", false);
+
+    assert.strictEqual((event as MouseEvent).action, "release");
+  });
+
+  it("parses middle button", () => {
+    const event = parseMouseSequence("1;10;5", true);
+
+    assert.strictEqual((event as MouseEvent).button, 1);
+  });
+
+  it("parses right button", () => {
+    const event = parseMouseSequence("2;10;5", true);
+
+    assert.strictEqual((event as MouseEvent).button, 2);
+  });
+
+  it("parses motion event", () => {
+    const event = parseMouseSequence("32;10;5", true); // 32 = motion flag
+
+    assert.strictEqual((event as MouseEvent).action, "move");
+    assert.strictEqual((event as MouseEvent).button, 0);
+  });
+
+  it("parses motion with button", () => {
+    const event = parseMouseSequence("33;10;5", true); // 32 + 1 = motion + middle
+
+    assert.strictEqual((event as MouseEvent).action, "move");
+    assert.strictEqual((event as MouseEvent).button, 1);
+  });
+
+  it("parses scroll up", () => {
+    const event = parseMouseSequence("64;10;5", true);
+
+    assert.strictEqual(event?.type, "scroll");
+    assert.strictEqual((event as ScrollEvent).direction, "up");
+  });
+
+  it("parses scroll down", () => {
+    const event = parseMouseSequence("65;10;5", true);
+
+    assert.strictEqual(event?.type, "scroll");
+    assert.strictEqual((event as ScrollEvent).direction, "down");
+  });
+
+  it("parses scroll left", () => {
+    const event = parseMouseSequence("66;10;5", true);
+
+    assert.strictEqual(event?.type, "scroll");
+    assert.strictEqual((event as ScrollEvent).direction, "left");
+  });
+
+  it("parses scroll right", () => {
+    const event = parseMouseSequence("67;10;5", true);
+
+    assert.strictEqual(event?.type, "scroll");
+    assert.strictEqual((event as ScrollEvent).direction, "right");
+  });
+
+  it("parses shift modifier", () => {
+    const event = parseMouseSequence("4;10;5", true); // 4 = shift
+
+    assert.strictEqual(event?.shift, true);
+    assert.strictEqual(event?.alt, false);
+    assert.strictEqual(event?.ctrl, false);
+  });
+
+  it("parses alt modifier", () => {
+    const event = parseMouseSequence("8;10;5", true); // 8 = alt
+
+    assert.strictEqual(event?.alt, true);
+  });
+
+  it("parses ctrl modifier", () => {
+    const event = parseMouseSequence("16;10;5", true); // 16 = ctrl
+
+    assert.strictEqual(event?.ctrl, true);
+  });
+
+  it("parses multiple modifiers", () => {
+    const event = parseMouseSequence("28;10;5", true); // 4 + 8 + 16 = shift + alt + ctrl
+
+    assert.strictEqual(event?.shift, true);
+    assert.strictEqual(event?.alt, true);
+    assert.strictEqual(event?.ctrl, true);
+  });
+
+  it("returns null for invalid params", () => {
+    assert.strictEqual(parseMouseSequence("", true), null);
+    assert.strictEqual(parseMouseSequence("0;10", true), null);
+    assert.strictEqual(parseMouseSequence("a;10;5", true), null);
+  });
+
+  it("converts to 0-indexed coordinates", () => {
+    const event = parseMouseSequence("0;1;1", true);
+
+    assert.strictEqual(event?.x, 0);
+    assert.strictEqual(event?.y, 0);
+  });
+
+  it("handles large coordinates", () => {
+    const event = parseMouseSequence("0;300;100", true);
+
+    assert.strictEqual(event?.x, 299);
+    assert.strictEqual(event?.y, 99);
+  });
+});
+
+describe("SequenceParser state machine", () => {
+  it("parses complete mouse sequence", () => {
+    const parser = new SequenceParser();
+    const events = parser.feed("\x1b[<0;10;5M");
+
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual(events[0].type, "mouse");
+  });
+
+  it("parses multiple sequences in one chunk", () => {
+    const parser = new SequenceParser();
+    const events = parser.feed("\x1b[<0;10;5M\x1b[<0;11;5M");
+
+    assert.strictEqual(events.length, 2);
+  });
+
+  it("handles split sequences across chunks", () => {
+    const parser = new SequenceParser();
+
+    let events = parser.feed("\x1b[<0;10");
+    assert.strictEqual(events.length, 0);
+
+    events = parser.feed(";5M");
+    assert.strictEqual(events.length, 1);
+  });
+
+  it("ignores non-mouse CSI sequences", () => {
+    const parser = new SequenceParser();
+    const events = parser.feed("\x1b[A"); // arrow up
+
+    assert.strictEqual(events.length, 0);
+  });
+
+  it("recovers from invalid sequences", () => {
+    const parser = new SequenceParser();
+
+    // Invalid sequence followed by valid
+    const events = parser.feed("\x1b[<invalid\x1b[<0;10;5M");
+
+    assert.strictEqual(events.length, 1);
   });
 });

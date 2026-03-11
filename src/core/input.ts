@@ -50,7 +50,7 @@ export interface MouseEvent {
 /** Scroll wheel event */
 export interface ScrollEvent {
   type: "scroll";
-  direction: "up" | "down";
+  direction: "up" | "down" | "left" | "right";
   /** 0-indexed column */
   x: number;
   /** 0-indexed row */
@@ -269,6 +269,160 @@ export function teardownTerminal(
   // Disable raw mode
   if (stdin.isTTY) {
     stdin.setRawMode(false);
+  }
+}
+
+// Parser state machine states (const object pattern for strip-types compatibility)
+const ParserState = {
+  Ground: 0,
+  Escape: 1,
+  Csi: 2,
+  SgrMouse: 3,
+} as const;
+
+type ParserState = (typeof ParserState)[keyof typeof ParserState];
+
+/**
+ * Parse SGR mouse protocol parameters into a MouseEvent or ScrollEvent.
+ *
+ * @param params - The "button;col;row" parameters from the SGR sequence
+ * @param isPress - true for press (M terminator), false for release (m terminator)
+ * @returns Parsed mouse or scroll event, or null if invalid
+ */
+export function parseMouseSequence(
+  params: string,
+  isPress: boolean,
+): MouseEvent | ScrollEvent | null {
+  // Parse "button;col;row"
+  const parts = params.split(";");
+  if (parts.length !== 3) return null;
+
+  const button = Number.parseInt(parts[0], 10);
+  const col = Number.parseInt(parts[1], 10);
+  const row = Number.parseInt(parts[2], 10);
+
+  if (Number.isNaN(button) || Number.isNaN(col) || Number.isNaN(row))
+    return null;
+
+  // Extract modifiers
+  const shift = (button & 4) !== 0;
+  const alt = (button & 8) !== 0;
+  const ctrl = (button & 16) !== 0;
+  const isMotion = (button & 32) !== 0;
+
+  // Extract base button (bits 0-1, plus bit 6-7 for scroll)
+  const baseButton = button & 3;
+  const isScroll = (button & 64) !== 0;
+
+  // Convert to 0-indexed coordinates
+  const x = col - 1;
+  const y = row - 1;
+
+  // Handle scroll events (bits 0-1 encode direction: 0=up, 1=down, 2=left, 3=right)
+  if (isScroll) {
+    const directions = ["up", "down", "left", "right"] as const;
+    const direction = directions[baseButton];
+    return {
+      type: "scroll",
+      direction,
+      x,
+      y,
+      ctrl,
+      alt,
+      shift,
+    };
+  }
+
+  // Handle mouse events
+  const action: "press" | "release" | "move" = isMotion
+    ? "move"
+    : isPress
+      ? "press"
+      : "release";
+
+  return {
+    type: "mouse",
+    action,
+    button: baseButton,
+    x,
+    y,
+    ctrl,
+    alt,
+    shift,
+  };
+}
+
+/**
+ * State machine parser for escape sequences (mouse and focus events).
+ *
+ * Parses SGR mouse protocol sequences from raw input. Will be extended
+ * with focus event parsing.
+ */
+export class SequenceParser {
+  private state: ParserState = ParserState.Ground;
+  private buffer = "";
+
+  /**
+   * Feed input data and return any parsed events.
+   *
+   * @param data - Raw input string (may contain multiple sequences)
+   * @returns Array of parsed events (may be empty)
+   */
+  feed(data: string): (MouseEvent | ScrollEvent)[] {
+    const events: (MouseEvent | ScrollEvent)[] = [];
+
+    for (const char of data) {
+      const event = this.processChar(char);
+      if (event) events.push(event);
+    }
+
+    return events;
+  }
+
+  private processChar(char: string): MouseEvent | ScrollEvent | null {
+    switch (this.state) {
+      case ParserState.Ground:
+        if (char === "\x1b") {
+          this.state = ParserState.Escape;
+          this.buffer = "";
+        }
+        return null;
+
+      case ParserState.Escape:
+        if (char === "[") {
+          this.state = ParserState.Csi;
+        } else {
+          this.state = ParserState.Ground;
+        }
+        return null;
+
+      case ParserState.Csi:
+        if (char === "<") {
+          this.state = ParserState.SgrMouse;
+          this.buffer = "";
+        } else {
+          // Not a mouse sequence, reset
+          this.state = ParserState.Ground;
+        }
+        return null;
+
+      case ParserState.SgrMouse:
+        if (char === "M" || char === "m") {
+          const isPress = char === "M";
+          const event = parseMouseSequence(this.buffer, isPress);
+          this.state = ParserState.Ground;
+          this.buffer = "";
+          return event;
+        }
+        if ((char >= "0" && char <= "9") || char === ";") {
+          this.buffer += char;
+        } else {
+          // Invalid sequence, reset
+          this.state = ParserState.Ground;
+          this.buffer = "";
+        }
+        return null;
+    }
   }
 }
 
