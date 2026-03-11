@@ -355,8 +355,7 @@ export function parseMouseSequence(
 /**
  * State machine parser for escape sequences (mouse and focus events).
  *
- * Parses SGR mouse protocol sequences from raw input. Will be extended
- * with focus event parsing.
+ * Parses SGR mouse protocol sequences and focus events from raw input.
  */
 export class SequenceParser {
   private state: ParserState = ParserState.Ground;
@@ -368,8 +367,8 @@ export class SequenceParser {
    * @param data - Raw input string (may contain multiple sequences)
    * @returns Array of parsed events (may be empty)
    */
-  feed(data: string): (MouseEvent | ScrollEvent)[] {
-    const events: (MouseEvent | ScrollEvent)[] = [];
+  feed(data: string): (MouseEvent | ScrollEvent | FocusEvent)[] {
+    const events: (MouseEvent | ScrollEvent | FocusEvent)[] = [];
 
     for (const char of data) {
       const event = this.processChar(char);
@@ -379,7 +378,9 @@ export class SequenceParser {
     return events;
   }
 
-  private processChar(char: string): MouseEvent | ScrollEvent | null {
+  private processChar(
+    char: string,
+  ): MouseEvent | ScrollEvent | FocusEvent | null {
     switch (this.state) {
       case ParserState.Ground:
         if (char === "\x1b") {
@@ -400,8 +401,16 @@ export class SequenceParser {
         if (char === "<") {
           this.state = ParserState.SgrMouse;
           this.buffer = "";
+        } else if (char === "I") {
+          // Focus in: \x1b[I
+          this.state = ParserState.Ground;
+          return { type: "focus", focused: true };
+        } else if (char === "O") {
+          // Focus out: \x1b[O
+          this.state = ParserState.Ground;
+          return { type: "focus", focused: false };
         } else {
-          // Not a mouse sequence, reset
+          // Not a recognized sequence, reset
           this.state = ParserState.Ground;
         }
         return null;
@@ -424,6 +433,215 @@ export class SequenceParser {
         return null;
     }
   }
+}
+
+/** Result from PasteParser.feed() */
+interface PasteResult {
+  /** The complete pasted text, or null if paste is incomplete */
+  text: string | null;
+  /** Data remaining after the paste (or all data if no paste) */
+  remaining: string;
+  /** Data that appeared before the paste start marker */
+  beforePaste: string;
+}
+
+/**
+ * Parser for bracketed paste sequences.
+ *
+ * When bracketed paste is enabled, pasted text is wrapped:
+ * - Start marker: \x1b[200~
+ * - End marker: \x1b[201~
+ *
+ * Handles split markers across chunks and preserves data before paste.
+ */
+export class PasteParser {
+  private inPaste = false;
+  private pasteBuffer = "";
+  private prefixBuffer = ""; // Buffer for incomplete start marker
+
+  /**
+   * Feed input data and extract any paste content.
+   *
+   * @param data - Raw input string
+   * @returns Paste result with text (if complete), remaining data, and data before paste
+   */
+  feed(data: string): PasteResult {
+    let remaining = data;
+    let beforePaste = "";
+
+    if (!this.inPaste) {
+      // Handle potential split start marker from previous chunk
+      if (this.prefixBuffer.length > 0) {
+        remaining = this.prefixBuffer + remaining;
+        this.prefixBuffer = "";
+      }
+
+      // Look for start marker
+      const startMarker = "\x1b[200~";
+      const startIdx = remaining.indexOf(startMarker);
+
+      if (startIdx === -1) {
+        // Check if data ends with a prefix of the start marker
+        for (let i = 1; i < startMarker.length; i++) {
+          const suffix = remaining.slice(-i);
+          if (startMarker.startsWith(suffix)) {
+            this.prefixBuffer = suffix;
+            return {
+              text: null,
+              remaining: remaining.slice(0, -i),
+              beforePaste: "",
+            };
+          }
+        }
+        return { text: null, remaining, beforePaste: "" };
+      }
+
+      // Found start marker - preserve data BEFORE the paste
+      beforePaste = remaining.slice(0, startIdx);
+      this.inPaste = true;
+      this.pasteBuffer = "";
+      remaining = remaining.slice(startIdx + startMarker.length);
+    }
+
+    // Look for end marker
+    const endMarker = "\x1b[201~";
+    const endIdx = remaining.indexOf(endMarker);
+    if (endIdx === -1) {
+      // Incomplete paste, buffer it
+      this.pasteBuffer += remaining;
+      return { text: null, remaining: "", beforePaste };
+    }
+
+    // Complete paste
+    this.pasteBuffer += remaining.slice(0, endIdx);
+    const text = this.pasteBuffer;
+
+    this.inPaste = false;
+    this.pasteBuffer = "";
+
+    return {
+      text,
+      remaining: remaining.slice(endIdx + endMarker.length),
+      beforePaste,
+    };
+  }
+}
+
+/**
+ * Setup resize event handling.
+ *
+ * @param stdout - Output stream to monitor for resize events
+ * @param onResize - Callback for resize events
+ * @returns Cleanup function to remove the listener
+ */
+export function setupResizeHandler(
+  stdout: NodeJS.WriteStream,
+  onResize: (event: ResizeEvent) => void,
+): () => void {
+  const handler = () => {
+    onResize({
+      type: "resize",
+      width: stdout.columns,
+      height: stdout.rows,
+    });
+  };
+
+  stdout.on("resize", handler);
+
+  return () => {
+    stdout.off("resize", handler);
+  };
+}
+
+/** Handler type for input events */
+export type InputHandler = (event: InputEvent) => void;
+
+/**
+ * Create a unified input parser that handles all input types.
+ *
+ * Combines keyboard, mouse, paste, focus, and resize event parsing
+ * into a single interface. Manages terminal setup/teardown.
+ *
+ * @param stdin - Input stream
+ * @param stdout - Output stream (for resize events)
+ * @param onEvent - Callback for all input events
+ * @param options - Optional configuration (mouse tracking)
+ * @returns Object with destroy() method to cleanup
+ */
+export function createInputParser(
+  stdin: NodeJS.ReadStream,
+  stdout: NodeJS.WriteStream,
+  onEvent: InputHandler,
+  options: { mouse?: boolean } = {},
+): { destroy: () => void } {
+  const cleanups: (() => void)[] = [];
+
+  // Setup terminal
+  setupTerminal(stdin, stdout, options);
+  cleanups.push(() => teardownTerminal(stdin, stdout));
+
+  // Keyboard input (via readline)
+  const keyboardCleanup = setupKeyboardInput(stdin, (event) => {
+    onEvent(event);
+  });
+  cleanups.push(keyboardCleanup);
+
+  // Mouse and special sequence parser
+  const sequenceParser = new SequenceParser();
+  const pasteParser = new PasteParser();
+
+  const dataHandler = (data: Buffer) => {
+    let str = data.toString("utf8");
+
+    // Check for paste first (consumes entire paste content)
+    const pasteResult = pasteParser.feed(str);
+
+    // Process any data that appeared before the paste
+    if (pasteResult.beforePaste) {
+      const events = sequenceParser.feed(pasteResult.beforePaste);
+      for (const event of events) {
+        onEvent(event);
+      }
+    }
+
+    // Emit paste event if complete
+    if (pasteResult.text !== null) {
+      onEvent({ type: "paste", text: pasteResult.text });
+    }
+
+    // Parse remaining data for mouse/focus events
+    str = pasteResult.remaining;
+    if (str) {
+      const events = sequenceParser.feed(str);
+      for (const event of events) {
+        onEvent(event);
+      }
+    }
+  };
+
+  stdin.on("data", dataHandler);
+  cleanups.push(() => stdin.off("data", dataHandler));
+
+  // Resize events
+  const resizeCleanup = setupResizeHandler(stdout, (event) => {
+    onEvent(event);
+  });
+  cleanups.push(resizeCleanup);
+
+  // Create cleanup function
+  const cleanup = () => {
+    for (const fn of cleanups) {
+      fn();
+    }
+  };
+
+  // Register process cleanup
+  const unregisterCleanup = registerCleanup(cleanup);
+  cleanups.push(unregisterCleanup);
+
+  return {
+    destroy: cleanup,
+  };
 }
 
 /**

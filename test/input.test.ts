@@ -9,14 +9,17 @@ import {
   type MouseEvent,
   NO_MODIFIERS,
   type PasteEvent,
+  PasteParser,
   type ResizeEvent,
   type ScrollEvent,
   SequenceParser,
+  createInputParser,
   isPrintable,
   mapKeypressToEvent,
   parseMouseSequence,
   registerCleanup,
   setupKeyboardInput,
+  setupResizeHandler,
   setupTerminal,
   teardownTerminal,
 } from "../src/core/input.ts";
@@ -580,5 +583,231 @@ describe("SequenceParser state machine", () => {
     const events = parser.feed("\x1b[<invalid\x1b[<0;10;5M");
 
     assert.strictEqual(events.length, 1);
+  });
+
+  it("parses focus in event", () => {
+    const parser = new SequenceParser();
+    const events = parser.feed("\x1b[I");
+
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual(events[0].type, "focus");
+    assert.strictEqual((events[0] as FocusEvent).focused, true);
+  });
+
+  it("parses focus out event", () => {
+    const parser = new SequenceParser();
+    const events = parser.feed("\x1b[O");
+
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual(events[0].type, "focus");
+    assert.strictEqual((events[0] as FocusEvent).focused, false);
+  });
+
+  it("parses focus and mouse in same chunk", () => {
+    const parser = new SequenceParser();
+    const events = parser.feed("\x1b[I\x1b[<0;10;5M");
+
+    assert.strictEqual(events.length, 2);
+    assert.strictEqual(events[0].type, "focus");
+    assert.strictEqual(events[1].type, "mouse");
+  });
+});
+
+describe("paste parser", () => {
+  it("parses complete paste", () => {
+    const parser = new PasteParser();
+    const result = parser.feed("\x1b[200~hello world\x1b[201~");
+
+    assert.strictEqual(result.text, "hello world");
+    assert.strictEqual(result.remaining, "");
+  });
+
+  it("parses paste with remaining data", () => {
+    const parser = new PasteParser();
+    const result = parser.feed("\x1b[200~pasted\x1b[201~more");
+
+    assert.strictEqual(result.text, "pasted");
+    assert.strictEqual(result.remaining, "more");
+  });
+
+  it("handles split paste across chunks", () => {
+    const parser = new PasteParser();
+
+    let result = parser.feed("\x1b[200~hel");
+    assert.strictEqual(result.text, null);
+
+    result = parser.feed("lo\x1b[201~");
+    assert.strictEqual(result.text, "hello");
+  });
+
+  it("preserves data before paste marker", () => {
+    const parser = new PasteParser();
+    const result = parser.feed("hello\x1b[200~pasted\x1b[201~");
+
+    assert.strictEqual(result.beforePaste, "hello");
+    assert.strictEqual(result.text, "pasted");
+  });
+
+  it("handles split start marker across chunks", () => {
+    const parser = new PasteParser();
+
+    // First chunk ends with partial start marker
+    let result = parser.feed("text\x1b[200");
+    assert.strictEqual(result.text, null);
+    assert.strictEqual(result.remaining, "text"); // return data before partial
+
+    // Second chunk completes the marker
+    result = parser.feed("~pasted\x1b[201~");
+    assert.strictEqual(result.text, "pasted");
+  });
+
+  it("preserves newlines in paste", () => {
+    const parser = new PasteParser();
+    const result = parser.feed("\x1b[200~line1\nline2\x1b[201~");
+
+    assert.strictEqual(result.text, "line1\nline2");
+  });
+
+  it("handles paste with escape sequences inside", () => {
+    const parser = new PasteParser();
+    const result = parser.feed("\x1b[200~\x1b[31mred\x1b[0m\x1b[201~");
+
+    // The escape sequences inside paste are preserved as-is
+    assert.ok(result.text?.includes("\x1b[31m"));
+  });
+
+  it("returns null when no paste marker", () => {
+    const parser = new PasteParser();
+    const result = parser.feed("regular text");
+
+    assert.strictEqual(result.text, null);
+    assert.strictEqual(result.remaining, "regular text");
+  });
+
+  it("handles multiple consecutive pastes", () => {
+    const parser = new PasteParser();
+
+    // First paste
+    let result = parser.feed("\x1b[200~first\x1b[201~");
+    assert.strictEqual(result.text, "first");
+
+    // Second paste immediately after
+    result = parser.feed("\x1b[200~second\x1b[201~");
+    assert.strictEqual(result.text, "second");
+  });
+});
+
+describe("resize handler", () => {
+  it("emits resize event", () => {
+    let resizeEvent: ResizeEvent | undefined;
+
+    const mockStdout = {
+      columns: 120,
+      rows: 40,
+      on: (event: string, handler: () => void) => {
+        if (event === "resize") {
+          // Simulate resize by calling handler immediately
+          handler();
+        }
+      },
+      off: () => {},
+    } as unknown as NodeJS.WriteStream;
+
+    setupResizeHandler(mockStdout, (event) => {
+      resizeEvent = event;
+    });
+
+    assert.ok(resizeEvent);
+    assert.strictEqual(resizeEvent.type, "resize");
+    assert.strictEqual(resizeEvent.width, 120);
+    assert.strictEqual(resizeEvent.height, 40);
+  });
+
+  it("returns cleanup function", () => {
+    let offCalled = false;
+
+    const mockStdout = {
+      columns: 80,
+      rows: 24,
+      on: () => {},
+      off: (event: string) => {
+        if (event === "resize") {
+          offCalled = true;
+        }
+      },
+    } as unknown as NodeJS.WriteStream;
+
+    const cleanup = setupResizeHandler(mockStdout, () => {});
+    cleanup();
+
+    assert.ok(offCalled);
+  });
+});
+
+describe("createInputParser", () => {
+  it("returns destroy function", () => {
+    const mockStdin = {
+      isTTY: true,
+      setRawMode: () => {},
+      on: () => {},
+      off: () => {},
+      listenerCount: () => 0,
+    } as unknown as NodeJS.ReadStream;
+    const mockStdout = {
+      write: () => true,
+      columns: 80,
+      rows: 24,
+      on: () => {},
+      off: () => {},
+    } as unknown as NodeJS.WriteStream;
+
+    const parser = createInputParser(mockStdin, mockStdout, () => {});
+
+    assert.ok(typeof parser.destroy === "function");
+    parser.destroy();
+  });
+
+  it("calls onEvent for keyboard input", () => {
+    const events: InputEvent[] = [];
+    // Use a mutable object to capture the handler
+    const handlers: { keypress?: (char: string, key: object) => void } = {};
+
+    const mockStdin = {
+      isTTY: true,
+      setRawMode: () => {},
+      on: (event: string, handler: (char: string, key: object) => void) => {
+        if (event === "keypress") {
+          handlers.keypress = handler;
+        }
+      },
+      off: () => {},
+      listenerCount: () => 0,
+    } as unknown as NodeJS.ReadStream;
+    const mockStdout = {
+      write: () => true,
+      columns: 80,
+      rows: 24,
+      on: () => {},
+      off: () => {},
+    } as unknown as NodeJS.WriteStream;
+
+    const parser = createInputParser(mockStdin, mockStdout, (event) => {
+      events.push(event);
+    });
+
+    // Simulate keypress
+    assert.ok(handlers.keypress);
+    handlers.keypress("a", {
+      name: "a",
+      ctrl: false,
+      shift: false,
+      meta: false,
+      sequence: "a",
+    });
+
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual(events[0].type, "key");
+
+    parser.destroy();
   });
 });
