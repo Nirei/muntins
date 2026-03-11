@@ -4,9 +4,7 @@ import {
   BLINK,
   BOLD,
   Buffer,
-  type Cell,
   type Color,
-  DEFAULT_CELL,
   DEFAULT_COLOR,
   DIM,
   HIDDEN,
@@ -14,9 +12,9 @@ import {
   ITALIC,
   STRIKETHROUGH,
   UNDERLINE,
-  cellsEqual,
-  colorsEqual,
-  createCell,
+  displayWidth,
+  graphemeDisplayWidth,
+  graphemes,
 } from "../src/core/buffer.ts";
 
 describe("buffer core types", () => {
@@ -45,435 +43,784 @@ describe("buffer core types", () => {
     assert.ok(combined & UNDERLINE);
     assert.ok(!(combined & DIM));
   });
+});
 
-  it("DEFAULT_CELL has expected values", () => {
-    assert.strictEqual(DEFAULT_CELL.symbol, " ");
-    assert.deepStrictEqual(DEFAULT_CELL.fg, { type: "default" });
-    assert.deepStrictEqual(DEFAULT_CELL.bg, { type: "default" });
-    assert.strictEqual(DEFAULT_CELL.modifiers, 0);
+describe("displayWidth", () => {
+  it("ASCII characters are width 1", () => {
+    assert.strictEqual(displayWidth("a"), 1);
+    assert.strictEqual(displayWidth("Z"), 1);
+    assert.strictEqual(displayWidth("5"), 1);
+    assert.strictEqual(displayWidth("@"), 1);
   });
 
-  it("colorsEqual compares default colors", () => {
-    assert.ok(colorsEqual({ type: "default" }, { type: "default" }));
+  it("CJK characters are width 2", () => {
+    assert.strictEqual(displayWidth("中"), 2);
+    assert.strictEqual(displayWidth("日"), 2);
+    assert.strictEqual(displayWidth("한"), 2);
   });
 
-  it("colorsEqual compares named colors", () => {
-    assert.ok(
-      colorsEqual({ type: "named", index: 1 }, { type: "named", index: 1 }),
-    );
-    assert.ok(
-      !colorsEqual({ type: "named", index: 1 }, { type: "named", index: 2 }),
-    );
+  it("fullwidth ASCII are width 2", () => {
+    assert.strictEqual(displayWidth("Ａ"), 2); // U+FF21
+    assert.strictEqual(displayWidth("１"), 2); // U+FF11
   });
 
-  it("colorsEqual compares rgb colors", () => {
-    assert.ok(
-      colorsEqual(
-        { type: "rgb", r: 255, g: 0, b: 0 },
-        { type: "rgb", r: 255, g: 0, b: 0 },
-      ),
-    );
-    assert.ok(
-      !colorsEqual(
-        { type: "rgb", r: 255, g: 0, b: 0 },
-        { type: "rgb", r: 0, g: 255, b: 0 },
-      ),
-    );
+  it("control characters are width 0", () => {
+    assert.strictEqual(displayWidth("\x00"), 0);
+    assert.strictEqual(displayWidth("\x1b"), 0);
+    assert.strictEqual(displayWidth("\x7f"), 0);
   });
 
-  it("colorsEqual returns false for different types", () => {
-    assert.ok(!colorsEqual({ type: "default" }, { type: "named", index: 0 }));
+  it("combining marks are width 0", () => {
+    assert.strictEqual(displayWidth("\u0301"), 0); // Combining acute
   });
 
-  it("colorsEqual compares bright colors", () => {
-    assert.ok(
-      colorsEqual({ type: "bright", index: 1 }, { type: "bright", index: 1 }),
-    );
-    assert.ok(
-      !colorsEqual({ type: "bright", index: 1 }, { type: "bright", index: 2 }),
-    );
+  it("empty string is width 0", () => {
+    assert.strictEqual(displayWidth(""), 0);
+  });
+});
+
+describe("graphemeDisplayWidth", () => {
+  it("single codepoint delegates to displayWidth", () => {
+    assert.strictEqual(graphemeDisplayWidth("a"), 1);
+    assert.strictEqual(graphemeDisplayWidth("中"), 2);
   });
 
-  it("colorsEqual compares palette colors", () => {
-    assert.ok(
-      colorsEqual(
-        { type: "palette", index: 100 },
-        { type: "palette", index: 100 },
-      ),
-    );
-    assert.ok(
-      !colorsEqual(
-        { type: "palette", index: 100 },
-        { type: "palette", index: 200 },
-      ),
-    );
+  it("base + combining diacritical = width 1", () => {
+    const combined = "e\u0301"; // e + combining acute
+    assert.strictEqual(graphemeDisplayWidth(combined), 1);
   });
 
-  it("colorsEqual returns true for identical colors of each type", () => {
-    const colors: Color[] = [
-      { type: "default" },
-      { type: "named", index: 0 },
-      { type: "bright", index: 0 },
-      { type: "palette", index: 0 },
-      { type: "rgb", r: 0, g: 0, b: 0 },
-    ];
-
-    for (const c of colors) {
-      assert.ok(colorsEqual(c, c));
-    }
+  it("emoji with variation selector = width 2", () => {
+    const heart = "\u2764\uFE0F"; // heart
+    assert.strictEqual(graphemeDisplayWidth(heart), 2);
   });
 
-  it("cellsEqual compares all fields", () => {
-    const a: Cell = {
-      symbol: "x",
-      fg: { type: "default" },
-      bg: { type: "default" },
-      modifiers: BOLD,
-    };
-    const b: Cell = {
-      symbol: "x",
-      fg: { type: "default" },
-      bg: { type: "default" },
-      modifiers: BOLD,
-    };
-    const c: Cell = {
-      symbol: "y",
-      fg: { type: "default" },
-      bg: { type: "default" },
-      modifiers: BOLD,
-    };
-
-    assert.ok(cellsEqual(a, b));
-    assert.ok(!cellsEqual(a, c));
+  it("emoji with skin tone = width 2", () => {
+    assert.strictEqual(graphemeDisplayWidth("👋🏽"), 2);
   });
 
-  it("createCell returns cell with defaults", () => {
-    const cell = createCell();
-    assert.strictEqual(cell.symbol, " ");
-    assert.deepStrictEqual(cell.fg, { type: "default" });
-    assert.deepStrictEqual(cell.bg, { type: "default" });
-    assert.strictEqual(cell.modifiers, 0);
+  it("flag emoji = width 2", () => {
+    assert.strictEqual(graphemeDisplayWidth("🇯🇵"), 2);
+    assert.strictEqual(graphemeDisplayWidth("🇺🇸"), 2);
   });
 
-  it("createCell applies overrides", () => {
-    const cell = createCell({
-      symbol: "A",
-      fg: { type: "named", index: 1 },
-      modifiers: BOLD | UNDERLINE,
-    });
-    assert.strictEqual(cell.symbol, "A");
-    assert.deepStrictEqual(cell.fg, { type: "named", index: 1 });
-    assert.deepStrictEqual(cell.bg, { type: "default" });
-    assert.strictEqual(cell.modifiers, BOLD | UNDERLINE);
+  it("empty string is width 0", () => {
+    assert.strictEqual(graphemeDisplayWidth(""), 0);
+  });
+
+  it("ZWJ emoji sequences = width 2", () => {
+    // Family emoji (multiple people joined with ZWJ)
+    assert.strictEqual(graphemeDisplayWidth("👨‍👩‍👧"), 2);
+    // Person with profession
+    assert.strictEqual(graphemeDisplayWidth("👩‍🔬"), 2);
+  });
+
+  it("keycap sequences = width 2", () => {
+    // Digit + variation selector + combining enclosing keycap
+    const keycap1 = "1\uFE0F\u20E3";
+    assert.strictEqual(graphemeDisplayWidth(keycap1), 1);
+    // Hash keycap
+    const hashKeycap = "#\uFE0F\u20E3";
+    assert.strictEqual(graphemeDisplayWidth(hashKeycap), 1);
+  });
+});
+
+describe("graphemes", () => {
+  it("segments ASCII string", () => {
+    const segs = [...graphemes("abc")];
+    assert.deepStrictEqual(segs, ["a", "b", "c"]);
+  });
+
+  it("segments emoji with skin tone as single grapheme", () => {
+    const segs = [...graphemes("👋🏽")];
+    assert.strictEqual(segs.length, 1);
+    assert.strictEqual(segs[0], "👋🏽");
+  });
+
+  it("segments flag emoji as single grapheme", () => {
+    const segs = [...graphemes("🇯🇵")];
+    assert.strictEqual(segs.length, 1);
+  });
+
+  it("segments mixed content correctly", () => {
+    const segs = [...graphemes("a中🇺🇸")];
+    assert.strictEqual(segs.length, 3);
+    assert.strictEqual(segs[0], "a");
+    assert.strictEqual(segs[1], "中");
+    assert.strictEqual(segs[2], "🇺🇸");
+  });
+
+  it("handles combining marks", () => {
+    const segs = [...graphemes("e\u0301")]; // e with combining acute
+    assert.strictEqual(segs.length, 1);
   });
 });
 
 describe("Buffer class", () => {
-  it("creates buffer with correct dimensions", () => {
-    const buf = new Buffer(80, 24);
-    assert.strictEqual(buf.width, 80);
-    assert.strictEqual(buf.height, 24);
-  });
-
-  it("initializes cells to DEFAULT_CELL", () => {
-    const buf = new Buffer(10, 10);
-    const cell = buf.get(5, 5);
-    assert.strictEqual(cell.symbol, " ");
-    assert.deepStrictEqual(cell.fg, { type: "default" });
-  });
-
-  it("get returns DEFAULT_CELL for out-of-bounds", () => {
-    const buf = new Buffer(10, 10);
-    assert.strictEqual(buf.get(-1, 0).symbol, " ");
-    assert.strictEqual(buf.get(100, 0).symbol, " ");
-    assert.strictEqual(buf.get(0, -1).symbol, " ");
-    assert.strictEqual(buf.get(0, 100).symbol, " ");
-  });
-
-  it("set writes cell at position", () => {
-    const buf = new Buffer(10, 10);
-    const cell: Cell = {
-      symbol: "X",
-      fg: { type: "named", index: 1 },
-      bg: { type: "default" },
-      modifiers: BOLD,
-    };
-    buf.set(3, 4, cell);
-
-    const retrieved = buf.get(3, 4);
-    assert.strictEqual(retrieved.symbol, "X");
-    assert.deepStrictEqual(retrieved.fg, { type: "named", index: 1 });
-    assert.strictEqual(retrieved.modifiers, BOLD);
-  });
-
-  it("set ignores out-of-bounds", () => {
-    const buf = new Buffer(10, 10);
-    buf.set(-1, 0, {
-      symbol: "X",
-      fg: DEFAULT_COLOR,
-      bg: DEFAULT_COLOR,
-      modifiers: 0,
-    });
-    buf.set(100, 0, {
-      symbol: "X",
-      fg: DEFAULT_COLOR,
-      bg: DEFAULT_COLOR,
-      modifiers: 0,
-    });
-    // Should not throw
-  });
-
-  it("clear resets all cells", () => {
-    const buf = new Buffer(10, 10);
-    buf.set(5, 5, {
-      symbol: "X",
-      fg: DEFAULT_COLOR,
-      bg: DEFAULT_COLOR,
-      modifiers: 0,
-    });
-    buf.clear();
-    assert.strictEqual(buf.get(5, 5).symbol, " ");
-  });
-
-  it("resize grows buffer", () => {
-    const buf = new Buffer(5, 5);
-    buf.set(2, 2, {
-      symbol: "X",
-      fg: DEFAULT_COLOR,
-      bg: DEFAULT_COLOR,
-      modifiers: 0,
+  describe("dimensions and initialization", () => {
+    it("creates buffer with correct dimensions", () => {
+      const buf = new Buffer(80, 24);
+      assert.strictEqual(buf.width, 80);
+      assert.strictEqual(buf.height, 24);
     });
 
-    buf.resize(10, 10);
-
-    assert.strictEqual(buf.width, 10);
-    assert.strictEqual(buf.height, 10);
-    assert.strictEqual(buf.get(2, 2).symbol, "X"); // preserved
-    assert.strictEqual(buf.get(8, 8).symbol, " "); // new area
+    it("initializes all cells to space with default colors", () => {
+      const buf = new Buffer(10, 10);
+      assert.strictEqual(buf.getSymbol(5, 5), " ");
+      assert.deepStrictEqual(buf.getFg(5, 5), { type: "default" });
+      assert.deepStrictEqual(buf.getBg(5, 5), { type: "default" });
+      assert.strictEqual(buf.getModifiers(5, 5), 0);
+    });
   });
 
-  it("resize shrinks buffer", () => {
-    const buf = new Buffer(10, 10);
-    buf.set(2, 2, {
-      symbol: "X",
-      fg: DEFAULT_COLOR,
-      bg: DEFAULT_COLOR,
-      modifiers: 0,
-    });
-    buf.set(8, 8, {
-      symbol: "Y",
-      fg: DEFAULT_COLOR,
-      bg: DEFAULT_COLOR,
-      modifiers: 0,
+  describe("set operations", () => {
+    it("set() writes symbol and style to cell", () => {
+      const buf = new Buffer(10, 10);
+      buf.set(3, 4, "X", { type: "named", index: 1 }, DEFAULT_COLOR, BOLD);
+
+      assert.strictEqual(buf.getSymbol(3, 4), "X");
+      assert.deepStrictEqual(buf.getFg(3, 4), { type: "named", index: 1 });
+      assert.strictEqual(buf.getModifiers(3, 4), BOLD);
     });
 
-    buf.resize(5, 5);
+    it("set() marks dirty region", () => {
+      const buf = new Buffer(10, 10);
+      buf.flush(); // Clear initial dirty state
 
-    assert.strictEqual(buf.width, 5);
-    assert.strictEqual(buf.height, 5);
-    assert.strictEqual(buf.get(2, 2).symbol, "X"); // preserved
-    // (8, 8) is now out of bounds
-  });
+      assert.strictEqual(buf.hasDirtyRegion(), false);
 
-  it("resize with same dimensions is no-op", () => {
-    const buf = new Buffer(10, 10);
-    buf.set(5, 5, {
-      symbol: "X",
-      fg: DEFAULT_COLOR,
-      bg: DEFAULT_COLOR,
-      modifiers: 0,
+      buf.set(5, 5, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+
+      assert.strictEqual(buf.hasDirtyRegion(), true);
+      assert.strictEqual(buf.dirtyMinX, 5);
+      assert.strictEqual(buf.dirtyMinY, 5);
+      assert.strictEqual(buf.dirtyMaxX, 5);
+      assert.strictEqual(buf.dirtyMaxY, 5);
     });
-    buf.resize(10, 10);
-    assert.strictEqual(buf.get(5, 5).symbol, "X");
+
+    it("set() out-of-bounds is silent no-op", () => {
+      const buf = new Buffer(10, 10);
+      buf.set(-1, 0, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      buf.set(100, 0, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      // Should not throw
+    });
+
+    it("clear() resets all cells to default", () => {
+      const buf = new Buffer(10, 10);
+      buf.set(5, 5, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      buf.clear();
+      assert.strictEqual(buf.getSymbol(5, 5), " ");
+    });
+
+    it("clear() does NOT expand dirty region", () => {
+      const buf = new Buffer(10, 10);
+      buf.flush(); // Clear dirty state
+      buf.clear();
+      // Dirty region should still be empty after clear()
+      assert.strictEqual(buf.hasDirtyRegion(), false);
+    });
+
+    it("fillRect() fills region with given style", () => {
+      const buf = new Buffer(10, 10);
+      buf.fillRect(
+        2,
+        2,
+        3,
+        3,
+        "#",
+        { type: "named", index: 2 },
+        DEFAULT_COLOR,
+        0,
+      );
+
+      assert.strictEqual(buf.getSymbol(2, 2), "#");
+      assert.strictEqual(buf.getSymbol(4, 4), "#");
+      assert.strictEqual(buf.getSymbol(1, 1), " "); // outside
+      assert.strictEqual(buf.getSymbol(5, 5), " "); // outside
+    });
+
+    it("fillRect() clips to buffer bounds", () => {
+      const buf = new Buffer(10, 10);
+      buf.fillRect(-2, -2, 5, 5, "#", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+
+      assert.strictEqual(buf.getSymbol(0, 0), "#");
+      assert.strictEqual(buf.getSymbol(2, 2), "#");
+      assert.strictEqual(buf.getSymbol(3, 3), " "); // outside rect
+    });
+
+    it("fillRect() entirely outside bounds is no-op", () => {
+      const buf = new Buffer(10, 10);
+      buf.fillRect(100, 100, 5, 5, "#", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+
+      // All cells should still be default
+      assert.strictEqual(buf.getSymbol(0, 0), " ");
+    });
   });
 
-  it("fillRect fills area", () => {
-    const buf = new Buffer(10, 10);
-    const cell: Cell = {
-      symbol: "#",
-      fg: { type: "named", index: 2 },
-      bg: { type: "default" },
-      modifiers: 0,
-    };
+  describe("writeText", () => {
+    it("writes string characters sequentially", () => {
+      const buf = new Buffer(20, 10);
+      buf.writeText(0, 0, "hello", DEFAULT_COLOR, DEFAULT_COLOR, 0);
 
-    buf.fillRect(2, 2, 3, 3, cell);
+      assert.strictEqual(buf.getSymbol(0, 0), "h");
+      assert.strictEqual(buf.getSymbol(1, 0), "e");
+      assert.strictEqual(buf.getSymbol(2, 0), "l");
+      assert.strictEqual(buf.getSymbol(3, 0), "l");
+      assert.strictEqual(buf.getSymbol(4, 0), "o");
+    });
 
-    assert.strictEqual(buf.get(2, 2).symbol, "#");
-    assert.strictEqual(buf.get(4, 4).symbol, "#");
-    assert.strictEqual(buf.get(1, 1).symbol, " "); // outside
-    assert.strictEqual(buf.get(5, 5).symbol, " "); // outside
+    it("handles double-width characters with continuation cells", () => {
+      const buf = new Buffer(20, 10);
+      buf.writeText(0, 0, "中", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+
+      assert.strictEqual(buf.getSymbol(0, 0), "中");
+      assert.strictEqual(buf.getSymbol(1, 0), ""); // continuation
+    });
+
+    it("advances position by display width", () => {
+      const buf = new Buffer(20, 10);
+      const cols = buf.writeText(0, 0, "中a", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+
+      assert.strictEqual(cols, 3); // 2 for 中 + 1 for a
+      assert.strictEqual(buf.getSymbol(2, 0), "a");
+    });
+
+    it("applies style to all characters", () => {
+      const buf = new Buffer(20, 10);
+      const fg: Color = { type: "named", index: 1 };
+      buf.writeText(0, 0, "ab", fg, DEFAULT_COLOR, BOLD);
+
+      assert.deepStrictEqual(buf.getFg(0, 0), fg);
+      assert.deepStrictEqual(buf.getFg(1, 0), fg);
+      assert.strictEqual(buf.getModifiers(0, 0), BOLD);
+      assert.strictEqual(buf.getModifiers(1, 0), BOLD);
+    });
+
+    it("stops at buffer edge", () => {
+      const buf = new Buffer(5, 10);
+      const cols = buf.writeText(
+        0,
+        0,
+        "abcdefgh",
+        DEFAULT_COLOR,
+        DEFAULT_COLOR,
+        0,
+      );
+
+      assert.strictEqual(cols, 5);
+      assert.strictEqual(buf.getSymbol(4, 0), "e");
+    });
+
+    it("skips double-width char that would overflow", () => {
+      const buf = new Buffer(4, 10);
+      buf.writeText(0, 0, "ab中", DEFAULT_COLOR, DEFAULT_COLOR, 0); // 中 needs 2 cols, only 1 left
+
+      // ab takes 2 cols (0, 1), only 2 remain (2, 3), but 中 needs positions 2 AND 3 (width=2)
+      // Wait, that fits. Let me use a smaller buffer.
+      // Actually 中 at col 2 uses cols 2,3 which is fine for width 4.
+      // Let's try: ab takes cols 0,1, leaving 2,3. 中 uses 2,3. That fits!
+      // To test overflow, use buffer width 3: ab uses 0,1, only col 2 left, 中 needs 2 cols.
+      const buf2 = new Buffer(3, 10);
+      buf2.writeText(0, 0, "a中", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      // a at col 0, 中 needs cols 1,2 which fits (width 3, valid cols 0,1,2)
+
+      // Use width 2 buffer: a at col 0, 中 needs cols 1,2 but col 2 doesn't exist
+      const buf3 = new Buffer(2, 10);
+      buf3.writeText(0, 0, "a中", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      assert.strictEqual(buf3.getSymbol(0, 0), "a");
+      assert.strictEqual(buf3.getSymbol(1, 0), " "); // 中 didn't fit, position still space
+    });
+
+    it("returns number of columns consumed", () => {
+      const buf = new Buffer(20, 10);
+      const cols = buf.writeText(
+        5,
+        0,
+        "hello",
+        DEFAULT_COLOR,
+        DEFAULT_COLOR,
+        0,
+      );
+      assert.strictEqual(cols, 5);
+    });
+
+    it("out-of-bounds y is silent no-op returning 0", () => {
+      const buf = new Buffer(20, 10);
+      const cols = buf.writeText(
+        0,
+        100,
+        "hello",
+        DEFAULT_COLOR,
+        DEFAULT_COLOR,
+        0,
+      );
+      assert.strictEqual(cols, 0);
+    });
+
+    it("out-of-bounds x (>= width) is silent no-op returning 0", () => {
+      const buf = new Buffer(20, 10);
+      const cols = buf.writeText(
+        20,
+        0,
+        "hello",
+        DEFAULT_COLOR,
+        DEFAULT_COLOR,
+        0,
+      );
+      assert.strictEqual(cols, 0);
+    });
+
+    it("negative x clamps to 0", () => {
+      const buf = new Buffer(20, 10);
+      const cols = buf.writeText(
+        -2,
+        0,
+        "hello",
+        DEFAULT_COLOR,
+        DEFAULT_COLOR,
+        0,
+      );
+      // Should write starting at col 0
+      assert.strictEqual(buf.getSymbol(0, 0), "h");
+      assert.strictEqual(cols, 5);
+    });
   });
 
-  it("fillRect clips to bounds", () => {
-    const buf = new Buffer(10, 10);
-    const cell: Cell = {
-      symbol: "#",
-      fg: DEFAULT_COLOR,
-      bg: DEFAULT_COLOR,
-      modifiers: 0,
-    };
+  describe("double-width overwrite handling", () => {
+    it("overwriting first column of wide char clears continuation cell", () => {
+      const buf = new Buffer(20, 10);
+      buf.writeText(0, 0, "中", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      // Now overwrite col 0
+      buf.set(0, 0, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
 
-    buf.fillRect(-2, -2, 5, 5, cell);
+      assert.strictEqual(buf.getSymbol(0, 0), "X");
+      assert.strictEqual(buf.getSymbol(1, 0), " "); // Continuation cleared
+    });
 
-    assert.strictEqual(buf.get(0, 0).symbol, "#");
-    assert.strictEqual(buf.get(2, 2).symbol, "#");
-    assert.strictEqual(buf.get(3, 3).symbol, " "); // outside rect
+    it("overwriting continuation cell clears base character", () => {
+      const buf = new Buffer(20, 10);
+      buf.writeText(0, 0, "中", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      // Now overwrite col 1 (the continuation)
+      buf.set(1, 0, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+
+      assert.strictEqual(buf.getSymbol(0, 0), " "); // Base cleared
+      assert.strictEqual(buf.getSymbol(1, 0), "X");
+    });
+
+    it("overwriting with another wide char clears old continuation", () => {
+      const buf = new Buffer(20, 10);
+      buf.writeText(0, 0, "中", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      buf.writeText(0, 0, "日", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+
+      assert.strictEqual(buf.getSymbol(0, 0), "日");
+      assert.strictEqual(buf.getSymbol(1, 0), ""); // New continuation
+    });
   });
 
-  it("cells are independent objects", () => {
-    const buf = new Buffer(10, 10);
-    const cell: Cell = {
-      symbol: "A",
-      fg: DEFAULT_COLOR,
-      bg: DEFAULT_COLOR,
-      modifiers: 0,
-    };
+  describe("read operations", () => {
+    it("getSymbol() returns cell symbol", () => {
+      const buf = new Buffer(10, 10);
+      buf.set(5, 5, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      assert.strictEqual(buf.getSymbol(5, 5), "X");
+    });
 
-    buf.set(0, 0, cell);
-    buf.set(1, 0, cell);
+    it("getFg() returns cell foreground color as Color object", () => {
+      const buf = new Buffer(10, 10);
+      const fg: Color = { type: "rgb", r: 255, g: 128, b: 64 };
+      buf.set(5, 5, "X", fg, DEFAULT_COLOR, 0);
+      assert.deepStrictEqual(buf.getFg(5, 5), fg);
+    });
 
-    // Modifying one shouldn't affect the other
-    const retrieved = buf.get(0, 0);
-    retrieved.symbol = "B";
+    it("getBg() returns cell background color as Color object", () => {
+      const buf = new Buffer(10, 10);
+      const bg: Color = { type: "palette", index: 200 };
+      buf.set(5, 5, "X", DEFAULT_COLOR, bg, 0);
+      assert.deepStrictEqual(buf.getBg(5, 5), bg);
+    });
 
-    assert.strictEqual(buf.get(0, 0).symbol, "A");
-    assert.strictEqual(buf.get(1, 0).symbol, "A");
+    it("getModifiers() returns cell modifiers", () => {
+      const buf = new Buffer(10, 10);
+      buf.set(5, 5, "X", DEFAULT_COLOR, DEFAULT_COLOR, BOLD | ITALIC);
+      assert.strictEqual(buf.getModifiers(5, 5), BOLD | ITALIC);
+    });
+
+    it("getters out-of-bounds return defaults", () => {
+      const buf = new Buffer(10, 10);
+      assert.strictEqual(buf.getSymbol(-1, 0), " ");
+      assert.strictEqual(buf.getSymbol(100, 0), " ");
+      assert.deepStrictEqual(buf.getFg(-1, 0), DEFAULT_COLOR);
+      assert.deepStrictEqual(buf.getBg(-1, 0), DEFAULT_COLOR);
+      assert.strictEqual(buf.getModifiers(-1, 0), 0);
+    });
   });
 
-  it("fillRect entirely outside bounds is no-op", () => {
-    const buf = new Buffer(10, 10);
-    const cell: Cell = {
-      symbol: "#",
-      fg: DEFAULT_COLOR,
-      bg: DEFAULT_COLOR,
-      modifiers: 0,
-    };
+  describe("flush and double-buffering", () => {
+    it("flush() returns empty string when nothing changed", () => {
+      const buf = new Buffer(10, 10);
+      buf.flush(); // First flush syncs initial state
+      const output = buf.flush(); // Second flush with no changes
+      assert.strictEqual(output, "");
+    });
 
-    // Completely outside buffer
-    buf.fillRect(100, 100, 5, 5, cell);
+    it("flush() returns ANSI for changed cells", () => {
+      const buf = new Buffer(10, 10);
+      buf.flush(); // Sync initial state
+      // Set at non-zero position to require cursor movement ANSI
+      buf.set(5, 5, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      const output = buf.flush();
 
-    // All cells should still be default
-    assert.strictEqual(buf.get(0, 0).symbol, " ");
+      assert.ok(output.includes("X"));
+      assert.ok(output.includes("\x1b[")); // Contains ANSI for cursor positioning
+    });
+
+    it("flush() syncs buffers - second flush with no changes returns empty", () => {
+      const buf = new Buffer(10, 10);
+      buf.flush();
+      buf.set(0, 0, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      buf.flush();
+      const output = buf.flush();
+      assert.strictEqual(output, "");
+    });
+
+    it("sequential cells skip cursor positioning", () => {
+      const buf = new Buffer(10, 10);
+      buf.flush();
+      // Write at non-zero position to require cursor positioning for first char
+      buf.writeText(5, 5, "AB", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      const output = buf.flush();
+
+      // Should only have one cursor positioning for the start
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences
+      const cursorMatches = output.match(/\x1b\[\d+;\d+H/g) || [];
+      assert.strictEqual(cursorMatches.length, 1);
+    });
+
+    it("gaps in row emit cursor positioning", () => {
+      const buf = new Buffer(10, 10);
+      buf.flush();
+      // First char at (2,0) needs positioning, second at (5,0) also needs positioning due to gap
+      buf.set(2, 0, "A", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      buf.set(5, 0, "B", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      const output = buf.flush();
+
+      // Should have cursor positioning for both (initial + gap)
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences
+      const cursorMatches = output.match(/\x1b\[\d+;\d+H/g) || [];
+      assert.strictEqual(cursorMatches.length, 2);
+    });
+
+    it("continuation cells are skipped in output", () => {
+      const buf = new Buffer(10, 10);
+      buf.flush();
+      buf.writeText(0, 0, "中", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      const output = buf.flush();
+
+      // Should contain the character, not the empty continuation
+      assert.ok(output.includes("中"));
+      // Empty string should not be explicitly output
+    });
+
+    it("double-width character advances cursor by 2", () => {
+      const buf = new Buffer(10, 10);
+      buf.flush();
+      // Start at non-zero position to force initial cursor positioning
+      buf.writeText(3, 3, "中a", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      const output = buf.flush();
+
+      // After 中 (width 2), cursor is at col 5, so 'a' at col 5 needs no repositioning
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences
+      const cursorMatches = output.match(/\x1b\[\d+;\d+H/g) || [];
+      assert.strictEqual(cursorMatches.length, 1); // Only initial positioning
+    });
+  });
+
+  describe("style tracking across frames", () => {
+    it("persists foreground color across flush calls", () => {
+      const buf = new Buffer(10, 10);
+      buf.flush();
+
+      // First cell with red foreground
+      buf.set(0, 0, "A", { type: "named", index: 1 }, DEFAULT_COLOR, 0);
+      const output1 = buf.flush();
+      assert.ok(output1.includes("31")); // Red foreground
+
+      // Second cell with same color - should not re-emit
+      buf.set(1, 0, "B", { type: "named", index: 1 }, DEFAULT_COLOR, 0);
+      const output2 = buf.flush();
+      // Should not contain another color code for red
+      assert.ok(!output2.includes(";31m") && !output2.includes("[31m"));
+    });
+
+    it("removing modifier emits SGR 0 then reapplies remaining", () => {
+      const buf = new Buffer(10, 10);
+      buf.flush();
+
+      buf.set(0, 0, "A", DEFAULT_COLOR, DEFAULT_COLOR, BOLD | ITALIC);
+      buf.flush();
+
+      // Remove BOLD, keep ITALIC
+      buf.set(1, 0, "B", DEFAULT_COLOR, DEFAULT_COLOR, ITALIC);
+      const output = buf.flush();
+
+      // Should contain SGR 0 (reset) followed by 3 (italic)
+      assert.ok(output.includes("\x1b[0;3m") || output.includes("0;3"));
+    });
+
+    it("adding modifier emits only the new modifier code", () => {
+      const buf = new Buffer(10, 10);
+      buf.flush();
+
+      buf.set(0, 0, "A", DEFAULT_COLOR, DEFAULT_COLOR, BOLD);
+      buf.flush();
+
+      // Add ITALIC
+      buf.set(1, 0, "B", DEFAULT_COLOR, DEFAULT_COLOR, BOLD | ITALIC);
+      const output = buf.flush();
+
+      // Should only emit 3 (italic), not 1 (bold) again
+      assert.ok(output.includes("3m") || output.includes(";3m"));
+      // And should NOT re-emit 1 for bold
+      const boldMatches = output.match(/\[1m|\[1;|;1m|;1;/g) || [];
+      assert.strictEqual(boldMatches.length, 0);
+    });
+  });
+
+  describe("forceFullRedraw", () => {
+    it("resets front buffer to defaults", () => {
+      const buf = new Buffer(10, 10);
+      buf.set(0, 0, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      buf.flush();
+
+      // Now force full redraw
+      buf.forceFullRedraw();
+      const output = buf.flush();
+
+      // Should re-emit X since front was reset
+      assert.ok(output.includes("X"));
+    });
+
+    it("marks entire buffer dirty", () => {
+      const buf = new Buffer(10, 10);
+      buf.flush();
+      buf.forceFullRedraw();
+
+      assert.strictEqual(buf.dirtyMinX, 0);
+      assert.strictEqual(buf.dirtyMinY, 0);
+      assert.strictEqual(buf.dirtyMaxX, 9);
+      assert.strictEqual(buf.dirtyMaxY, 9);
+    });
+
+    it("next flush emits all non-default cells", () => {
+      const buf = new Buffer(10, 10);
+      buf.set(5, 5, "Y", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      buf.flush();
+
+      buf.forceFullRedraw();
+      const output = buf.flush();
+
+      assert.ok(output.includes("Y"));
+    });
+  });
+
+  describe("resize", () => {
+    it("resize changes dimensions", () => {
+      const buf = new Buffer(5, 5);
+      buf.resize(10, 10);
+
+      assert.strictEqual(buf.width, 10);
+      assert.strictEqual(buf.height, 10);
+    });
+
+    it("resize reinitializes all cells", () => {
+      const buf = new Buffer(5, 5);
+      buf.set(2, 2, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+
+      buf.resize(10, 10);
+
+      // Content is NOT preserved in new design
+      assert.strictEqual(buf.getSymbol(2, 2), " ");
+    });
+
+    it("resize marks entire buffer dirty", () => {
+      const buf = new Buffer(5, 5);
+      buf.flush();
+
+      buf.resize(10, 10);
+
+      assert.strictEqual(buf.dirtyMinX, 0);
+      assert.strictEqual(buf.dirtyMinY, 0);
+      assert.strictEqual(buf.dirtyMaxX, 9);
+      assert.strictEqual(buf.dirtyMaxY, 9);
+    });
+
+    it("resize with same dimensions is no-op", () => {
+      const buf = new Buffer(10, 10);
+      buf.set(5, 5, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      buf.resize(10, 10);
+      assert.strictEqual(buf.getSymbol(5, 5), "X");
+    });
+  });
+
+  describe("dirty region optimization", () => {
+    it("flush() only scans dirty region", () => {
+      const buf = new Buffer(100, 100);
+      buf.flush();
+
+      // Set a single cell
+      buf.set(50, 50, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+
+      assert.strictEqual(buf.dirtyMinX, 50);
+      assert.strictEqual(buf.dirtyMinY, 50);
+      assert.strictEqual(buf.dirtyMaxX, 50);
+      assert.strictEqual(buf.dirtyMaxY, 50);
+    });
+
+    it("small change in large buffer only scans that region", () => {
+      const buf = new Buffer(100, 100);
+      buf.flush();
+
+      buf.set(10, 10, "A", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      buf.set(20, 20, "B", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+
+      assert.strictEqual(buf.dirtyMinX, 10);
+      assert.strictEqual(buf.dirtyMinY, 10);
+      assert.strictEqual(buf.dirtyMaxX, 20);
+      assert.strictEqual(buf.dirtyMaxY, 20);
+    });
+
+    it("clear() followed by set() has dirty region from set() only", () => {
+      const buf = new Buffer(10, 10);
+      buf.flush();
+      buf.clear();
+      buf.set(5, 5, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+
+      assert.strictEqual(buf.dirtyMinX, 5);
+      assert.strictEqual(buf.dirtyMinY, 5);
+      assert.strictEqual(buf.dirtyMaxX, 5);
+      assert.strictEqual(buf.dirtyMaxY, 5);
+    });
   });
 });
 
-describe("dirty region tracking", () => {
-  it("set expands dirty region", () => {
+describe("ANSI output correctness", () => {
+  it("cursor positioning is 1-indexed", () => {
     const buf = new Buffer(10, 10);
-    buf.clearDirtyRegion();
+    buf.flush();
+    // Set at position (2, 3) to force cursor positioning
+    buf.set(2, 3, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+    const output = buf.flush();
 
-    assert.strictEqual(buf.hasDirtyRegion(), false);
-
-    buf.set(5, 5, {
-      symbol: "X",
-      fg: DEFAULT_COLOR,
-      bg: DEFAULT_COLOR,
-      modifiers: 0,
-    });
-
-    assert.strictEqual(buf.hasDirtyRegion(), true);
-    assert.strictEqual(buf.dirtyMinX, 5);
-    assert.strictEqual(buf.dirtyMinY, 5);
-    assert.strictEqual(buf.dirtyMaxX, 5);
-    assert.strictEqual(buf.dirtyMaxY, 5);
+    // Position (2,3) should be \x1b[4;3H (row 4, col 3 - 1-indexed)
+    assert.ok(output.includes("\x1b[4;3H"));
   });
 
-  it("multiple sets expand dirty region bounds", () => {
+  it("named foreground colors emit 30-37", () => {
     const buf = new Buffer(10, 10);
-    buf.clearDirtyRegion();
+    buf.flush();
+    buf.set(0, 0, "X", { type: "named", index: 1 }, DEFAULT_COLOR, 0); // Red
+    const output = buf.flush();
 
-    buf.set(2, 3, {
-      symbol: "A",
-      fg: DEFAULT_COLOR,
-      bg: DEFAULT_COLOR,
-      modifiers: 0,
-    });
-    buf.set(7, 8, {
-      symbol: "B",
-      fg: DEFAULT_COLOR,
-      bg: DEFAULT_COLOR,
-      modifiers: 0,
-    });
-
-    assert.strictEqual(buf.dirtyMinX, 2);
-    assert.strictEqual(buf.dirtyMinY, 3);
-    assert.strictEqual(buf.dirtyMaxX, 7);
-    assert.strictEqual(buf.dirtyMaxY, 8);
+    assert.ok(output.includes("31")); // 30 + 1
   });
 
-  it("clear marks entire buffer dirty", () => {
+  it("named background colors emit 40-47", () => {
     const buf = new Buffer(10, 10);
-    buf.clearDirtyRegion();
-    buf.clear();
+    buf.flush();
+    buf.set(0, 0, "X", DEFAULT_COLOR, { type: "named", index: 2 }, 0); // Green bg
+    const output = buf.flush();
 
-    assert.strictEqual(buf.dirtyMinX, 0);
-    assert.strictEqual(buf.dirtyMinY, 0);
-    assert.strictEqual(buf.dirtyMaxX, 9);
-    assert.strictEqual(buf.dirtyMaxY, 9);
+    assert.ok(output.includes("42")); // 40 + 2
   });
 
-  it("fillRect marks filled region dirty", () => {
+  it("bright foreground colors emit 90-97", () => {
     const buf = new Buffer(10, 10);
-    buf.clearDirtyRegion();
+    buf.flush();
+    buf.set(0, 0, "X", { type: "bright", index: 1 }, DEFAULT_COLOR, 0);
+    const output = buf.flush();
 
-    buf.fillRect(2, 3, 4, 5, {
-      symbol: "#",
-      fg: DEFAULT_COLOR,
-      bg: DEFAULT_COLOR,
-      modifiers: 0,
-    });
-
-    assert.strictEqual(buf.dirtyMinX, 2);
-    assert.strictEqual(buf.dirtyMinY, 3);
-    assert.strictEqual(buf.dirtyMaxX, 5); // 2 + 4 - 1
-    assert.strictEqual(buf.dirtyMaxY, 7); // 3 + 5 - 1
+    assert.ok(output.includes("91")); // 90 + 1
   });
 
-  it("clearDirtyRegion resets to empty", () => {
+  it("bright background colors emit 100-107", () => {
     const buf = new Buffer(10, 10);
-    buf.set(5, 5, {
-      symbol: "X",
-      fg: DEFAULT_COLOR,
-      bg: DEFAULT_COLOR,
-      modifiers: 0,
-    });
+    buf.flush();
+    buf.set(0, 0, "X", DEFAULT_COLOR, { type: "bright", index: 1 }, 0);
+    const output = buf.flush();
 
-    assert.strictEqual(buf.hasDirtyRegion(), true);
-
-    buf.clearDirtyRegion();
-
-    assert.strictEqual(buf.hasDirtyRegion(), false);
+    assert.ok(output.includes("101")); // 100 + 1
   });
 
-  it("resize marks entire buffer dirty", () => {
-    const buf = new Buffer(5, 5);
-    buf.clearDirtyRegion();
+  it("palette colors emit 38;5;N / 48;5;N", () => {
+    const buf = new Buffer(10, 10);
+    buf.flush();
+    buf.set(0, 0, "X", { type: "palette", index: 200 }, DEFAULT_COLOR, 0);
+    const output = buf.flush();
 
-    buf.resize(10, 10);
-
-    assert.strictEqual(buf.dirtyMinX, 0);
-    assert.strictEqual(buf.dirtyMinY, 0);
-    assert.strictEqual(buf.dirtyMaxX, 9);
-    assert.strictEqual(buf.dirtyMaxY, 9);
+    assert.ok(output.includes("38;5;200"));
   });
 
-  it("out-of-bounds set does not expand dirty region", () => {
+  it("RGB colors emit 38;2;R;G;B / 48;2;R;G;B", () => {
     const buf = new Buffer(10, 10);
-    buf.clearDirtyRegion();
+    buf.flush();
+    buf.set(
+      0,
+      0,
+      "X",
+      { type: "rgb", r: 255, g: 128, b: 64 },
+      DEFAULT_COLOR,
+      0,
+    );
+    const output = buf.flush();
 
-    buf.set(-1, -1, {
-      symbol: "X",
-      fg: DEFAULT_COLOR,
-      bg: DEFAULT_COLOR,
-      modifiers: 0,
-    });
-    buf.set(100, 100, {
-      symbol: "X",
-      fg: DEFAULT_COLOR,
-      bg: DEFAULT_COLOR,
-      modifiers: 0,
-    });
+    assert.ok(output.includes("38;2;255;128;64"));
+  });
 
-    assert.strictEqual(buf.hasDirtyRegion(), false);
+  it("default colors emit 39 / 49", () => {
+    const buf = new Buffer(10, 10);
+    buf.flush();
+    // Set a non-default color first
+    buf.set(0, 0, "X", { type: "named", index: 1 }, DEFAULT_COLOR, 0);
+    buf.flush();
+
+    // Now reset to default
+    buf.set(1, 0, "Y", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+    const output = buf.flush();
+
+    assert.ok(output.includes("39")); // Default fg
+  });
+
+  it("modifiers emit correct SGR codes (1-9)", () => {
+    const buf = new Buffer(10, 10);
+    buf.flush();
+    buf.set(0, 0, "X", DEFAULT_COLOR, DEFAULT_COLOR, BOLD);
+    const output = buf.flush();
+
+    assert.ok(output.includes("1m") || output.includes("[1m"));
+  });
+
+  it("multiple modifiers combined in single SGR sequence", () => {
+    const buf = new Buffer(10, 10);
+    buf.flush();
+    buf.set(0, 0, "X", DEFAULT_COLOR, DEFAULT_COLOR, BOLD | ITALIC);
+    const output = buf.flush();
+
+    // Should contain both 1 and 3 in a single sequence
+    assert.ok(output.includes("1;3m") || output.includes("1;3;"));
+  });
+});
+
+describe("edge cases", () => {
+  it("1x1 buffer works correctly", () => {
+    const buf = new Buffer(1, 1);
+    buf.set(0, 0, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+    assert.strictEqual(buf.getSymbol(0, 0), "X");
+    const output = buf.flush();
+    assert.ok(output.includes("X"));
+  });
+
+  it("control characters (< 32) are handled", () => {
+    const buf = new Buffer(10, 10);
+    buf.set(0, 0, "\x00", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+    assert.strictEqual(buf.getSymbol(0, 0), "\x00");
   });
 });

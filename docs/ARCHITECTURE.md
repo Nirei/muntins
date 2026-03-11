@@ -109,7 +109,19 @@ const ansiOutput = buffer.flush();  // diff + serialize + sync
 
 **Double-buffering with copy-on-flush.** The class maintains two cell arrays: `front` (what's on screen) and `back` (the render target). The runtime clears `back`, paints into it, then calls `flush()` which compares `back` vs `front`, emits ANSI sequences for differences, and copies changed cells from `back` to `front`. After flush, both buffers contain the same state — the next frame's `clear()` writes to `back`, and only cells that actually differ from `front` generate output.
 
-**Zero-allocation design.** Cells are allocated once at Buffer construction and mutated in place. The `set()` method takes primitive arguments (symbol, fg, bg, modifiers) rather than a Cell object, avoiding per-call object allocation. Colors are converted internally to packed 32-bit integers for efficient comparison (no object allocation or deep equality checks). The diff/serialize step is merged into a single `flush()` method with no intermediate `CellChange[]` array.
+**Zero-allocation design.** Cells are allocated once at Buffer construction and mutated in place. The `set()` method takes primitive arguments (symbol, fg, bg, modifiers) rather than a Cell object, avoiding per-call object allocation. The diff/serialize step is merged into a single `flush()` method with no intermediate `CellChange[]` array.
+
+**Packed color encoding** converts `Color` objects to 32-bit integers for O(1) comparison without object allocation. The encoding uses the high byte as a type tag:
+
+| Type      | Encoding              | Example                      |
+|-----------|-----------------------|------------------------------|
+| default   | `0x00_000000`         | Terminal default color       |
+| named     | `0x01_0000NN`         | `0x01_000001` = red (index 1)|
+| bright    | `0x02_0000NN`         | `0x02_000001` = bright red   |
+| palette   | `0x03_0000NN`         | `0x03_0000C8` = palette 200  |
+| rgb       | `0x04_RRGGBB`         | `0x04_FF8040` = #FF8040      |
+
+This allows the internal `cellsEqual()` to compare colors with `a.fg === b.fg` rather than deep equality checks on discriminated unions.
 
 **Style state persists across frames.** Buffer tracks the terminal's current style (foreground, background, modifiers) and cursor position across `flush()` calls. This minimizes ANSI output — only emit SGR codes when the style actually changes from the previous cell. When removing modifiers, emit `SGR 0` followed by the remaining styles. Use `forceFullRedraw()` if the terminal gets desynchronized (e.g., external process wrote to stdout).
 
