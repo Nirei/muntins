@@ -93,3 +93,143 @@ export type InputEvent =
   | FocusEvent;
 
 export { NO_MODIFIERS, type Modifiers };
+
+/**
+ * Enable terminal features needed for input handling.
+ *
+ * Enables raw mode and sends escape sequences for focus reporting and
+ * bracketed paste. Optionally enables mouse tracking.
+ *
+ * @throws Error if stdin is not a TTY (raw mode not supported)
+ */
+export function setupTerminal(
+  stdin: NodeJS.ReadStream,
+  stdout: NodeJS.WriteStream,
+  options: { mouse?: boolean } = {},
+): void {
+  // Check TTY
+  if (!stdin.isTTY) {
+    throw new Error("stdin is not a TTY; raw mode not supported");
+  }
+
+  // Enable raw mode
+  stdin.setRawMode(true);
+
+  // Build escape sequence
+  let seq = "";
+
+  // Mouse tracking (optional)
+  if (options.mouse) {
+    seq += "\x1b[?1000h"; // Basic mouse press/release
+    seq += "\x1b[?1002h"; // Button-event tracking (motion while pressed)
+    seq += "\x1b[?1006h"; // SGR extended coordinates
+  }
+
+  // Focus reporting
+  seq += "\x1b[?1004h";
+
+  // Bracketed paste
+  seq += "\x1b[?2004h";
+
+  // Write to terminal
+  if (seq) {
+    stdout.write(seq);
+  }
+}
+
+/**
+ * Restore terminal to normal state.
+ *
+ * Disables raw mode and sends escape sequences to turn off all features
+ * enabled by setupTerminal. Safe to call multiple times.
+ */
+export function teardownTerminal(
+  stdin: NodeJS.ReadStream,
+  stdout: NodeJS.WriteStream,
+): void {
+  // Build reverse sequence
+  let seq = "";
+
+  // Disable bracketed paste
+  seq += "\x1b[?2004l";
+
+  // Disable focus reporting
+  seq += "\x1b[?1004l";
+
+  // Disable mouse tracking (all modes)
+  seq += "\x1b[?1006l";
+  seq += "\x1b[?1002l";
+  seq += "\x1b[?1000l";
+
+  // Write to terminal
+  stdout.write(seq);
+
+  // Disable raw mode
+  if (stdin.isTTY) {
+    stdin.setRawMode(false);
+  }
+}
+
+/**
+ * Register cleanup handlers for all process exit paths.
+ *
+ * A terminal left in raw mode is unusable. This ensures cleanup runs on:
+ * - Normal exit
+ * - SIGINT (Ctrl+C)
+ * - SIGTERM
+ * - SIGHUP
+ * - Uncaught exceptions
+ * - Unhandled promise rejections
+ *
+ * @returns Unregister function to remove all handlers (for tests/cleanup)
+ */
+export function registerCleanup(cleanup: () => void): () => void {
+  // Track registration to prevent duplicates
+  let registered = true;
+
+  const onExit = () => {
+    if (registered) cleanup();
+  };
+  const onSigInt = () => {
+    cleanup();
+    process.exit(130);
+  };
+  const onSigTerm = () => {
+    cleanup();
+    process.exit(143);
+  };
+  const onSigHup = () => {
+    cleanup();
+    process.exit(129);
+  };
+  const onException = (err: Error) => {
+    cleanup();
+    console.error(err);
+    process.exit(1);
+  };
+  const onRejection = (reason: unknown) => {
+    cleanup();
+    console.error("Unhandled rejection:", reason);
+    process.exit(1);
+  };
+
+  // Register handlers
+  process.on("exit", onExit);
+  process.on("SIGINT", onSigInt);
+  process.on("SIGTERM", onSigTerm);
+  process.on("SIGHUP", onSigHup);
+  process.on("uncaughtException", onException);
+  process.on("unhandledRejection", onRejection);
+
+  // Return unregister function
+  return () => {
+    if (!registered) return;
+    registered = false;
+    process.off("exit", onExit);
+    process.off("SIGINT", onSigInt);
+    process.off("SIGTERM", onSigTerm);
+    process.off("SIGHUP", onSigHup);
+    process.off("uncaughtException", onException);
+    process.off("unhandledRejection", onRejection);
+  };
+}

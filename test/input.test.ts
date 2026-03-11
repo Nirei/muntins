@@ -11,6 +11,9 @@ import {
   type PasteEvent,
   type ResizeEvent,
   type ScrollEvent,
+  registerCleanup,
+  setupTerminal,
+  teardownTerminal,
 } from "../src/core/input.ts";
 
 describe("input event types", () => {
@@ -109,5 +112,117 @@ describe("input event types", () => {
 describe("mouse button constants", () => {
   it("MOUSE_LEFT is 0", () => {
     assert.strictEqual(MOUSE_LEFT, 0);
+  });
+});
+
+describe("terminal setup", () => {
+  it("setupTerminal throws if stdin is not TTY", () => {
+    const mockStdin = { isTTY: false } as NodeJS.ReadStream;
+    const mockStdout = { write: () => true } as unknown as NodeJS.WriteStream;
+
+    assert.throws(() => {
+      setupTerminal(mockStdin, mockStdout);
+    }, /not a TTY/);
+  });
+
+  it("setupTerminal enables raw mode", () => {
+    let rawModeEnabled = false;
+    const mockStdin = {
+      isTTY: true,
+      setRawMode: (mode: boolean) => {
+        rawModeEnabled = mode;
+      },
+    } as unknown as NodeJS.ReadStream;
+    const mockStdout = { write: () => true } as unknown as NodeJS.WriteStream;
+
+    setupTerminal(mockStdin, mockStdout);
+    assert.strictEqual(rawModeEnabled, true);
+  });
+
+  it("setupTerminal writes focus and paste sequences", () => {
+    let written = "";
+    const mockStdin = {
+      isTTY: true,
+      setRawMode: () => {},
+    } as unknown as NodeJS.ReadStream;
+    const mockStdout = {
+      write: (s: string) => {
+        written += s;
+        return true;
+      },
+    } as unknown as NodeJS.WriteStream;
+
+    setupTerminal(mockStdin, mockStdout);
+
+    assert.ok(written.includes("\x1b[?1004h")); // focus
+    assert.ok(written.includes("\x1b[?2004h")); // bracketed paste
+  });
+
+  it("setupTerminal writes mouse sequences when enabled", () => {
+    let written = "";
+    const mockStdin = {
+      isTTY: true,
+      setRawMode: () => {},
+    } as unknown as NodeJS.ReadStream;
+    const mockStdout = {
+      write: (s: string) => {
+        written += s;
+        return true;
+      },
+    } as unknown as NodeJS.WriteStream;
+
+    setupTerminal(mockStdin, mockStdout, { mouse: true });
+
+    assert.ok(written.includes("\x1b[?1000h"));
+    assert.ok(written.includes("\x1b[?1002h"));
+    assert.ok(written.includes("\x1b[?1006h"));
+  });
+
+  it("teardownTerminal disables raw mode", () => {
+    let rawModeEnabled = true;
+    const mockStdin = {
+      isTTY: true,
+      setRawMode: (mode: boolean) => {
+        rawModeEnabled = mode;
+      },
+    } as unknown as NodeJS.ReadStream;
+    const mockStdout = { write: () => true } as unknown as NodeJS.WriteStream;
+
+    teardownTerminal(mockStdin, mockStdout);
+    assert.strictEqual(rawModeEnabled, false);
+  });
+
+  it("teardownTerminal writes disable sequences", () => {
+    let written = "";
+    const mockStdin = {
+      isTTY: true,
+      setRawMode: () => {},
+    } as unknown as NodeJS.ReadStream;
+    const mockStdout = {
+      write: (s: string) => {
+        written += s;
+        return true;
+      },
+    } as unknown as NodeJS.WriteStream;
+
+    teardownTerminal(mockStdin, mockStdout);
+
+    assert.ok(written.includes("\x1b[?2004l")); // bracketed paste off
+    assert.ok(written.includes("\x1b[?1004l")); // focus off
+    assert.ok(written.includes("\x1b[?1000l")); // mouse off
+  });
+
+  it("registerCleanup returns unregister function", () => {
+    let cleanupCalled = false;
+    const unregister = registerCleanup(() => {
+      cleanupCalled = true;
+    });
+
+    // Immediately unregister so we don't affect other tests
+    unregister();
+
+    // Calling unregister again should be a no-op (no error)
+    unregister();
+    assert.strictEqual(cleanupCalled, false);
   });
 });
