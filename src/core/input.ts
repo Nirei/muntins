@@ -1,5 +1,7 @@
 // Input handling and parsing
 
+import * as readline from "node:readline";
+
 // Mouse button constants
 export const MOUSE_LEFT = 0;
 export const MOUSE_MIDDLE = 1;
@@ -93,6 +95,106 @@ export type InputEvent =
   | FocusEvent;
 
 export { NO_MODIFIERS, type Modifiers };
+
+// Local interface matching readline's Key (may not be exported from @types/node)
+interface ReadlineKey {
+  name?: string;
+  ctrl?: boolean;
+  shift?: boolean;
+  meta?: boolean;
+  sequence?: string;
+}
+
+/**
+ * Check if a character is printable (not a control character).
+ */
+export function isPrintable(char: string | undefined): boolean {
+  if (!char || char.length === 0) return false;
+  const code = char.charCodeAt(0);
+  // Printable ASCII and beyond, excluding control characters
+  return code >= 0x20 && code !== 0x7f;
+}
+
+/**
+ * Normalize key names for consistency.
+ */
+function normalizeKeyName(name: string): string {
+  const normalized = name.toLowerCase();
+
+  switch (normalized) {
+    case "return":
+      return "enter";
+    case "esc":
+      return "escape";
+    default:
+      return normalized;
+  }
+}
+
+/**
+ * Map readline keypress event to our KeyEvent type.
+ */
+export function mapKeypressToEvent(
+  char: string | undefined,
+  key: ReadlineKey | undefined,
+): KeyEvent | null {
+  // Handle edge cases
+  if (!key && !char) {
+    return null;
+  }
+
+  // Get the key name, normalize it
+  const rawName = key?.name ?? char ?? "";
+  const name = normalizeKeyName(rawName);
+  const sequence = key?.sequence ?? char ?? "";
+
+  // Determine if char is printable
+  const printableChar = isPrintable(char) ? (char as string) : "";
+
+  return {
+    type: "key",
+    name,
+    char: printableChar,
+    ctrl: key?.ctrl ?? false,
+    alt: key?.meta ?? false,
+    shift: key?.shift ?? false,
+    sequence,
+  };
+}
+
+/**
+ * Setup keyboard input handling using Node's readline.
+ *
+ * Converts readline keypress events into our KeyEvent type.
+ *
+ * @param stdin - Input stream (must have emitKeypressEvents called)
+ * @param onKey - Callback for each key event
+ * @returns Cleanup function to remove the listener
+ */
+export function setupKeyboardInput(
+  stdin: NodeJS.ReadStream,
+  onKey: (event: KeyEvent) => void,
+): () => void {
+  // Enable keypress events on stdin
+  // NOTE: This is a one-way operation in Node.js — there's no way to "disable" it.
+  // The keypress events will continue until the process exits.
+  readline.emitKeypressEvents(stdin);
+
+  // Handler for keypress events
+  const handler = (char: string | undefined, key: ReadlineKey | undefined) => {
+    const event = mapKeypressToEvent(char, key);
+    if (event) {
+      onKey(event);
+    }
+  };
+
+  stdin.on("keypress", handler);
+
+  // Return cleanup function (removes our handler, but emitKeypressEvents cannot be undone)
+  return () => {
+    stdin.off("keypress", handler);
+  };
+}
 
 /**
  * Enable terminal features needed for input handling.

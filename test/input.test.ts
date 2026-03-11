@@ -11,7 +11,10 @@ import {
   type PasteEvent,
   type ResizeEvent,
   type ScrollEvent,
+  isPrintable,
+  mapKeypressToEvent,
   registerCleanup,
+  setupKeyboardInput,
   setupTerminal,
   teardownTerminal,
 } from "../src/core/input.ts";
@@ -224,5 +227,193 @@ describe("terminal setup", () => {
     // Calling unregister again should be a no-op (no error)
     unregister();
     assert.strictEqual(cleanupCalled, false);
+  });
+});
+
+describe("keyboard input", () => {
+  it("maps simple character", () => {
+    const event = mapKeypressToEvent("a", {
+      name: "a",
+      ctrl: false,
+      shift: false,
+      meta: false,
+      sequence: "a",
+    });
+
+    assert.strictEqual(event?.name, "a");
+    assert.strictEqual(event?.char, "a");
+    assert.strictEqual(event?.ctrl, false);
+  });
+
+  it("maps uppercase with shift", () => {
+    const event = mapKeypressToEvent("A", {
+      name: "a",
+      ctrl: false,
+      shift: true,
+      meta: false,
+      sequence: "A",
+    });
+
+    assert.strictEqual(event?.name, "a");
+    assert.strictEqual(event?.char, "A");
+    assert.strictEqual(event?.shift, true);
+  });
+
+  it("maps ctrl+c", () => {
+    const event = mapKeypressToEvent(undefined, {
+      name: "c",
+      ctrl: true,
+      shift: false,
+      meta: false,
+      sequence: "\x03",
+    });
+
+    assert.strictEqual(event?.name, "c");
+    assert.strictEqual(event?.ctrl, true);
+    assert.strictEqual(event?.char, "");
+  });
+
+  it("maps arrow keys", () => {
+    const event = mapKeypressToEvent(undefined, {
+      name: "up",
+      ctrl: false,
+      shift: false,
+      meta: false,
+      sequence: "\x1b[A",
+    });
+
+    assert.strictEqual(event?.name, "up");
+    assert.strictEqual(event?.char, "");
+  });
+
+  it("maps function keys", () => {
+    const event = mapKeypressToEvent(undefined, {
+      name: "f1",
+      ctrl: false,
+      shift: false,
+      meta: false,
+      sequence: "\x1bOP",
+    });
+
+    assert.strictEqual(event?.name, "f1");
+  });
+
+  it("maps alt+key", () => {
+    const event = mapKeypressToEvent("x", {
+      name: "x",
+      ctrl: false,
+      shift: false,
+      meta: true,
+      sequence: "\x1bx",
+    });
+
+    assert.strictEqual(event?.name, "x");
+    assert.strictEqual(event?.alt, true);
+  });
+
+  it("normalizes return to enter", () => {
+    const event = mapKeypressToEvent(undefined, {
+      name: "return",
+      ctrl: false,
+      shift: false,
+      meta: false,
+      sequence: "\r",
+    });
+
+    assert.strictEqual(event?.name, "enter");
+  });
+
+  it("normalizes esc to escape", () => {
+    const event = mapKeypressToEvent(undefined, {
+      name: "esc",
+      ctrl: false,
+      shift: false,
+      meta: false,
+      sequence: "\x1b",
+    });
+
+    assert.strictEqual(event?.name, "escape");
+  });
+
+  it("maps escape key", () => {
+    const event = mapKeypressToEvent(undefined, {
+      name: "escape",
+      ctrl: false,
+      shift: false,
+      meta: false,
+      sequence: "\x1b",
+    });
+
+    assert.strictEqual(event?.name, "escape");
+  });
+
+  it("maps UTF-8 emoji character", () => {
+    const event = mapKeypressToEvent("😀", {
+      name: undefined,
+      ctrl: false,
+      shift: false,
+      meta: false,
+      sequence: "😀",
+    });
+
+    assert.strictEqual(event?.char, "😀");
+    assert.strictEqual(event?.sequence, "😀");
+  });
+
+  it("maps multi-codepoint emoji (ZWJ sequence)", () => {
+    // Family emoji: 👨‍👩‍👧 is composed of multiple codepoints joined by ZWJ
+    const familyEmoji = "👨‍👩‍👧";
+    const event = mapKeypressToEvent(familyEmoji, {
+      name: undefined,
+      ctrl: false,
+      shift: false,
+      meta: false,
+      sequence: familyEmoji,
+    });
+
+    // isPrintable checks charCodeAt(0), which is the first codepoint
+    // The first codepoint (0x1F468) is printable, so the whole string is kept
+    assert.strictEqual(event?.char, familyEmoji);
+    assert.strictEqual(event?.sequence, familyEmoji);
+  });
+
+  it("returns null for empty input", () => {
+    const event = mapKeypressToEvent(undefined, undefined);
+    assert.strictEqual(event, null);
+  });
+
+  it("isPrintable returns true for letters", () => {
+    assert.strictEqual(isPrintable("a"), true);
+    assert.strictEqual(isPrintable("Z"), true);
+  });
+
+  it("isPrintable returns false for control characters", () => {
+    assert.strictEqual(isPrintable("\x00"), false);
+    assert.strictEqual(isPrintable("\x1b"), false);
+    assert.strictEqual(isPrintable("\x7f"), false);
+  });
+
+  it("isPrintable returns false for undefined/empty", () => {
+    assert.strictEqual(isPrintable(undefined), false);
+    assert.strictEqual(isPrintable(""), false);
+  });
+
+  it("setupKeyboardInput cleanup removes listener", () => {
+    let offCalled = false;
+    const mockStdin = {
+      on: (_event: string, _handler: () => void) => {},
+      off: (event: string, _handler: () => void) => {
+        if (event === "keypress") {
+          offCalled = true;
+        }
+      },
+      // Required by readline.emitKeypressEvents
+      listenerCount: () => 0,
+    } as unknown as NodeJS.ReadStream;
+
+    const cleanup = setupKeyboardInput(mockStdin, () => {});
+    cleanup();
+
+    assert.ok(offCalled);
   });
 });
