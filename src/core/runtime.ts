@@ -1,9 +1,9 @@
 // Render pipeline and component primitives
-// TODO: Implement mount, useFocus, TabFocus
+// TODO: Implement useFocus, TabFocus (Task 5.6)
 
 import {
   BOLD,
-  type Buffer,
+  Buffer,
   type Color,
   DEFAULT_COLOR,
   DIM,
@@ -14,8 +14,20 @@ import {
   graphemeDisplayWidth,
   graphemes,
 } from "./buffer.ts";
-import type { InputEvent, KeyEvent, MouseEvent, ScrollEvent } from "./input.ts";
-import { DEFAULT_FLEX_STYLE, type FlexStyle } from "./layout.ts";
+import {
+  type InputEvent,
+  type KeyEvent,
+  type MouseEvent,
+  type ScrollEvent,
+  createInputParser,
+} from "./input.ts";
+import {
+  DEFAULT_FLEX_STYLE,
+  type FlexStyle,
+  type LayoutNode,
+  type LayoutResult,
+  computeLayout,
+} from "./layout.ts";
 import {
   createEffect,
   createRoot,
@@ -792,4 +804,206 @@ export function For<T>(props: ForProps<T>): Node {
   });
 
   return container;
+}
+
+// ============================================================================
+// Render Cycle and Mount (Task 5.4)
+// ============================================================================
+
+/**
+ * Convert runtime Node to layout system's LayoutNode.
+ * Resolves reactive styles and handles children as either array or getter function.
+ */
+function nodeToLayoutNode(node: Node): LayoutNode {
+  const style = typeof node.style === "function" ? node.style() : node.style;
+
+  // Handle children as either array or getter function (for Show/For)
+  const children =
+    typeof node.children === "function"
+      ? (node.children as () => Node[])()
+      : node.children;
+
+  return {
+    style,
+    children: children?.map(nodeToLayoutNode),
+    measure: node.measure,
+  };
+}
+
+/**
+ * Recursively paint nodes using layout results.
+ * Uses screenX/screenY from layout results for absolute positioning.
+ */
+function paintNode(node: Node, layout: LayoutResult, buffer: Buffer): void {
+  const { screenX, screenY, width, height } = layout;
+
+  // Paint this node if it has a render function
+  if (node.render) {
+    node.render(screenX, screenY, width, height, buffer);
+  }
+
+  // Get children (may be a getter for Show/For)
+  const children =
+    typeof node.children === "function"
+      ? (node.children as () => Node[])()
+      : (node.children ?? []);
+  const childLayouts = layout.children ?? [];
+
+  // Paint children
+  for (let i = 0; i < children.length; i++) {
+    if (childLayouts[i]) {
+      paintNode(children[i], childLayouts[i], buffer);
+    }
+  }
+}
+
+/**
+ * The three-phase render pipeline.
+ */
+function renderFrame(state: RuntimeState): void {
+  const { root, options, buffer } = state;
+  const { stdout } = options;
+
+  // Phase 1: Build — already done reactively
+  // (component tree exists, signals drive updates)
+
+  // Phase 2: Layout
+  const layoutNode = nodeToLayoutNode(root);
+  state.layoutResult = computeLayout(layoutNode, stdout.columns, stdout.rows);
+
+  // Phase 3: Paint
+  buffer.clear();
+  paintNode(root, state.layoutResult, buffer);
+
+  // Diff, serialize, and sync (all internal to Buffer)
+  const output = buffer.flush();
+  if (output.length > 0) {
+    flushFrame(stdout, output);
+  }
+
+  // Clear pending events
+  state.pendingEvents = [];
+}
+
+/**
+ * Handle incoming input events.
+ * Resize events are handled immediately; others are queued.
+ */
+function handleEvent(state: RuntimeState, event: InputEvent): void {
+  // Handle resize immediately
+  if (event.type === "resize") {
+    state.buffer.resize(event.width, event.height);
+    renderFrame(state);
+    return;
+  }
+
+  // Route keyboard/mouse events to nodes (Task 5.5)
+  // This may trigger signal updates, which batch automatically
+  // Note: routeEvent is implemented in Task 5.5
+  // For now, we just queue the event
+
+  // Queue event for render
+  state.pendingEvents.push(event);
+
+  // If no fps limit, render immediately
+  if (state.options.fps === 0) {
+    renderFrame(state);
+  }
+}
+
+/**
+ * Internal unmount function.
+ */
+function unmountState(state: RuntimeState): void {
+  const { options } = state;
+  const { stdout } = options;
+
+  // Stop render loop
+  if (state.frameInterval) {
+    clearInterval(state.frameInterval);
+    state.frameInterval = null;
+  }
+
+  // Dispose component tree
+  state.rootDispose();
+
+  // Destroy input parser (restores terminal input state)
+  state.inputParser.destroy();
+
+  // Exit TUI mode (display)
+  exitTuiMode(stdout, { alternateScreen: options.alternateScreen });
+}
+
+/**
+ * Mount an application to the terminal.
+ *
+ * Creates the component tree, sets up input handling, and starts the
+ * render loop. Returns an App handle with an unmount() method.
+ *
+ * @param component - Function that returns the root node
+ * @param options - Optional mount configuration
+ * @returns App handle with unmount() method
+ */
+export function mount(component: () => Node, options?: MountOptions): App {
+  const opts: Required<MountOptions> = { ...DEFAULT_MOUNT_OPTIONS, ...options };
+  const { stdin, stdout } = opts;
+
+  // Initialize state
+  const state: RuntimeState = {
+    root: undefined as unknown as Node,
+    rootDispose: undefined as unknown as () => void,
+    buffer: new Buffer(stdout.columns, stdout.rows),
+    layoutResult: null,
+    inputParser: undefined as unknown as { destroy: () => void },
+    frameInterval: null,
+    options: opts,
+    pendingEvents: [],
+    focusedNode: null,
+    rootScope: {
+      parent: null,
+      focusableNodes: [],
+      focusedIndex: -1,
+      trap: false,
+    },
+    hoverState: { currentNode: null },
+    terminalFocused: true,
+    stdin,
+  };
+
+  // Enter TUI mode (display)
+  enterTuiMode(stdout, { alternateScreen: opts.alternateScreen });
+
+  // Setup input parsing (Phase 4)
+  state.inputParser = createInputParser(
+    stdin,
+    stdout,
+    (event) => handleEvent(state, event),
+    { mouse: opts.mouse },
+  );
+
+  // Build component tree in a root scope
+  state.rootDispose = createRoot((dispose) => {
+    state.root = component();
+    return dispose;
+  });
+
+  // Initial render
+  renderFrame(state);
+
+  // Start render loop if fps is set
+  if (opts.fps > 0) {
+    const interval = Math.floor(1000 / opts.fps);
+    state.frameInterval = setInterval(() => {
+      if (state.pendingEvents.length > 0) {
+        renderFrame(state);
+      }
+    }, interval);
+  }
+
+  // Return app handle
+  return {
+    unmount() {
+      unmountState(state);
+    },
+  };
 }

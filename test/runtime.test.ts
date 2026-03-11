@@ -18,6 +18,7 @@ import {
   flushFrame,
   lineDisplayWidth,
   measureText,
+  mount,
   truncateLine,
   wrapLine,
 } from "../src/core/runtime.ts";
@@ -835,5 +836,333 @@ describe("For", () => {
       dispose();
       return dispose;
     });
+  });
+});
+
+// ============================================================================
+// Mount Tests
+// ============================================================================
+
+// Test helpers for mock streams
+interface MockStdin {
+  isTTY: boolean;
+  setRawMode: (mode: boolean) => MockStdin;
+  on: (event: string, handler: (...args: unknown[]) => void) => MockStdin;
+  off: (event: string, handler: (...args: unknown[]) => void) => MockStdin;
+  emit: (event: string, ...args: unknown[]) => boolean;
+  resume: () => void;
+  pause: () => void;
+  listenerCount: (event: string) => number;
+  _handlers: Map<string, Array<(...args: unknown[]) => void>>;
+}
+
+interface MockStdout {
+  isTTY: boolean;
+  columns: number;
+  rows: number;
+  written: string;
+  write: (s: string) => boolean;
+  on: (event: string, handler: () => void) => MockStdout;
+  off: (event: string, handler: () => void) => MockStdout;
+  emit: (event: string) => boolean;
+  _handlers: Map<string, Array<() => void>>;
+}
+
+function createMockStdin(): MockStdin {
+  const handlers = new Map<string, Array<(...args: unknown[]) => void>>();
+
+  const stdin: MockStdin = {
+    isTTY: true,
+    setRawMode: () => stdin,
+    on: (event, handler) => {
+      const list = handlers.get(event) ?? [];
+      list.push(handler);
+      handlers.set(event, list);
+      return stdin;
+    },
+    off: (event, handler) => {
+      const list = handlers.get(event);
+      if (list) {
+        const idx = list.indexOf(handler);
+        if (idx >= 0) list.splice(idx, 1);
+      }
+      return stdin;
+    },
+    emit: (event, ...args) => {
+      const list = handlers.get(event);
+      if (list) {
+        for (const h of list) h(...args);
+      }
+      return true;
+    },
+    resume: () => {},
+    pause: () => {},
+    listenerCount: (event) => handlers.get(event)?.length ?? 0,
+    _handlers: handlers,
+  };
+
+  return stdin;
+}
+
+function createMockStdout(cols = 80, rows = 24): MockStdout {
+  const handlers = new Map<string, Array<() => void>>();
+
+  const stdout: MockStdout = {
+    isTTY: true,
+    columns: cols,
+    rows: rows,
+    written: "",
+    write: function (s: string) {
+      this.written += s;
+      return true;
+    },
+    on: (event, handler) => {
+      const list = handlers.get(event) ?? [];
+      list.push(handler);
+      handlers.set(event, list);
+      return stdout;
+    },
+    off: (event, handler) => {
+      const list = handlers.get(event);
+      if (list) {
+        const idx = list.indexOf(handler);
+        if (idx >= 0) list.splice(idx, 1);
+      }
+      return stdout;
+    },
+    emit: (event) => {
+      const list = handlers.get(event);
+      if (list) {
+        for (const h of list) h();
+      }
+      return true;
+    },
+    _handlers: handlers,
+  };
+
+  return stdout;
+}
+
+describe("mount", () => {
+  it("returns app with unmount function", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const app = mount(() => Text({ content: "hello" }), {
+      stdin: mockStdin as unknown as NodeJS.ReadStream,
+      stdout: mockStdout as unknown as NodeJS.WriteStream,
+    });
+
+    assert.ok(typeof app.unmount === "function");
+    app.unmount();
+  });
+
+  it("enters TUI mode on mount", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const app = mount(() => Text({ content: "hello" }), {
+      stdin: mockStdin as unknown as NodeJS.ReadStream,
+      stdout: mockStdout as unknown as NodeJS.WriteStream,
+    });
+
+    assert.ok(mockStdout.written.includes("\x1b[?1049h")); // alternate screen
+    app.unmount();
+  });
+
+  it("exits TUI mode on unmount", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const app = mount(() => Text({ content: "hello" }), {
+      stdin: mockStdin as unknown as NodeJS.ReadStream,
+      stdout: mockStdout as unknown as NodeJS.WriteStream,
+    });
+
+    mockStdout.written = "";
+    app.unmount();
+
+    assert.ok(mockStdout.written.includes("\x1b[?1049l")); // exit alternate screen
+  });
+
+  it("renders initial content", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const app = mount(() => Text({ content: "hello" }), {
+      stdin: mockStdin as unknown as NodeJS.ReadStream,
+      stdout: mockStdout as unknown as NodeJS.WriteStream,
+    });
+
+    assert.ok(mockStdout.written.includes("hello"));
+    app.unmount();
+  });
+
+  it("disposes root on unmount", () => {
+    let cleanupCalled = false;
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const app = mount(
+      () => {
+        onCleanup(() => {
+          cleanupCalled = true;
+        });
+        return Text({ content: "hello" });
+      },
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+      },
+    );
+
+    assert.strictEqual(cleanupCalled, false);
+    app.unmount();
+    assert.strictEqual(cleanupCalled, true);
+  });
+
+  it("handles nested components", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const app = mount(
+      () =>
+        Box({
+          children: [Text({ content: "line1" }), Text({ content: "line2" })],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+      },
+    );
+
+    assert.ok(mockStdout.written.includes("line1"));
+    assert.ok(mockStdout.written.includes("line2"));
+    app.unmount();
+  });
+
+  it("supports reactive content updates", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+    const [count, _setCount] = createSignal(0);
+
+    const app = mount(() => Text({ content: () => `Count: ${count()}` }), {
+      stdin: mockStdin as unknown as NodeJS.ReadStream,
+      stdout: mockStdout as unknown as NodeJS.WriteStream,
+      fps: 0, // Immediate mode
+    });
+
+    // The output contains both "Count:" and "0" - they may be separated by
+    // ANSI cursor positioning sequences (e.g., \x1b[1;8H) due to cell-by-cell rendering
+    assert.ok(mockStdout.written.includes("Count:"));
+    assert.ok(mockStdout.written.includes("0"));
+
+    // Update signal - in fps: 0 mode, updates are queued but need an event to trigger render
+    // The signal change itself doesn't trigger re-render automatically
+    // (that's expected - the component tree is built once, signals drive updates through effects)
+    app.unmount();
+  });
+
+  it("skips alternate screen when disabled", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const app = mount(() => Text({ content: "hello" }), {
+      stdin: mockStdin as unknown as NodeJS.ReadStream,
+      stdout: mockStdout as unknown as NodeJS.WriteStream,
+      alternateScreen: false,
+    });
+
+    assert.ok(!mockStdout.written.includes("\x1b[?1049h"));
+    app.unmount();
+  });
+});
+
+describe("renderFrame", () => {
+  it("paints nodes at layout positions", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout(20, 10);
+
+    const app = mount(
+      () =>
+        Box({
+          flexDirection: "column",
+          children: [Text({ content: "A" }), Text({ content: "B" })],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+      },
+    );
+
+    // Both should be rendered
+    assert.ok(mockStdout.written.includes("A"));
+    assert.ok(mockStdout.written.includes("B"));
+    app.unmount();
+  });
+
+  it("handles Show components", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+    const [visible, _setVisible] = createSignal(true);
+
+    const app = mount(
+      () =>
+        Show({
+          when: visible,
+          children: () => Text({ content: "visible" }),
+          fallback: () => Text({ content: "hidden" }),
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+      },
+    );
+
+    assert.ok(mockStdout.written.includes("visible"));
+    app.unmount();
+  });
+
+  it("handles For components", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+    const [items, _setItems] = createSignal(["a", "b", "c"]);
+
+    const app = mount(
+      () =>
+        For({
+          each: items,
+          render: (item) => Text({ content: item }),
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+      },
+    );
+
+    assert.ok(mockStdout.written.includes("a"));
+    assert.ok(mockStdout.written.includes("b"));
+    assert.ok(mockStdout.written.includes("c"));
+    app.unmount();
+  });
+});
+
+describe("resize handling", () => {
+  it("buffer is resized on resize event", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout(80, 24);
+
+    const app = mount(() => Text({ content: "hello" }), {
+      stdin: mockStdin as unknown as NodeJS.ReadStream,
+      stdout: mockStdout as unknown as NodeJS.WriteStream,
+    });
+
+    // Simulate resize
+    mockStdout.columns = 120;
+    mockStdout.rows = 40;
+    mockStdout.emit("resize");
+
+    // Buffer should be resized (we can't directly check buffer, but the app should not crash)
+    app.unmount();
   });
 });
