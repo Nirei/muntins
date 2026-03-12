@@ -14,6 +14,7 @@ import {
   graphemeDisplayWidth,
   graphemes,
 } from "./buffer.ts";
+import type { FocusEvent, PasteEvent } from "./input.ts";
 import {
   type InputEvent,
   type KeyEvent,
@@ -28,6 +29,7 @@ import {
   type LayoutResult,
   computeLayout,
 } from "./layout.ts";
+import { batch } from "./signals.ts";
 import {
   createEffect,
   createRoot,
@@ -250,6 +252,10 @@ export interface TextProps {
   ref?: Ref;
   onKeyPress?: (key: KeyEvent) => boolean | undefined;
   onMousePress?: (event: MouseEvent) => void;
+  onMouseRelease?: (event: MouseEvent) => void;
+  onMouseMove?: (event: MouseEvent) => void;
+  onScroll?: (event: ScrollEvent) => void;
+  onHover?: (hovering: boolean) => void;
 }
 
 /**
@@ -520,6 +526,10 @@ export function Text(props: TextProps): Node {
     ref,
     onKeyPress,
     onMousePress,
+    onMouseRelease,
+    onMouseMove,
+    onScroll,
+    onHover,
     wrap = "wrap",
     ...styleProps
   } = props;
@@ -532,6 +542,10 @@ export function Text(props: TextProps): Node {
     autoFocus,
     onKeyPress,
     onMousePress,
+    onMouseRelease,
+    onMouseMove,
+    onScroll,
+    onHover,
 
     measure(availableWidth: number, _availableHeight: number) {
       return measureText(getContent(), availableWidth, wrap);
@@ -866,8 +880,282 @@ function renderFrame(state: RuntimeState): void {
 }
 
 /**
+ * Build path from target node to root by following _parent pointers.
+ * O(depth) complexity instead of O(n) tree search.
+ *
+ * Parent pointers are set by Box and Show/For when constructing the node tree.
+ */
+export function buildPathToRoot(target: Node): Node[] {
+  const path: Node[] = [];
+  let current: Node | undefined = target;
+
+  while (current) {
+    path.push(current);
+    current = current._parent;
+  }
+
+  return path; // First element is target, last is root
+}
+
+/**
+ * Route keyboard event to focused node with bubbling.
+ *
+ * Events start at the focused node and bubble up to the root.
+ * Handlers return true to consume the event and stop bubbling.
+ */
+function routeKeyEvent(state: RuntimeState, event: KeyEvent): void {
+  const focused = state.focusedNode;
+  if (!focused) return;
+
+  // Build path from focused node to root using parent pointers
+  const path = buildPathToRoot(focused);
+
+  // Dispatch from focused node upward (bubbling)
+  for (const node of path) {
+    if (node.onKeyPress) {
+      const consumed = node.onKeyPress(event);
+      if (consumed === true) {
+        return; // Event consumed, stop bubbling
+      }
+    }
+  }
+}
+
+/**
+ * Find the deepest node containing a point using screen coordinates.
+ *
+ * Uses screenX/screenY from layout results since mouse events report
+ * absolute terminal positions.
+ *
+ * @param node - Node to test
+ * @param layout - Layout result for the node
+ * @param x - Mouse x coordinate (0-indexed column)
+ * @param y - Mouse y coordinate (0-indexed row)
+ * @returns The deepest node containing the point, or null if outside bounds
+ */
+export function hitTest(
+  node: Node,
+  layout: LayoutResult,
+  x: number,
+  y: number,
+): Node | null {
+  // Use screen coordinates for hit testing (mouse x,y are absolute)
+  const { screenX, screenY, width, height } = layout;
+
+  // Check if point is within this node's bounds
+  if (
+    x < screenX ||
+    x >= screenX + width ||
+    y < screenY ||
+    y >= screenY + height
+  ) {
+    return null;
+  }
+
+  // Get children (may be a getter for Show/For)
+  const children =
+    typeof node.children === "function"
+      ? (node.children as () => Node[])()
+      : (node.children ?? []);
+  const childLayouts = layout.children ?? [];
+
+  // Check children in reverse order for proper z-ordering
+  // Later children are considered "on top" and checked first
+  for (let i = children.length - 1; i >= 0; i--) {
+    const childLayout = childLayouts[i];
+    if (!childLayout) continue;
+
+    const hit = hitTest(children[i], childLayout, x, y);
+    if (hit) {
+      return hit;
+    }
+  }
+
+  // No child contains point, return this node
+  return node;
+}
+
+/**
+ * Route mouse event to node under cursor, with hover tracking.
+ *
+ * Updates hover state and dispatches press/release/move events
+ * to the target node.
+ */
+function routeMouseEvent(state: RuntimeState, event: MouseEvent): void {
+  const { root, layoutResult, hoverState } = state;
+  if (!layoutResult) return;
+
+  // Find node under cursor
+  const target = hitTest(root, layoutResult, event.x, event.y);
+
+  // Update hover state
+  if (target !== hoverState.currentNode) {
+    if (hoverState.currentNode?.onHover) {
+      hoverState.currentNode.onHover(false);
+    }
+    if (target?.onHover) {
+      target.onHover(true);
+    }
+    hoverState.currentNode = target;
+  }
+
+  // Dispatch event to target
+  if (!target) return;
+
+  switch (event.action) {
+    case "press":
+      if (target.onMousePress) {
+        target.onMousePress(event);
+      }
+      break;
+    case "release":
+      if (target.onMouseRelease) {
+        target.onMouseRelease(event);
+      }
+      break;
+    case "move":
+      if (target.onMouseMove) {
+        target.onMouseMove(event);
+      }
+      break;
+  }
+}
+
+/**
+ * Route scroll event to node under cursor.
+ *
+ * Scroll events don't bubble. They go directly to the node under
+ * the cursor. This matches browser behavior where scroll events target
+ * the scrollable element directly.
+ */
+function routeScrollEvent(state: RuntimeState, event: ScrollEvent): void {
+  const { root, layoutResult } = state;
+  if (!layoutResult) return;
+
+  const target = hitTest(root, layoutResult, event.x, event.y);
+
+  if (target?.onScroll) {
+    target.onScroll(event);
+  }
+}
+
+/**
+ * Route paste event to focused node.
+ *
+ * Paste is converted to synthetic key events for each character.
+ */
+function routePasteEvent(state: RuntimeState, event: PasteEvent): void {
+  const focused = state.focusedNode;
+  if (!focused) return;
+
+  // Synthesize key events for each character
+  for (const char of event.text) {
+    if (focused.onKeyPress) {
+      focused.onKeyPress({
+        type: "key",
+        name: char === "\n" ? "enter" : char,
+        char: char,
+        ctrl: false,
+        alt: false,
+        shift: false,
+        sequence: char,
+      });
+    }
+  }
+}
+
+/**
+ * Route terminal focus event.
+ *
+ * Tracks whether the terminal window has focus.
+ */
+function routeFocusEvent(state: RuntimeState, event: FocusEvent): void {
+  state.terminalFocused = event.focused;
+}
+
+/**
+ * Route an input event to the appropriate handler.
+ *
+ * Dispatches based on event type:
+ * - key: Sent to focused node with bubbling
+ * - mouse: Sent to node under cursor
+ * - scroll: Sent to node under cursor (no bubbling)
+ * - paste: Converted to key events for focused node
+ * - focus: Updates terminal focus state
+ * - resize: Handled separately in handleEvent
+ */
+function routeEvent(state: RuntimeState, event: InputEvent): void {
+  switch (event.type) {
+    case "key":
+      routeKeyEvent(state, event);
+      break;
+    case "mouse":
+      routeMouseEvent(state, event);
+      break;
+    case "scroll":
+      routeScrollEvent(state, event);
+      break;
+    case "paste":
+      routePasteEvent(state, event);
+      break;
+    case "focus":
+      routeFocusEvent(state, event);
+      break;
+    case "resize":
+      // Handled separately in handleEvent
+      break;
+  }
+}
+
+/**
+ * Find first focusable node in depth-first order.
+ * Used to initialize focus after mount.
+ */
+function findFocusable(node: Node, preferAutoFocus: boolean): Node | null {
+  // If preferAutoFocus, look for autoFocus first
+  if (preferAutoFocus && node.autoFocus && node.focusable) {
+    return node;
+  }
+
+  // Get children (may be a getter for Show/For)
+  const children =
+    typeof node.children === "function"
+      ? (node.children as () => Node[])()
+      : (node.children ?? []);
+
+  // Check children recursively
+  for (const child of children) {
+    const result = findFocusable(child, preferAutoFocus);
+    if (result) return result;
+  }
+
+  // If not preferAutoFocus pass, check this node
+  if (!preferAutoFocus && node.focusable) {
+    return node;
+  }
+
+  return null;
+}
+
+/**
+ * Initialize focus after component tree is built.
+ * First tries to find a node with autoFocus, otherwise falls back to first focusable.
+ */
+function initializeFocus(state: RuntimeState): void {
+  // First pass: look for autoFocus
+  let focused = findFocusable(state.root, true);
+
+  // Second pass: first focusable if no autoFocus found
+  if (!focused) {
+    focused = findFocusable(state.root, false);
+  }
+
+  state.focusedNode = focused;
+}
+
+/**
  * Handle incoming input events.
- * Resize events are handled immediately; others are queued.
+ * Resize events are handled immediately; others are routed and queued.
  */
 function handleEvent(state: RuntimeState, event: InputEvent): void {
   // Handle resize immediately
@@ -877,10 +1165,11 @@ function handleEvent(state: RuntimeState, event: InputEvent): void {
     return;
   }
 
-  // Route keyboard/mouse events to nodes (Task 5.5)
-  // This may trigger signal updates, which batch automatically
-  // Note: routeEvent is implemented in Task 5.5
-  // For now, we just queue the event
+  // Route event to nodes within a batch
+  // This ensures all signal updates from event handlers are coalesced
+  batch(() => {
+    routeEvent(state, event);
+  });
 
   // Queue event for render
   state.pendingEvents.push(event);
@@ -966,6 +1255,9 @@ export function mount(component: () => Node, options?: MountOptions): App {
     state.root = component();
     return dispose;
   });
+
+  // Initialize focus after tree is built
+  initializeFocus(state);
 
   // Initial render
   renderFrame(state);

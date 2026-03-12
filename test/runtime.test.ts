@@ -1,10 +1,16 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
+import type {
+  MouseEvent as InputMouseEvent,
+  KeyEvent,
+  ScrollEvent,
+} from "../src/core/input.ts";
 import {
   DEFAULT_FLEX_STYLE,
   type LayoutNode,
   computeLayout,
 } from "../src/core/layout.ts";
+import type { LayoutResult } from "../src/core/layout.ts";
 import {
   Box,
   DEFAULT_MOUNT_OPTIONS,
@@ -12,10 +18,12 @@ import {
   type Node,
   Show,
   Text,
+  buildPathToRoot,
   createRef,
   enterTuiMode,
   exitTuiMode,
   flushFrame,
+  hitTest,
   lineDisplayWidth,
   measureText,
   mount,
@@ -1131,6 +1139,373 @@ describe("resize handling", () => {
     mockStdout.emit("resize");
 
     // Buffer should be resized (we can't directly check buffer, but the app should not crash)
+    app.unmount();
+  });
+});
+
+describe("buildPathToRoot", () => {
+  it("returns path from target to root via parent pointers", () => {
+    const grandchild = Text({ content: "grandchild" });
+    const child = Box({ children: [grandchild] });
+    const root = Box({ children: [child] });
+
+    // Box sets _parent on children, so:
+    // grandchild._parent === child
+    // child._parent === root
+    // root._parent === undefined
+
+    const path = buildPathToRoot(grandchild);
+
+    assert.strictEqual(path.length, 3);
+    assert.strictEqual(path[0], grandchild);
+    assert.strictEqual(path[1], child);
+    assert.strictEqual(path[2], root);
+  });
+
+  it("returns single-element path for root node", () => {
+    const root = Text({ content: "root" });
+    // No parent set
+
+    const path = buildPathToRoot(root);
+
+    assert.strictEqual(path.length, 1);
+    assert.strictEqual(path[0], root);
+  });
+});
+
+describe("keyboard routing", () => {
+  it("dispatches to focused node", () => {
+    let receivedName: string | null = null;
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const app = mount(
+      () =>
+        Box({
+          focusable: true,
+          autoFocus: true,
+          onKeyPress: (e) => {
+            receivedName = e.name;
+            return true;
+          },
+          children: [Text({ content: "hello" })],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+        fps: 0,
+      },
+    );
+
+    // Simulate keypress
+    mockStdin.emit("keypress", "a", { name: "a", sequence: "a" });
+
+    assert.strictEqual(receivedName, "a");
+    app.unmount();
+  });
+
+  it("bubbles when not consumed", () => {
+    const calls: string[] = [];
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const app = mount(
+      () =>
+        Box({
+          onKeyPress: () => {
+            calls.push("parent");
+            return false;
+          },
+          children: [
+            Text({
+              content: "child",
+              focusable: true,
+              autoFocus: true,
+              onKeyPress: () => {
+                calls.push("child");
+                return false;
+              },
+            }),
+          ],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+        fps: 0,
+      },
+    );
+
+    // Simulate keypress
+    mockStdin.emit("keypress", "a", { name: "a", sequence: "a" });
+
+    assert.deepStrictEqual(calls, ["child", "parent"]);
+    app.unmount();
+  });
+
+  it("stops bubbling when consumed", () => {
+    const calls: string[] = [];
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const app = mount(
+      () =>
+        Box({
+          onKeyPress: () => {
+            calls.push("parent");
+            return false;
+          },
+          children: [
+            Text({
+              content: "child",
+              focusable: true,
+              autoFocus: true,
+              onKeyPress: () => {
+                calls.push("child");
+                return true; // Consume
+              },
+            }),
+          ],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+        fps: 0,
+      },
+    );
+
+    // Simulate keypress
+    mockStdin.emit("keypress", "a", { name: "a", sequence: "a" });
+
+    assert.deepStrictEqual(calls, ["child"]);
+    app.unmount();
+  });
+});
+
+describe("hit testing", () => {
+  it("returns node containing point", () => {
+    const node = Text({ content: "hello" });
+    const layout: LayoutResult = {
+      x: 0,
+      y: 0,
+      screenX: 0,
+      screenY: 0,
+      width: 10,
+      height: 1,
+      children: [],
+    };
+
+    assert.strictEqual(hitTest(node, layout, 5, 0), node);
+  });
+
+  it("returns null for point outside", () => {
+    const node = Text({ content: "hello" });
+    const layout: LayoutResult = {
+      x: 0,
+      y: 0,
+      screenX: 0,
+      screenY: 0,
+      width: 10,
+      height: 1,
+      children: [],
+    };
+
+    assert.strictEqual(hitTest(node, layout, 15, 0), null);
+  });
+
+  it("returns deepest child", () => {
+    const child = Text({ content: "child" });
+    const parent = Box({ children: [child] });
+
+    // Child at relative x=5,y=5 within parent, screen position is absolute
+    const layout: LayoutResult = {
+      x: 0,
+      y: 0,
+      screenX: 0,
+      screenY: 0,
+      width: 20,
+      height: 10,
+      children: [
+        {
+          x: 5,
+          y: 5,
+          screenX: 5,
+          screenY: 5,
+          width: 5,
+          height: 1,
+          children: [],
+        },
+      ],
+    };
+
+    assert.strictEqual(hitTest(parent, layout, 7, 5), child);
+  });
+
+  it("prefers later children (z-order)", () => {
+    const child1 = Text({ content: "first" });
+    const child2 = Text({ content: "second" });
+    const parent = Box({ children: [child1, child2] });
+
+    // Overlapping children
+    const layout: LayoutResult = {
+      x: 0,
+      y: 0,
+      screenX: 0,
+      screenY: 0,
+      width: 20,
+      height: 10,
+      children: [
+        {
+          x: 0,
+          y: 0,
+          screenX: 0,
+          screenY: 0,
+          width: 10,
+          height: 5,
+          children: [],
+        },
+        {
+          x: 5,
+          y: 2,
+          screenX: 5,
+          screenY: 2,
+          width: 10,
+          height: 5,
+          children: [],
+        }, // overlaps
+      ],
+    };
+
+    // Point in overlap region should hit child2
+    assert.strictEqual(hitTest(parent, layout, 7, 3), child2);
+  });
+});
+
+describe("hover tracking", () => {
+  it("calls onHover(true) when entering", () => {
+    let hovering = false;
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout(20, 10);
+
+    const app = mount(
+      () =>
+        Text({
+          content: "hello",
+          onHover: (h) => {
+            hovering = h;
+          },
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+        mouse: true,
+        fps: 0,
+      },
+    );
+
+    // Simulate mouse move into the text area
+    // SGR mouse format: \x1b[<button;col;row[M|m]
+    // Button 35 = 32 (motion) + 3 (no button), move at (1,1)
+    mockStdin.emit("data", Buffer.from("\x1b[<35;1;1M"));
+
+    assert.strictEqual(hovering, true);
+    app.unmount();
+  });
+
+  it("calls onHover(false) when leaving", () => {
+    let hovering = true;
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout(20, 10);
+
+    const app = mount(
+      () =>
+        Box({
+          width: 5,
+          height: 1,
+          children: [
+            Text({
+              content: "hello",
+              onHover: (h) => {
+                hovering = h;
+              },
+            }),
+          ],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+        mouse: true,
+        fps: 0,
+      },
+    );
+
+    // First move into the element
+    mockStdin.emit("data", Buffer.from("\x1b[<35;1;1M"));
+    assert.strictEqual(hovering, true);
+
+    // Then move outside the element (way off to the right)
+    mockStdin.emit("data", Buffer.from("\x1b[<35;50;50M"));
+    assert.strictEqual(hovering, false);
+
+    app.unmount();
+  });
+});
+
+describe("mouse events", () => {
+  it("dispatches press to node under cursor", () => {
+    let pressed = false;
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout(20, 10);
+
+    const app = mount(
+      () =>
+        Text({
+          content: "hello",
+          onMousePress: () => {
+            pressed = true;
+          },
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+        mouse: true,
+        fps: 0,
+      },
+    );
+
+    // SGR mouse press: button 0 (left), at (1,1)
+    mockStdin.emit("data", Buffer.from("\x1b[<0;1;1M"));
+
+    assert.strictEqual(pressed, true);
+    app.unmount();
+  });
+});
+
+describe("scroll events", () => {
+  it("dispatches to node under cursor", () => {
+    let scrollDir: "up" | "down" | "left" | "right" | null = null;
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout(20, 10);
+
+    const app = mount(
+      () =>
+        Text({
+          content: "hello",
+          onScroll: (e) => {
+            scrollDir = e.direction;
+          },
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+        mouse: true,
+        fps: 0,
+      },
+    );
+
+    // SGR scroll up: button 64 (scroll bit) + 0 (up direction) at (1,1)
+    mockStdin.emit("data", Buffer.from("\x1b[<64;1;1M"));
+
+    assert.strictEqual(scrollDir, "up");
     app.unmount();
   });
 });

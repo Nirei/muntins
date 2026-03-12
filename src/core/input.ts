@@ -4,8 +4,6 @@ import * as readline from "node:readline";
 
 // Mouse button constants
 export const MOUSE_LEFT = 0;
-export const MOUSE_MIDDLE = 1;
-export const MOUSE_RIGHT = 2;
 
 // Modifier flags (internal use)
 interface Modifiers {
@@ -585,7 +583,7 @@ export function setupResizeHandler(
 }
 
 /** Handler type for input events */
-export type InputHandler = (event: InputEvent) => void;
+type InputHandler = (event: InputEvent) => void;
 
 /**
  * Create a unified input parser that handles all input types.
