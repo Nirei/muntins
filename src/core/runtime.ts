@@ -1,5 +1,4 @@
 // Render pipeline and component primitives
-// TODO: Implement useFocus, TabFocus (Task 5.6)
 
 import {
   BOLD,
@@ -127,8 +126,11 @@ export interface App {
 
 // Internal interfaces (not exported, scaffolded for mount/render cycle implementation)
 
-/** Internal state for a mounted application. */
-interface RuntimeState {
+/**
+ * Internal state for a mounted application.
+ * @internal Exported for testing purposes.
+ */
+export interface RuntimeState {
   // Core tree
   root: Node;
   rootDispose: () => void;
@@ -153,15 +155,276 @@ interface RuntimeState {
   terminalFocused: boolean;
 }
 
-interface FocusScope {
+/**
+ * Focus scope for organizing focusable nodes.
+ * Scopes can be nested and optionally trap focus within themselves.
+ * @internal Exported for testing purposes.
+ */
+export interface FocusScope {
   parent: FocusScope | null;
   focusableNodes: Node[];
   focusedIndex: number;
   trap: boolean;
 }
 
+/**
+ * Controller for programmatic focus management within a scope.
+ */
+export interface FocusController {
+  next(): void;
+  prev(): void;
+  set(ref: Ref): void;
+  current(): Node | null;
+}
+
+/**
+ * Runtime context threaded through component construction via closures.
+ * Supports multiple concurrent mount() calls.
+ * @internal Exported for testing purposes.
+ */
+export interface RuntimeContext {
+  state: RuntimeState;
+  currentScope: FocusScope;
+}
+
 interface HoverState {
   currentNode: Node | null;
+}
+
+/** Internal type for nodes that may have a focus scope attached */
+interface NodeWithFocusScope extends Node {
+  _focusScope?: FocusScope;
+}
+
+// The context is set during mount and captured by component closures
+let activeContext: RuntimeContext | null = null;
+
+/**
+ * Get the current active context.
+ * Exposed for testing purposes only.
+ * @internal
+ */
+export function getActiveContext(): RuntimeContext | null {
+  return activeContext;
+}
+
+/**
+ * Set the active context.
+ * Exposed for testing purposes only.
+ * @internal
+ */
+export function setActiveContext(ctx: RuntimeContext | null): void {
+  activeContext = ctx;
+}
+
+/**
+ * Execute a function within a runtime context.
+ * The context is set during the callback and restored after.
+ */
+export function withContext<T>(ctx: RuntimeContext, fn: () => T): T {
+  const prev = activeContext;
+  activeContext = ctx;
+  try {
+    return fn();
+  } finally {
+    activeContext = prev;
+  }
+}
+
+/**
+ * Get the current runtime context.
+ * Throws if called outside of a mounted component.
+ */
+function getContext(): RuntimeContext {
+  if (!activeContext) {
+    throw new Error("useFocus must be called within a mounted component");
+  }
+  return activeContext;
+}
+
+// Focus management functions
+
+/**
+ * Collect focusable nodes into a scope via depth-first traversal.
+ * Stops at nested FocusScope boundaries (nodes with _focusScope set to a different scope).
+ */
+export function collectFocusableInScope(node: Node, scope: FocusScope): void {
+  // If this node has its own scope, don't collect its children here
+  const nodeScope = (node as NodeWithFocusScope)._focusScope;
+  if (nodeScope && nodeScope !== scope) {
+    return;
+  }
+
+  if (node.focusable) {
+    scope.focusableNodes.push(node);
+  }
+
+  // Get children (may be a getter for Show/For)
+  const children =
+    typeof node.children === "function"
+      ? (node.children as () => Node[])()
+      : (node.children ?? []);
+
+  for (const child of children) {
+    collectFocusableInScope(child, scope);
+  }
+}
+
+/**
+ * Navigate focus to the next focusable node within a scope.
+ * Handles wrapping and scope escaping based on trap setting.
+ */
+export function focusNext(state: RuntimeState, scope: FocusScope): void {
+  const { focusableNodes, focusedIndex } = scope;
+
+  if (focusableNodes.length === 0) {
+    // No focusables in this scope — try parent if not trapped
+    if (!scope.trap && scope.parent) {
+      focusNext(state, scope.parent);
+    }
+    return;
+  }
+
+  if (focusedIndex === -1) {
+    // Nothing focused — focus first
+    scope.focusedIndex = 0;
+    state.focusedNode = focusableNodes[0];
+    return;
+  }
+
+  const nextIndex = focusedIndex + 1;
+
+  if (nextIndex >= focusableNodes.length) {
+    // At end of scope
+    if (scope.trap) {
+      // Wrap within scope
+      scope.focusedIndex = 0;
+      state.focusedNode = focusableNodes[0];
+    } else if (scope.parent) {
+      // Escape to parent
+      scope.focusedIndex = -1;
+      focusNext(state, scope.parent);
+    } else {
+      // Root scope — wrap
+      scope.focusedIndex = 0;
+      state.focusedNode = focusableNodes[0];
+    }
+  } else {
+    scope.focusedIndex = nextIndex;
+    state.focusedNode = focusableNodes[nextIndex];
+  }
+}
+
+/**
+ * Navigate focus to the previous focusable node within a scope.
+ * Handles wrapping and scope escaping based on trap setting.
+ */
+export function focusPrev(state: RuntimeState, scope: FocusScope): void {
+  const { focusableNodes, focusedIndex } = scope;
+
+  if (focusableNodes.length === 0) {
+    if (!scope.trap && scope.parent) {
+      focusPrev(state, scope.parent);
+    }
+    return;
+  }
+
+  if (focusedIndex === -1) {
+    // Nothing focused — focus last
+    scope.focusedIndex = focusableNodes.length - 1;
+    state.focusedNode = focusableNodes[scope.focusedIndex];
+    return;
+  }
+
+  const prevIndex = focusedIndex - 1;
+
+  if (prevIndex < 0) {
+    if (scope.trap) {
+      // Wrap within scope
+      scope.focusedIndex = focusableNodes.length - 1;
+      state.focusedNode = focusableNodes[scope.focusedIndex];
+    } else if (scope.parent) {
+      // Escape to parent
+      scope.focusedIndex = -1;
+      focusPrev(state, scope.parent);
+    } else {
+      // Root scope — wrap
+      scope.focusedIndex = focusableNodes.length - 1;
+      state.focusedNode = focusableNodes[scope.focusedIndex];
+    }
+  } else {
+    scope.focusedIndex = prevIndex;
+    state.focusedNode = focusableNodes[prevIndex];
+  }
+}
+
+/**
+ * Find which scope contains a given node.
+ */
+function findScopeContaining(scope: FocusScope, node: Node): FocusScope | null {
+  if (scope.focusableNodes.includes(node)) {
+    return scope;
+  }
+  // For nested scopes, we'd need to traverse the scope hierarchy
+  // Since scopes are stored on nodes, we'd need to track scope tree
+  // For now, return null if not in immediate scope
+  return null;
+}
+
+/**
+ * Set focus to a specific node via ref.
+ */
+export function focusSet(
+  state: RuntimeState,
+  scope: FocusScope,
+  ref: Ref,
+): void {
+  if (!ref.current || !ref.current.focusable) return;
+
+  // Find which scope contains this node
+  const targetScope = findScopeContaining(state.rootScope, ref.current);
+  if (!targetScope) return;
+
+  const index = targetScope.focusableNodes.indexOf(ref.current);
+  if (index !== -1) {
+    // Clear focus from current scope
+    scope.focusedIndex = -1;
+    // Set focus in target scope
+    targetScope.focusedIndex = index;
+    state.focusedNode = ref.current;
+  }
+}
+
+/**
+ * Create a focus controller for a scope.
+ */
+function createFocusController(
+  state: RuntimeState,
+  scope: FocusScope,
+): FocusController {
+  return {
+    next() {
+      focusNext(state, scope);
+    },
+    prev() {
+      focusPrev(state, scope);
+    },
+    set(ref: Ref) {
+      focusSet(state, scope, ref);
+    },
+    current() {
+      return state.focusedNode;
+    },
+  };
+}
+
+/**
+ * Access the focus controller for the current scope.
+ * Must be called within a mounted component context.
+ */
+export function useFocus(): FocusController {
+  const ctx = getContext();
+  return createFocusController(ctx.state, ctx.currentScope);
 }
 
 // Screen control functions
@@ -804,6 +1067,121 @@ export function For<T>(props: ForProps<T>): Node {
   return container;
 }
 
+/** Props for FocusScopeComponent */
+export interface FocusScopeProps {
+  trap?: boolean;
+  children: Node[];
+}
+
+/**
+ * Creates a nested focus scope for organizing focusable elements.
+ *
+ * When `trap` is true, Tab/Shift+Tab navigation wraps within this scope
+ * instead of escaping to the parent. Useful for modal dialogs.
+ */
+export function FocusScopeComponent(props: FocusScopeProps): Node {
+  const ctx = getContext();
+
+  // Create new scope as child of current
+  const scope: FocusScope = {
+    parent: ctx.currentScope,
+    focusableNodes: [],
+    focusedIndex: -1,
+    trap: props.trap ?? false,
+  };
+
+  // Build children within new scope context
+  const childCtx: RuntimeContext = { state: ctx.state, currentScope: scope };
+
+  const node = withContext(childCtx, () => Box({ children: props.children }));
+
+  // Store scope reference on node for cleanup and boundary detection
+  (node as NodeWithFocusScope)._focusScope = scope;
+
+  // Collect focusable nodes into this scope
+  collectFocusableInScope(node, scope);
+
+  // Auto-focus first focusable node if nothing is focused yet
+  if (scope.focusableNodes.length > 0 && ctx.state.focusedNode === null) {
+    const autoFocusIndex = scope.focusableNodes.findIndex((n) => n.autoFocus);
+    if (autoFocusIndex !== -1) {
+      scope.focusedIndex = autoFocusIndex;
+      ctx.state.focusedNode = scope.focusableNodes[autoFocusIndex];
+    } else {
+      scope.focusedIndex = 0;
+      ctx.state.focusedNode = scope.focusableNodes[0];
+    }
+  }
+
+  return node;
+}
+
+/** Props for TabFocus component */
+export interface TabFocusProps {
+  children: Node[];
+  trap?: boolean;
+}
+
+/**
+ * Convenience component that combines a FocusScope with Tab key handling.
+ *
+ * Wraps children in a focus scope and handles Tab/Shift+Tab to navigate
+ * between focusable children.
+ */
+export function TabFocus(props: TabFocusProps): Node {
+  const ctx = getContext();
+
+  // Create new scope as child of current
+  const scope: FocusScope = {
+    parent: ctx.currentScope,
+    focusableNodes: [],
+    focusedIndex: -1,
+    trap: props.trap ?? false,
+  };
+
+  // Build children within new scope context
+  const childCtx: RuntimeContext = { state: ctx.state, currentScope: scope };
+
+  const node = withContext(childCtx, () => {
+    const focus = createFocusController(ctx.state, scope);
+
+    return Box({
+      children: props.children,
+      onKeyPress(event) {
+        if (event.name === "tab") {
+          if (event.shift) {
+            focus.prev();
+          } else {
+            focus.next();
+          }
+          return true;
+        }
+        return false;
+      },
+    });
+  });
+
+  // Store scope reference on node
+  (node as NodeWithFocusScope)._focusScope = scope;
+
+  // Collect focusable nodes into this scope
+  collectFocusableInScope(node, scope);
+
+  // Auto-focus first focusable node if nothing is focused yet
+  if (scope.focusableNodes.length > 0 && ctx.state.focusedNode === null) {
+    const autoFocusIndex = scope.focusableNodes.findIndex((n) => n.autoFocus);
+    if (autoFocusIndex !== -1) {
+      scope.focusedIndex = autoFocusIndex;
+      ctx.state.focusedNode = scope.focusableNodes[autoFocusIndex];
+    } else {
+      scope.focusedIndex = 0;
+      ctx.state.focusedNode = scope.focusableNodes[0];
+    }
+  }
+
+  return node;
+}
+
 /**
  * Convert runtime Node to layout system's LayoutNode.
  * Resolves reactive styles and handles children as either array or getter function.
@@ -1108,49 +1486,28 @@ function routeEvent(state: RuntimeState, event: InputEvent): void {
 }
 
 /**
- * Find first focusable node in depth-first order.
- * Used to initialize focus after mount.
- */
-function findFocusable(node: Node, preferAutoFocus: boolean): Node | null {
-  // If preferAutoFocus, look for autoFocus first
-  if (preferAutoFocus && node.autoFocus && node.focusable) {
-    return node;
-  }
-
-  // Get children (may be a getter for Show/For)
-  const children =
-    typeof node.children === "function"
-      ? (node.children as () => Node[])()
-      : (node.children ?? []);
-
-  // Check children recursively
-  for (const child of children) {
-    const result = findFocusable(child, preferAutoFocus);
-    if (result) return result;
-  }
-
-  // If not preferAutoFocus pass, check this node
-  if (!preferAutoFocus && node.focusable) {
-    return node;
-  }
-
-  return null;
-}
-
-/**
  * Initialize focus after component tree is built.
- * First tries to find a node with autoFocus, otherwise falls back to first focusable.
+ *
+ * Collects focusable nodes into the root scope, then focuses either
+ * the first node with autoFocus or the first focusable node.
  */
-function initializeFocus(state: RuntimeState): void {
-  // First pass: look for autoFocus
-  let focused = findFocusable(state.root, true);
+export function initializeFocus(state: RuntimeState): void {
+  // Clear and collect focusable nodes into root scope
+  state.rootScope.focusableNodes = [];
+  collectFocusableInScope(state.root, state.rootScope);
 
-  // Second pass: first focusable if no autoFocus found
-  if (!focused) {
-    focused = findFocusable(state.root, false);
+  const { focusableNodes } = state.rootScope;
+
+  // Find autoFocus node
+  const autoFocusIndex = focusableNodes.findIndex((n) => n.autoFocus);
+
+  if (autoFocusIndex !== -1) {
+    state.rootScope.focusedIndex = autoFocusIndex;
+    state.focusedNode = focusableNodes[autoFocusIndex];
+  } else if (focusableNodes.length > 0) {
+    state.rootScope.focusedIndex = 0;
+    state.focusedNode = focusableNodes[0];
   }
-
-  state.focusedNode = focused;
 }
 
 /**
@@ -1250,9 +1607,12 @@ export function mount(component: () => Node, options?: MountOptions): App {
     { mouse: opts.mouse },
   );
 
-  // Build component tree in a root scope
+  // Create runtime context for component construction
+  const ctx: RuntimeContext = { state, currentScope: state.rootScope };
+
+  // Build component tree within context
   state.rootDispose = createRoot((dispose) => {
-    state.root = component();
+    state.root = withContext(ctx, () => component());
     return dispose;
   });
 
