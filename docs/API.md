@@ -99,6 +99,9 @@ Box({
   // visibility
   display: 'none',             // () => condition ? 'flex' : 'none'
 
+  // visual
+  backgroundColor: '#1a1a2e',  // name | '#rrggbb' | [r, g, b]
+
   // children
   children: [...],
 });
@@ -425,7 +428,7 @@ Text({
 ```typescript
 // Layout primitives
 mount(component, options?)
-Box(props)           // { children, ...flexStyle, ...eventHandlers }
+Box(props)           // { children, backgroundColor?, ...flexStyle, ...eventHandlers }
 Text(props)          // { content, ...textStyle, ...eventHandlers }
 
 // Conditional rendering and lists

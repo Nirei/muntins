@@ -588,6 +588,7 @@ export function flushFrame(stdout: NodeJS.WriteStream, content: string): void {
 /** Props for Box component. */
 export interface BoxProps extends Partial<FlexStyle> {
   children?: Node[];
+  backgroundColor?: Color | (() => Color);
   focusable?: boolean;
   autoFocus?: boolean;
   ref?: Ref;
@@ -826,12 +827,14 @@ function renderText(
 /**
  * Creates a Box node - a layout container that supports reactive styles and event handlers.
  *
- * Box is the fundamental container primitive. It has no measure or render functions;
- * its size is determined by flexbox layout based on its children.
+ * Box is the fundamental container primitive. When backgroundColor is set, Box renders
+ * its background; otherwise it's a pure layout container with no render overhead.
+ * Size is determined by flexbox layout based on its children.
  */
 export function Box(props: BoxProps): Node {
   const {
     children = [],
+    backgroundColor,
     focusable,
     autoFocus,
     ref,
@@ -863,6 +866,17 @@ export function Box(props: BoxProps): Node {
     onMouseMove,
     onScroll,
     onHover,
+
+    // Add render function when backgroundColor is set
+    render: backgroundColor
+      ? (x, y, width, height, buffer) => {
+          const bg =
+            typeof backgroundColor === "function"
+              ? backgroundColor()
+              : backgroundColor;
+          buffer.fillRect(x, y, width, height, " ", DEFAULT_COLOR, bg, 0);
+        }
+      : undefined,
   };
 
   // Bind ref

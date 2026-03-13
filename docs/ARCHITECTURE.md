@@ -84,7 +84,7 @@ interface LayoutResult {
 
 - **Integer arithmetic throughout.** Terminal cells are discrete. Use integer division with a remainder-distribution strategy: if 10 columns split among 3 items → 4, 3, 3 (last item absorbs rounding). This avoids all floating-point rounding issues that plague browser implementations.
 - **Fixed root dimensions.** The outermost container always knows its size (`process.stdout.columns × process.stdout.rows`), eliminating indefinite-size resolution complexity.
-- **Simplified box model.** Borders are always exactly 1 character wide. Padding is in whole characters. No `border-box` vs `content-box` distinction needed.
+- **Simplified box model.** Borders are always exactly 1 character wide. Padding is in whole characters. No `border-box` vs `content-box` distinction needed. Box supports `backgroundColor` for filling its area with color, and borders for visual framing.
 - **No intrinsic sizing complexity.** Text width equals the string's display width (accounting for double-width CJK/emoji via `wcwidth`). Text height equals line count after wrapping. No font metrics, no sub-pixel text measurement.
 - **Skip rarely-needed features.** `order` property, `wrap-reverse`, baseline alignment, writing modes, and `visibility: collapse` are unnecessary for most TUI applications. Reverse flex directions can be implemented by simply reversing the children array.
 
@@ -219,7 +219,7 @@ The library decomposes into five independent modules with clean interfaces betwe
 - **`core/layout.ts`**, `computeLayout(node, availableWidth, availableHeight) → LayoutResult`. Pure function, no side effects, no dependency on signals. Takes a tree of `{style, children, measure?}` nodes, returns a tree of `{x, y, width, height}` results.
 - **`core/buffer.ts`**, `Buffer` class with internal double-buffering. Provides `set()`, `writeText()`, `clear()`, `fillRect()` for painting, and `flush()` which diffs, serializes ANSI, and syncs buffers in one call. Handles double-width characters, style state tracking across frames, cursor optimization, and dirty region tracking. Colors are stored internally as packed integers for zero-allocation comparison.
 - **`core/input.ts`**, State-machine parser, terminal mode setup/teardown, event type definitions. Converts raw stdin bytes into typed `InputEvent` objects.
-- **`core/runtime.ts`**, The glue layer. Manages the render cycle: processes input events in a batch, runs layout if dirty, paints into the buffer, calls `buffer.flush()`. Provides the component primitives (`Box`, `Text`, `Show`, `For`) that wire signals to layout nodes and buffer writes.
+- **`core/runtime.ts`**, The glue layer. Manages the render cycle: processes input events in a batch, runs layout if dirty, paints into the buffer, calls `buffer.flush()`. Provides the component primitives (`Box`, `Text`, `Show`, `For`) that wire signals to layout nodes and buffer writes. Box is primarily a layout container but can paint background colors and borders. Text is a leaf node that measures and renders text content.
 
 ## Conclusion
 
