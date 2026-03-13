@@ -589,7 +589,7 @@ export function flushFrame(stdout: NodeJS.WriteStream, content: string): void {
 export interface BoxProps extends Partial<FlexStyle> {
   children?: Node[];
   backgroundColor?: Color | (() => Color);
-  border?: BorderProp;
+  border?: BorderProp | (() => BorderProp);
   borderColor?: Color | (() => Color);
   borderStyle?: BorderStyleName;
   focusable?: boolean;
@@ -923,6 +923,24 @@ function getBorderStyleName(
 }
 
 /**
+ * Get the character for a corner position based on which adjacent edges exist.
+ * Returns corner char if both edges exist, edge char if one exists, undefined if neither.
+ */
+function getCornerChar(
+  chars: BorderChars,
+  hasEdge1: boolean,
+  hasEdge2: boolean,
+  corner: string,
+  edge1Char: string,
+  edge2Char: string,
+): string | undefined {
+  if (hasEdge1 && hasEdge2) return corner;
+  if (hasEdge1) return edge1Char;
+  if (hasEdge2) return edge2Char;
+  return undefined;
+}
+
+/**
  * Render border onto the buffer.
  * Uses correct corner logic: corners only render when both adjacent edges exist.
  */
@@ -934,97 +952,58 @@ function renderBorder(
   height: number,
   borders: { top: boolean; end: boolean; bottom: boolean; start: boolean },
   styleName: BorderStyleName,
-  color: Color,
+  fg: Color,
+  bg: Color,
 ): void {
   const chars = BORDER_CHARS[styleName];
   const { top, end, bottom, start } = borders;
 
-  // Draw top edge
+  // Draw horizontal edges
   if (top) {
     const startCol = start ? x + 1 : x;
     const endCol = end ? x + width - 1 : x + width;
     for (let col = startCol; col < endCol; col++) {
-      buffer.set(col, y, chars.h, color, DEFAULT_COLOR, 0);
+      buffer.set(col, y, chars.h, fg, bg, 0);
     }
   }
-
-  // Draw bottom edge
   if (bottom) {
     const startCol = start ? x + 1 : x;
     const endCol = end ? x + width - 1 : x + width;
     for (let col = startCol; col < endCol; col++) {
-      buffer.set(col, y + height - 1, chars.h, color, DEFAULT_COLOR, 0);
+      buffer.set(col, y + height - 1, chars.h, fg, bg, 0);
     }
   }
 
-  // Draw left (start) edge
+  // Draw vertical edges
   if (start) {
     const startRow = top ? y + 1 : y;
     const endRow = bottom ? y + height - 1 : y + height;
     for (let row = startRow; row < endRow; row++) {
-      buffer.set(x, row, chars.v, color, DEFAULT_COLOR, 0);
+      buffer.set(x, row, chars.v, fg, bg, 0);
     }
   }
-
-  // Draw right (end) edge
   if (end) {
     const startRow = top ? y + 1 : y;
     const endRow = bottom ? y + height - 1 : y + height;
     for (let row = startRow; row < endRow; row++) {
-      buffer.set(x + width - 1, row, chars.v, color, DEFAULT_COLOR, 0);
+      buffer.set(x + width - 1, row, chars.v, fg, bg, 0);
     }
   }
 
-  // Draw corners (only when both adjacent edges exist)
-  // Top-left corner
-  if (top && start) {
-    buffer.set(x, y, chars.tl, color, DEFAULT_COLOR, 0);
-  } else if (top && !start) {
-    // Extend top edge to left corner position
-    buffer.set(x, y, chars.h, color, DEFAULT_COLOR, 0);
-  } else if (start && !top) {
-    // Extend left edge to top corner position
-    buffer.set(x, y, chars.v, color, DEFAULT_COLOR, 0);
-  }
+  // Draw corners using table-driven approach
+  const corners: [number, number, boolean, boolean, string, string, string][] =
+    [
+      [x, y, top, start, chars.tl, chars.h, chars.v], // top-left
+      [x + width - 1, y, top, end, chars.tr, chars.h, chars.v], // top-right
+      [x, y + height - 1, bottom, start, chars.bl, chars.h, chars.v], // bottom-left
+      [x + width - 1, y + height - 1, bottom, end, chars.br, chars.h, chars.v], // bottom-right
+    ];
 
-  // Top-right corner
-  if (top && end) {
-    buffer.set(x + width - 1, y, chars.tr, color, DEFAULT_COLOR, 0);
-  } else if (top && !end) {
-    // Extend top edge to right corner position
-    buffer.set(x + width - 1, y, chars.h, color, DEFAULT_COLOR, 0);
-  } else if (end && !top) {
-    // Extend right edge to top corner position
-    buffer.set(x + width - 1, y, chars.v, color, DEFAULT_COLOR, 0);
-  }
-
-  // Bottom-left corner
-  if (bottom && start) {
-    buffer.set(x, y + height - 1, chars.bl, color, DEFAULT_COLOR, 0);
-  } else if (bottom && !start) {
-    // Extend bottom edge to left corner position
-    buffer.set(x, y + height - 1, chars.h, color, DEFAULT_COLOR, 0);
-  } else if (start && !bottom) {
-    // Extend left edge to bottom corner position
-    buffer.set(x, y + height - 1, chars.v, color, DEFAULT_COLOR, 0);
-  }
-
-  // Bottom-right corner
-  if (bottom && end) {
-    buffer.set(
-      x + width - 1,
-      y + height - 1,
-      chars.br,
-      color,
-      DEFAULT_COLOR,
-      0,
-    );
-  } else if (bottom && !end) {
-    // Extend bottom edge to right corner position
-    buffer.set(x + width - 1, y + height - 1, chars.h, color, DEFAULT_COLOR, 0);
-  } else if (end && !bottom) {
-    // Extend right edge to bottom corner position
-    buffer.set(x + width - 1, y + height - 1, chars.v, color, DEFAULT_COLOR, 0);
+  for (const [cx, cy, hasHoriz, hasVert, corner, hChar, vChar] of corners) {
+    const char = getCornerChar(chars, hasHoriz, hasVert, corner, hChar, vChar);
+    if (char) {
+      buffer.set(cx, cy, char, fg, bg, 0);
+    }
   }
 }
 
@@ -1054,16 +1033,14 @@ export function Box(props: BoxProps): Node {
     ...styleProps
   } = props;
 
-  // Parse border prop into individual side flags
-  const borderFlags = parseBorderProp(border);
-  const hasBorder =
-    borderFlags.top ||
-    borderFlags.end ||
-    borderFlags.bottom ||
-    borderFlags.start;
+  // Reactive border getter - evaluates border prop (which may be a signal)
+  const getBorderFlags = () => {
+    const borderValue = typeof border === "function" ? border() : border;
+    return parseBorderProp(borderValue);
+  };
 
-  // Determine if we need a render function
-  const needsRender = backgroundColor !== undefined || hasBorder;
+  // Determine if we need a render function (border prop could be reactive)
+  const needsRender = backgroundColor !== undefined || border !== undefined;
 
   const node: Node = {
     get style() {
@@ -1073,7 +1050,8 @@ export function Box(props: BoxProps): Node {
         resolved[key] =
           typeof value === "function" ? (value as () => unknown)() : value;
       }
-      // Add border flags to FlexStyle for layout
+      // Add border flags to FlexStyle for layout (reactive)
+      const borderFlags = getBorderFlags();
       return {
         ...DEFAULT_FLEX_STYLE,
         ...resolved,
@@ -1096,24 +1074,37 @@ export function Box(props: BoxProps): Node {
     // Render function when backgroundColor or border is set
     render: needsRender
       ? (x, y, width, height, buffer) => {
+          // Resolve background color (may be reactive)
+          const bg =
+            backgroundColor !== undefined
+              ? typeof backgroundColor === "function"
+                ? backgroundColor()
+                : backgroundColor
+              : DEFAULT_COLOR;
+
           // Render background first (if set)
           if (backgroundColor !== undefined) {
-            const bg =
-              typeof backgroundColor === "function"
-                ? backgroundColor()
-                : backgroundColor;
             buffer.fillRect(x, y, width, height, " ", DEFAULT_COLOR, bg, 0);
           }
 
-          // Render border (if set)
+          // Render border (if set) - reactive evaluation
+          const borderFlags = getBorderFlags();
+          const hasBorder =
+            borderFlags.top ||
+            borderFlags.end ||
+            borderFlags.bottom ||
+            borderFlags.start;
+
           if (hasBorder) {
-            const color =
+            const fg =
               borderColor !== undefined
                 ? typeof borderColor === "function"
                   ? borderColor()
                   : borderColor
                 : DEFAULT_COLOR;
-            const styleName = getBorderStyleName(border, borderStyle);
+            const borderValue =
+              typeof border === "function" ? border() : border;
+            const styleName = getBorderStyleName(borderValue, borderStyle);
             renderBorder(
               buffer,
               x,
@@ -1122,7 +1113,8 @@ export function Box(props: BoxProps): Node {
               height,
               borderFlags,
               styleName,
-              color,
+              fg,
+              bg,
             );
           }
         }

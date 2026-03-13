@@ -388,7 +388,7 @@ describe("Box borders", () => {
     assert.ok(node.render, "render should be defined when border is set");
   });
 
-  it("border: false has no borders", () => {
+  it("border: false has no borders in style", () => {
     const node = Box({ border: false, width: 5, height: 3 });
 
     const style = typeof node.style === "function" ? node.style() : node.style;
@@ -396,7 +396,8 @@ describe("Box borders", () => {
     assert.strictEqual(style.borderEnd, false);
     assert.strictEqual(style.borderBottom, false);
     assert.strictEqual(style.borderStart, false);
-    assert.strictEqual(node.render, undefined);
+    // render exists to support reactivity, but draws nothing
+    assert.ok(node.render, "render exists when border prop is set");
   });
 
   it("border: 'round' sets style on all sides", () => {
@@ -602,6 +603,27 @@ describe("Box borders", () => {
     }
   });
 
+  it("reactive border prop updates", () => {
+    const [border, setBorder] = createSignal<boolean>(false);
+    const node = Box({ border, width: 5, height: 3 });
+    assert.ok(node.render);
+
+    const buffer = new RenderBuffer(5, 3);
+
+    // Initially no border
+    node.render(0, 0, 5, 3, buffer);
+    assert.strictEqual(buffer.getSymbol(0, 0), " ");
+
+    // Enable border
+    setBorder(true);
+    node.render(0, 0, 5, 3, buffer);
+    assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.single.tl);
+
+    // Style getter also reflects reactive changes
+    const style = typeof node.style === "function" ? node.style() : node.style;
+    assert.strictEqual(style.borderTop, true);
+  });
+
   it("empty box with border renders correctly", () => {
     const node = Box({ border: true, width: 3, height: 2 });
     assert.ok(node.render);
@@ -763,6 +785,11 @@ describe("Box borders", () => {
     // Interior cells should have background
     const interiorBg = buffer.getBg(2, 1);
     assert.strictEqual(interiorBg.type, "named");
+
+    // Border cells should also have the background color
+    const borderBg = buffer.getBg(0, 0);
+    assert.strictEqual(borderBg.type, "named");
+    assert.strictEqual((borderBg as { type: "named"; index: number }).index, 4);
   });
 });
 
