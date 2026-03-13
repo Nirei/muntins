@@ -296,7 +296,7 @@ function findParentScope(state: RuntimeState, node: Node): FocusScope {
  * Register focusable nodes from a newly created subtree into the appropriate scope.
  * Called when Show/For creates new child nodes.
  */
-export function registerSubtreeFocusables(
+function registerSubtreeFocusables(
   state: RuntimeState,
   subtreeRoot: Node,
 ): void {
@@ -305,6 +305,54 @@ export function registerSubtreeFocusables(
 
   // Collect focusable nodes from the new subtree
   collectFocusableInScope(subtreeRoot, scope);
+}
+
+/**
+ * Unregister all focusable nodes from a subtree being disposed.
+ * Removes nodes from their containing scope's focusableNodes array.
+ */
+function unregisterSubtreeFocusables(
+  state: RuntimeState,
+  subtreeRoot: Node,
+): void {
+  // Find which scope contains these nodes
+  const scope = findParentScope(state, subtreeRoot);
+
+  // Collect all focusable nodes in the subtree
+  const nodesToRemove: Node[] = [];
+  collectFocusableInScope(subtreeRoot, {
+    parent: null,
+    focusableNodes: nodesToRemove,
+    focusedIndex: -1,
+    trap: false,
+  });
+
+  // Remove each from the scope's focusableNodes
+  for (const node of nodesToRemove) {
+    const index = scope.focusableNodes.indexOf(node);
+    if (index !== -1) {
+      scope.focusableNodes.splice(index, 1);
+      // Adjust focusedIndex if needed
+      if (scope.focusedIndex > index) {
+        scope.focusedIndex--;
+      } else if (scope.focusedIndex === index) {
+        scope.focusedIndex = -1;
+      }
+    }
+  }
+}
+
+/**
+ * Count total focusable nodes in a scope and all its ancestors.
+ */
+function countFocusablesInAncestors(scope: FocusScope | null): number {
+  let count = 0;
+  let current = scope;
+  while (current) {
+    count += current.focusableNodes.length;
+    current = current.parent;
+  }
+  return count;
 }
 
 /**
@@ -337,12 +385,12 @@ export function focusNext(state: RuntimeState, scope: FocusScope): void {
       // Wrap within scope
       scope.focusedIndex = 0;
       state.setFocusedNode(focusableNodes[0]);
-    } else if (scope.parent) {
-      // Escape to parent
+    } else if (scope.parent && countFocusablesInAncestors(scope.parent) > 0) {
+      // Escape to parent (only if parent has focusables)
       scope.focusedIndex = -1;
       focusNext(state, scope.parent);
     } else {
-      // Root scope — wrap
+      // No parent focusables or at root — wrap
       scope.focusedIndex = 0;
       state.setFocusedNode(focusableNodes[0]);
     }
@@ -380,12 +428,12 @@ export function focusPrev(state: RuntimeState, scope: FocusScope): void {
       // Wrap within scope
       scope.focusedIndex = focusableNodes.length - 1;
       state.setFocusedNode(focusableNodes[scope.focusedIndex]);
-    } else if (scope.parent) {
-      // Escape to parent
+    } else if (scope.parent && countFocusablesInAncestors(scope.parent) > 0) {
+      // Escape to parent (only if parent has focusables)
       scope.focusedIndex = -1;
       focusPrev(state, scope.parent);
     } else {
-      // Root scope — wrap
+      // No parent focusables or at root — wrap
       scope.focusedIndex = focusableNodes.length - 1;
       state.setFocusedNode(focusableNodes[scope.focusedIndex]);
     }
@@ -428,11 +476,7 @@ function findScopeContaining(
 /**
  * Set focus to a specific node via ref.
  */
-export function focusSet(
-  state: RuntimeState,
-  scope: FocusScope,
-  ref: Ref,
-): void {
+function focusSet(state: RuntimeState, scope: FocusScope, ref: Ref): void {
   if (!ref.current?.focusable) return;
 
   // Find which scope contains this node
@@ -550,6 +594,7 @@ export interface BoxProps extends Partial<FlexStyle> {
   onKeyPress?: (key: KeyEvent) => boolean | undefined;
   onMousePress?: (event: MouseEvent) => void;
   onMouseRelease?: (event: MouseEvent) => void;
+  onMouseMove?: (event: MouseEvent) => void;
   onScroll?: (event: ScrollEvent) => void;
   onHover?: (hovering: boolean) => void;
 }
@@ -793,6 +838,7 @@ export function Box(props: BoxProps): Node {
     onKeyPress,
     onMousePress,
     onMouseRelease,
+    onMouseMove,
     onScroll,
     onHover,
     ...styleProps
@@ -814,6 +860,7 @@ export function Box(props: BoxProps): Node {
     onKeyPress,
     onMousePress,
     onMouseRelease,
+    onMouseMove,
     onScroll,
     onHover,
   };
@@ -1371,7 +1418,8 @@ export function isNodeInSubtree(node: Node, subtreeRoot: Node): boolean {
 
 /**
  * Clean up focus and hover state when a subtree is being disposed.
- * If the focused or hovered node is inside the subtree, clears the reference.
+ * Removes all focusable nodes in the subtree from their scope, clears focus
+ * if the focused node is being disposed, and clears hover state if needed.
  *
  * Must be called before disposing a subtree to prevent stale references.
  */
@@ -1382,21 +1430,11 @@ export function cleanupSubtreeState(
   // Check if focused node is in the subtree being disposed
   const focused = state.focusedNode();
   if (focused && isNodeInSubtree(focused, subtreeRoot)) {
-    // Remove from scope's focusableNodes and clear focus
-    const scope = findScopeContaining(state.rootScope, state.root, focused);
-    if (scope) {
-      const index = scope.focusableNodes.indexOf(focused);
-      if (index !== -1) {
-        scope.focusableNodes.splice(index, 1);
-        if (scope.focusedIndex === index) {
-          scope.focusedIndex = -1;
-        } else if (scope.focusedIndex > index) {
-          scope.focusedIndex--;
-        }
-      }
-    }
     state.setFocusedNode(null);
   }
+
+  // Remove all focusable nodes in the subtree from their scope
+  unregisterSubtreeFocusables(state, subtreeRoot);
 
   // Check if hovered node is in the subtree being disposed
   if (
@@ -1693,7 +1731,7 @@ export function initializeFocus(state: RuntimeState): void {
   const targetNode = allFocusables.find((n) => n.autoFocus) ?? allFocusables[0];
 
   // Find which scope contains this node and update its state
-  const scope = findScopeForNode(state.root, targetNode, state.rootScope);
+  const scope = findScopeForNode(targetNode, state.rootScope);
   const index = scope.focusableNodes.indexOf(targetNode);
   if (index !== -1) {
     scope.focusedIndex = index;
@@ -1704,11 +1742,7 @@ export function initializeFocus(state: RuntimeState): void {
 /**
  * Find the scope that contains a node by traversing scope boundaries.
  */
-function findScopeForNode(
-  root: Node,
-  target: Node,
-  defaultScope: FocusScope,
-): FocusScope {
+function findScopeForNode(target: Node, defaultScope: FocusScope): FocusScope {
   // Walk up from target to find the nearest scope
   let current: Node | undefined = target;
   while (current) {
@@ -1751,9 +1785,14 @@ function handleEvent(state: RuntimeState, event: InputEvent): void {
 /**
  * Internal unmount function.
  */
-function unmountState(state: RuntimeState): void {
+function unmountState(state: RuntimeState, cleanupHandlers?: () => void): void {
   const { options } = state;
   const { stdout } = options;
+
+  // Remove signal handlers if provided
+  if (cleanupHandlers) {
+    cleanupHandlers();
+  }
 
   // Stop render loop
   if (state.frameInterval) {
@@ -1847,10 +1886,52 @@ export function mount(component: () => Node, options?: MountOptions): App {
     }, interval);
   }
 
+  // Track if already unmounted to prevent double cleanup
+  let unmounted = false;
+
+  // Setup signal handlers for clean terminal restoration on exit
+  const handleExit = () => {
+    if (!unmounted) {
+      unmounted = true;
+      unmountState(state, removeSignalHandlers);
+    }
+  };
+
+  const handleSignal = (signal: NodeJS.Signals) => {
+    handleExit();
+    // Re-raise signal with default handler
+    process.exit(signal === "SIGINT" ? 130 : 143);
+  };
+
+  const handleUncaughtException = (err: Error) => {
+    handleExit();
+    console.error(err);
+    process.exit(1);
+  };
+
+  // Store handlers for removal
+  const sigintHandler = () => handleSignal("SIGINT");
+  const sigtermHandler = () => handleSignal("SIGTERM");
+
+  process.on("exit", handleExit);
+  process.on("SIGINT", sigintHandler);
+  process.on("SIGTERM", sigtermHandler);
+  process.on("uncaughtException", handleUncaughtException);
+
+  const removeSignalHandlers = () => {
+    process.off("exit", handleExit);
+    process.off("SIGINT", sigintHandler);
+    process.off("SIGTERM", sigtermHandler);
+    process.off("uncaughtException", handleUncaughtException);
+  };
+
   // Return app handle
   return {
     unmount() {
-      unmountState(state);
+      if (!unmounted) {
+        unmounted = true;
+        unmountState(state, removeSignalHandlers);
+      }
     },
   };
 }

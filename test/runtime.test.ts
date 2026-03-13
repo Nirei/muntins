@@ -954,6 +954,105 @@ describe("focus cleanup on Show disposal", () => {
   });
 });
 
+describe("stale focusableNodes cleanup", () => {
+  it("removes all focusable nodes when Show hides unfocused nodes", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+    const [visible, setVisible] = createSignal(true);
+    const firstRef = createRef();
+    let focusController!: FocusController;
+    const keyPresses: string[] = [];
+
+    const app = mount(
+      () => {
+        focusController = useFocus();
+        return TabFocus({
+          children: [
+            Text({
+              content: "first",
+              focusable: true,
+              autoFocus: true,
+              ref: firstRef,
+              onKeyPress: () => {
+                keyPresses.push("first");
+                return false;
+              },
+            }),
+            Show({
+              when: visible,
+              children: () =>
+                Box({
+                  children: [
+                    Text({
+                      content: "second",
+                      focusable: true,
+                      onKeyPress: () => {
+                        keyPresses.push("second");
+                        return false;
+                      },
+                    }),
+                    Text({
+                      content: "third",
+                      focusable: true,
+                      onKeyPress: () => {
+                        keyPresses.push("third");
+                        return false;
+                      },
+                    }),
+                  ],
+                }),
+            }),
+          ],
+        });
+      },
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+        fps: 0,
+      },
+    );
+
+    // Initially 3 focusable nodes: first, second, third
+    // first is focused via autoFocus
+    assert.strictEqual(focusController.current(), firstRef.current);
+
+    // Tab to second
+    mockStdin.emit("keypress", "\t", { name: "tab", sequence: "\t" });
+    keyPresses.length = 0;
+    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    assert.deepStrictEqual(keyPresses, ["second"]);
+
+    // Tab to third
+    mockStdin.emit("keypress", "\t", { name: "tab", sequence: "\t" });
+    keyPresses.length = 0;
+    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    assert.deepStrictEqual(keyPresses, ["third"]);
+
+    // Tab back to first (wrap)
+    mockStdin.emit("keypress", "\t", { name: "tab", sequence: "\t" });
+    keyPresses.length = 0;
+    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    assert.deepStrictEqual(keyPresses, ["first"]);
+
+    // Now hide the Show content (second, third are removed but not focused)
+    setVisible(false);
+
+    // Tab should stay on first (only focusable node left)
+    // If stale nodes remain in focusableNodes, Tab could try to focus disposed nodes
+    mockStdin.emit("keypress", "\t", { name: "tab", sequence: "\t" });
+    keyPresses.length = 0;
+    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    // Should still be on first since it's the only focusable node
+    assert.deepStrictEqual(
+      keyPresses,
+      ["first"],
+      "After hiding Show, only first should be focusable",
+    );
+
+    app.unmount();
+  });
+});
+
 describe("focus cleanup on For disposal", () => {
   it("clears focus when focused item is removed from For", () => {
     const mockStdin = createMockStdin();
@@ -1276,6 +1375,75 @@ describe("mount", () => {
 
     assert.ok(!mockStdout.written.includes("\x1b[?1049h"));
     app.unmount();
+  });
+
+  it("multiple mount/unmount cycles work cleanly", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    // First cycle
+    const app1 = mount(() => Text({ content: "first" }), {
+      stdin: mockStdin as unknown as NodeJS.ReadStream,
+      stdout: mockStdout as unknown as NodeJS.WriteStream,
+    });
+    assert.ok(mockStdout.written.includes("first"));
+    app1.unmount();
+
+    // Reset output tracking
+    mockStdout.written = "";
+
+    // Second cycle - should work identically
+    const app2 = mount(() => Text({ content: "second" }), {
+      stdin: mockStdin as unknown as NodeJS.ReadStream,
+      stdout: mockStdout as unknown as NodeJS.WriteStream,
+    });
+    assert.ok(mockStdout.written.includes("second"));
+    app2.unmount();
+
+    // Third cycle with focus to verify no stale focus state
+    mockStdout.written = "";
+    const focusedNodes: string[] = [];
+
+    const app3 = mount(
+      () =>
+        TabFocus({
+          children: [
+            Text({
+              content: "third-a",
+              focusable: true,
+              autoFocus: true,
+              onKeyPress: () => {
+                focusedNodes.push("a");
+                return false;
+              },
+            }),
+            Text({
+              content: "third-b",
+              focusable: true,
+              onKeyPress: () => {
+                focusedNodes.push("b");
+                return false;
+              },
+            }),
+          ],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+        fps: 0,
+      },
+    );
+
+    // Verify focus works in third cycle
+    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    assert.deepStrictEqual(focusedNodes, ["a"]);
+
+    mockStdin.emit("keypress", "\t", { name: "tab", sequence: "\t" });
+    focusedNodes.length = 0;
+    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    assert.deepStrictEqual(focusedNodes, ["b"]);
+
+    app3.unmount();
   });
 });
 
