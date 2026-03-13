@@ -30,6 +30,8 @@ import {
 } from "./layout.ts";
 import { batch } from "./signals.ts";
 import {
+  type Accessor,
+  type Setter,
   createEffect,
   createRoot,
   createSignal,
@@ -146,8 +148,9 @@ export interface RuntimeState {
   inputParser: { destroy: () => void };
   pendingEvents: InputEvent[];
 
-  // Focus
-  focusedNode: Node | null;
+  // Focus (reactive signal for tracking focus changes)
+  focusedNode: Accessor<Node | null>;
+  setFocusedNode: Setter<Node | null>;
   rootScope: FocusScope;
 
   // Hover and terminal focus
@@ -174,7 +177,8 @@ export interface FocusController {
   next(): void;
   prev(): void;
   set(ref: Ref): void;
-  current(): Node | null;
+  /** Returns a reactive accessor for the currently focused node. */
+  current: Accessor<Node | null>;
 }
 
 /**
@@ -271,6 +275,39 @@ export function collectFocusableInScope(node: Node, scope: FocusScope): void {
 }
 
 /**
+ * Find the focus scope that should contain a node by walking up the tree.
+ * Returns the first scope encountered, or the root scope if none found.
+ */
+function findParentScope(state: RuntimeState, node: Node): FocusScope {
+  let current: Node | undefined = node._parent;
+
+  while (current) {
+    const nodeScope = (current as NodeWithFocusScope)._focusScope;
+    if (nodeScope) {
+      return nodeScope;
+    }
+    current = current._parent;
+  }
+
+  return state.rootScope;
+}
+
+/**
+ * Register focusable nodes from a newly created subtree into the appropriate scope.
+ * Called when Show/For creates new child nodes.
+ */
+export function registerSubtreeFocusables(
+  state: RuntimeState,
+  subtreeRoot: Node,
+): void {
+  // Find which scope should contain these nodes
+  const scope = findParentScope(state, subtreeRoot);
+
+  // Collect focusable nodes from the new subtree
+  collectFocusableInScope(subtreeRoot, scope);
+}
+
+/**
  * Navigate focus to the next focusable node within a scope.
  * Handles wrapping and scope escaping based on trap setting.
  */
@@ -288,7 +325,7 @@ export function focusNext(state: RuntimeState, scope: FocusScope): void {
   if (focusedIndex === -1) {
     // Nothing focused — focus first
     scope.focusedIndex = 0;
-    state.focusedNode = focusableNodes[0];
+    state.setFocusedNode(focusableNodes[0]);
     return;
   }
 
@@ -299,7 +336,7 @@ export function focusNext(state: RuntimeState, scope: FocusScope): void {
     if (scope.trap) {
       // Wrap within scope
       scope.focusedIndex = 0;
-      state.focusedNode = focusableNodes[0];
+      state.setFocusedNode(focusableNodes[0]);
     } else if (scope.parent) {
       // Escape to parent
       scope.focusedIndex = -1;
@@ -307,11 +344,11 @@ export function focusNext(state: RuntimeState, scope: FocusScope): void {
     } else {
       // Root scope — wrap
       scope.focusedIndex = 0;
-      state.focusedNode = focusableNodes[0];
+      state.setFocusedNode(focusableNodes[0]);
     }
   } else {
     scope.focusedIndex = nextIndex;
-    state.focusedNode = focusableNodes[nextIndex];
+    state.setFocusedNode(focusableNodes[nextIndex]);
   }
 }
 
@@ -332,7 +369,7 @@ export function focusPrev(state: RuntimeState, scope: FocusScope): void {
   if (focusedIndex === -1) {
     // Nothing focused — focus last
     scope.focusedIndex = focusableNodes.length - 1;
-    state.focusedNode = focusableNodes[scope.focusedIndex];
+    state.setFocusedNode(focusableNodes[scope.focusedIndex]);
     return;
   }
 
@@ -342,7 +379,7 @@ export function focusPrev(state: RuntimeState, scope: FocusScope): void {
     if (scope.trap) {
       // Wrap within scope
       scope.focusedIndex = focusableNodes.length - 1;
-      state.focusedNode = focusableNodes[scope.focusedIndex];
+      state.setFocusedNode(focusableNodes[scope.focusedIndex]);
     } else if (scope.parent) {
       // Escape to parent
       scope.focusedIndex = -1;
@@ -350,24 +387,41 @@ export function focusPrev(state: RuntimeState, scope: FocusScope): void {
     } else {
       // Root scope — wrap
       scope.focusedIndex = focusableNodes.length - 1;
-      state.focusedNode = focusableNodes[scope.focusedIndex];
+      state.setFocusedNode(focusableNodes[scope.focusedIndex]);
     }
   } else {
     scope.focusedIndex = prevIndex;
-    state.focusedNode = focusableNodes[prevIndex];
+    state.setFocusedNode(focusableNodes[prevIndex]);
   }
 }
 
 /**
- * Find which scope contains a given node.
+ * Find which scope contains a given node by traversing the node tree.
+ *
+ * Walks up from the target node using _parent pointers, looking for the
+ * nearest ancestor that has a _focusScope containing the target node.
+ * Falls back to checking the root scope.
  */
-function findScopeContaining(scope: FocusScope, node: Node): FocusScope | null {
-  if (scope.focusableNodes.includes(node)) {
-    return scope;
+function findScopeContaining(
+  rootScope: FocusScope,
+  root: Node,
+  node: Node,
+): FocusScope | null {
+  // First check if the node is in the root scope
+  if (rootScope.focusableNodes.includes(node)) {
+    return rootScope;
   }
-  // For nested scopes, we'd need to traverse the scope hierarchy
-  // Since scopes are stored on nodes, we'd need to track scope tree
-  // For now, return null if not in immediate scope
+
+  // Walk up the tree from the node, looking for a scope that contains it
+  let current: Node | undefined = node._parent;
+  while (current) {
+    const nodeScope = (current as NodeWithFocusScope)._focusScope;
+    if (nodeScope?.focusableNodes.includes(node)) {
+      return nodeScope;
+    }
+    current = current._parent;
+  }
+
   return null;
 }
 
@@ -379,10 +433,14 @@ export function focusSet(
   scope: FocusScope,
   ref: Ref,
 ): void {
-  if (!ref.current || !ref.current.focusable) return;
+  if (!ref.current?.focusable) return;
 
   // Find which scope contains this node
-  const targetScope = findScopeContaining(state.rootScope, ref.current);
+  const targetScope = findScopeContaining(
+    state.rootScope,
+    state.root,
+    ref.current,
+  );
   if (!targetScope) return;
 
   const index = targetScope.focusableNodes.indexOf(ref.current);
@@ -391,7 +449,7 @@ export function focusSet(
     scope.focusedIndex = -1;
     // Set focus in target scope
     targetScope.focusedIndex = index;
-    state.focusedNode = ref.current;
+    state.setFocusedNode(ref.current);
   }
 }
 
@@ -412,9 +470,7 @@ function createFocusController(
     set(ref: Ref) {
       focusSet(state, scope, ref);
     },
-    current() {
-      return state.focusedNode;
-    },
+    current: state.focusedNode,
   };
 }
 
@@ -858,8 +914,12 @@ export interface ShowProps<T> {
 export function Show<T>(props: ShowProps<T>): Node {
   const { when: condition, children: childrenBranch, fallback } = props;
 
+  // Capture context for cleanup (may be null if used outside mount)
+  const ctx = activeContext;
+
   const children: Node[] = [];
   let currentDispose: (() => void) | null = null;
+  let currentChild: Node | null = null;
 
   // Define container first so children can reference it.
   // Use display: "contents" so Show doesn't affect parent layout.
@@ -870,15 +930,25 @@ export function Show<T>(props: ShowProps<T>): Node {
     },
   };
 
+  // Helper to clean up previous subtree
+  const disposeChild = () => {
+    if (currentDispose) {
+      // Clean up focus/hover state before disposing
+      if (ctx && currentChild) {
+        cleanupSubtreeState(ctx.state, currentChild);
+      }
+      currentDispose();
+      currentDispose = null;
+      currentChild = null;
+    }
+  };
+
   // Create a reactive effect that updates the child
   createEffect(() => {
     const value = condition();
 
     // Dispose previous subtree
-    if (currentDispose) {
-      currentDispose();
-      currentDispose = null;
-    }
+    disposeChild();
 
     // Clear children array
     children.length = 0;
@@ -889,6 +959,13 @@ export function Show<T>(props: ShowProps<T>): Node {
         const node = childrenBranch(value);
         node._parent = container;
         children.push(node);
+        currentChild = node;
+
+        // Register focusable nodes from new subtree
+        if (ctx) {
+          registerSubtreeFocusables(ctx.state, node);
+        }
+
         return dispose;
       });
     } else if (fallback) {
@@ -896,6 +973,13 @@ export function Show<T>(props: ShowProps<T>): Node {
         const node = fallback();
         node._parent = container;
         children.push(node);
+        currentChild = node;
+
+        // Register focusable nodes from new subtree
+        if (ctx) {
+          registerSubtreeFocusables(ctx.state, node);
+        }
+
         return dispose;
       });
     }
@@ -903,10 +987,7 @@ export function Show<T>(props: ShowProps<T>): Node {
 
   // Ensure we clean up when Show itself is disposed
   onCleanup(() => {
-    if (currentDispose) {
-      currentDispose();
-      currentDispose = null;
-    }
+    disposeChild();
   });
 
   return container;
@@ -944,6 +1025,9 @@ interface ForItemEntry<T> {
 export function For<T>(props: ForProps<T>): Node {
   const { each: items, render, key: keyFn } = props;
 
+  // Capture context for cleanup (may be null if used outside mount)
+  const ctx = activeContext;
+
   const children: Node[] = [];
   // Map from key to array of entries (supports duplicates)
   const itemRoots: Map<unknown, ForItemEntry<T>[]> = new Map();
@@ -958,6 +1042,15 @@ export function For<T>(props: ForProps<T>): Node {
     get children() {
       return children;
     },
+  };
+
+  // Helper to dispose an entry with proper focus/hover cleanup
+  const disposeEntry = (entry: ForItemEntry<T>) => {
+    if (ctx) {
+      cleanupSubtreeState(ctx.state, entry.node);
+    }
+    entry.node._parent = undefined;
+    entry.dispose();
   };
 
   // Helper to create a new entry with its own detached root.
@@ -985,6 +1078,11 @@ export function For<T>(props: ForProps<T>): Node {
           existing.push(entry);
         } else {
           itemRoots.set(key, [entry]);
+        }
+
+        // Register focusable nodes from new subtree
+        if (ctx) {
+          registerSubtreeFocusables(ctx.state, node);
         }
 
         return dispose;
@@ -1039,16 +1137,14 @@ export function For<T>(props: ForProps<T>): Node {
       if (needed === 0) {
         // Key no longer exists — dispose all entries
         for (const entry of entries) {
-          entry.node._parent = undefined;
-          entry.dispose();
+          disposeEntry(entry);
         }
         itemRoots.delete(key);
       } else if (entries.length > needed) {
         // More entries than needed — dispose excess
         const excess = entries.splice(needed);
         for (const entry of excess) {
-          entry.node._parent = undefined;
-          entry.dispose();
+          disposeEntry(entry);
         }
       }
     }
@@ -1058,7 +1154,7 @@ export function For<T>(props: ForProps<T>): Node {
   onCleanup(() => {
     for (const entries of itemRoots.values()) {
       for (const entry of entries) {
-        entry.dispose();
+        disposeEntry(entry);
       }
     }
     itemRoots.clear();
@@ -1101,17 +1197,8 @@ export function FocusScopeComponent(props: FocusScopeProps): Node {
   // Collect focusable nodes into this scope
   collectFocusableInScope(node, scope);
 
-  // Auto-focus first focusable node if nothing is focused yet
-  if (scope.focusableNodes.length > 0 && ctx.state.focusedNode === null) {
-    const autoFocusIndex = scope.focusableNodes.findIndex((n) => n.autoFocus);
-    if (autoFocusIndex !== -1) {
-      scope.focusedIndex = autoFocusIndex;
-      ctx.state.focusedNode = scope.focusableNodes[autoFocusIndex];
-    } else {
-      scope.focusedIndex = 0;
-      ctx.state.focusedNode = scope.focusableNodes[0];
-    }
-  }
+  // Don't auto-focus here; let initializeFocus handle it after tree construction.
+  // This ensures autoFocus props anywhere in the tree are considered together.
 
   return node;
 }
@@ -1167,17 +1254,8 @@ export function TabFocus(props: TabFocusProps): Node {
   // Collect focusable nodes into this scope
   collectFocusableInScope(node, scope);
 
-  // Auto-focus first focusable node if nothing is focused yet
-  if (scope.focusableNodes.length > 0 && ctx.state.focusedNode === null) {
-    const autoFocusIndex = scope.focusableNodes.findIndex((n) => n.autoFocus);
-    if (autoFocusIndex !== -1) {
-      scope.focusedIndex = autoFocusIndex;
-      ctx.state.focusedNode = scope.focusableNodes[autoFocusIndex];
-    } else {
-      scope.focusedIndex = 0;
-      ctx.state.focusedNode = scope.focusableNodes[0];
-    }
-  }
+  // Don't auto-focus here; let initializeFocus handle it after tree construction.
+  // This ensures autoFocus props anywhere in the tree are considered together.
 
   return node;
 }
@@ -1276,13 +1354,71 @@ export function buildPathToRoot(target: Node): Node[] {
 }
 
 /**
+ * Check if a node is contained within a subtree.
+ * Uses parent pointers to walk up from the node and check if the container
+ * is an ancestor.
+ */
+export function isNodeInSubtree(node: Node, subtreeRoot: Node): boolean {
+  let current: Node | undefined = node;
+  while (current) {
+    if (current === subtreeRoot) {
+      return true;
+    }
+    current = current._parent;
+  }
+  return false;
+}
+
+/**
+ * Clean up focus and hover state when a subtree is being disposed.
+ * If the focused or hovered node is inside the subtree, clears the reference.
+ *
+ * Must be called before disposing a subtree to prevent stale references.
+ */
+export function cleanupSubtreeState(
+  state: RuntimeState,
+  subtreeRoot: Node,
+): void {
+  // Check if focused node is in the subtree being disposed
+  const focused = state.focusedNode();
+  if (focused && isNodeInSubtree(focused, subtreeRoot)) {
+    // Remove from scope's focusableNodes and clear focus
+    const scope = findScopeContaining(state.rootScope, state.root, focused);
+    if (scope) {
+      const index = scope.focusableNodes.indexOf(focused);
+      if (index !== -1) {
+        scope.focusableNodes.splice(index, 1);
+        if (scope.focusedIndex === index) {
+          scope.focusedIndex = -1;
+        } else if (scope.focusedIndex > index) {
+          scope.focusedIndex--;
+        }
+      }
+    }
+    state.setFocusedNode(null);
+  }
+
+  // Check if hovered node is in the subtree being disposed
+  if (
+    state.hoverState.currentNode &&
+    isNodeInSubtree(state.hoverState.currentNode, subtreeRoot)
+  ) {
+    // Call onHover(false) before clearing
+    if (state.hoverState.currentNode.onHover) {
+      state.hoverState.currentNode.onHover(false);
+    }
+    state.hoverState.currentNode = null;
+  }
+}
+
+/**
  * Route keyboard event to focused node with bubbling.
  *
  * Events start at the focused node and bubble up to the root.
  * Handlers return true to consume the event and stop bubbling.
  */
 function routeKeyEvent(state: RuntimeState, event: KeyEvent): void {
-  const focused = state.focusedNode;
+  const focused = state.focusedNode();
   if (!focused) return;
 
   // Build path from focused node to root using parent pointers
@@ -1400,44 +1536,71 @@ function routeMouseEvent(state: RuntimeState, event: MouseEvent): void {
 }
 
 /**
- * Route scroll event to node under cursor.
+ * Route scroll event to node under cursor with bubbling.
  *
- * Scroll events don't bubble. They go directly to the node under
- * the cursor. This matches browser behavior where scroll events target
- * the scrollable element directly.
+ * Scroll events bubble up the tree until a handler is found.
+ * This matches browser behavior where scroll events propagate
+ * to scrollable ancestors.
  */
 function routeScrollEvent(state: RuntimeState, event: ScrollEvent): void {
   const { root, layoutResult } = state;
   if (!layoutResult) return;
 
   const target = hitTest(root, layoutResult, event.x, event.y);
+  if (!target) return;
 
-  if (target?.onScroll) {
-    target.onScroll(event);
+  // Build path from target to root and bubble
+  const path = buildPathToRoot(target);
+
+  for (const node of path) {
+    if (node.onScroll) {
+      node.onScroll(event);
+      return; // Scroll events stop at first handler
+    }
   }
 }
 
 /**
- * Route paste event to focused node.
+ * Route paste event to focused node with bubbling.
  *
- * Paste is converted to synthetic key events for each character.
+ * Paste text is converted to synthetic key events for each grapheme.
+ * Events bubble up the tree like regular keyboard events.
+ * Handlers can return true to consume an event and stop processing.
  */
 function routePasteEvent(state: RuntimeState, event: PasteEvent): void {
-  const focused = state.focusedNode;
+  const focused = state.focusedNode();
   if (!focused) return;
 
-  // Synthesize key events for each character
-  for (const char of event.text) {
-    if (focused.onKeyPress) {
-      focused.onKeyPress({
-        type: "key",
-        name: char === "\n" ? "enter" : char,
-        char: char,
-        ctrl: false,
-        alt: false,
-        shift: false,
-        sequence: char,
-      });
+  // Build path from focused node to root for bubbling
+  const path = buildPathToRoot(focused);
+
+  // Process each grapheme (not codepoint) to handle emoji correctly
+  for (const char of graphemes(event.text)) {
+    const keyEvent: KeyEvent = {
+      type: "key",
+      name: char === "\n" ? "enter" : char,
+      char: char,
+      ctrl: false,
+      alt: false,
+      shift: false,
+      sequence: char,
+    };
+
+    // Bubble the event up the tree
+    let consumed = false;
+    for (const node of path) {
+      if (node.onKeyPress) {
+        const result = node.onKeyPress(keyEvent);
+        if (result === true) {
+          consumed = true;
+          break; // Event consumed, stop bubbling this character
+        }
+      }
+    }
+
+    // If a handler consumed the event, stop processing remaining characters
+    if (consumed) {
+      return;
     }
   }
 }
@@ -1486,28 +1649,76 @@ function routeEvent(state: RuntimeState, event: InputEvent): void {
 }
 
 /**
+ * Collect ALL focusable nodes in the tree, ignoring scope boundaries.
+ * Used by initializeFocus to find autoFocus nodes anywhere in the tree.
+ */
+function collectAllFocusables(node: Node): Node[] {
+  const result: Node[] = [];
+
+  if (node.focusable) {
+    result.push(node);
+  }
+
+  const children =
+    typeof node.children === "function"
+      ? (node.children as () => Node[])()
+      : (node.children ?? []);
+
+  for (const child of children) {
+    result.push(...collectAllFocusables(child));
+  }
+
+  return result;
+}
+
+/**
  * Initialize focus after component tree is built.
  *
- * Collects focusable nodes into the root scope, then focuses either
- * the first node with autoFocus or the first focusable node.
+ * Searches the entire tree for a node with autoFocus. If found, focuses it.
+ * Otherwise, focuses the first focusable node in tree order.
  */
 export function initializeFocus(state: RuntimeState): void {
   // Clear and collect focusable nodes into root scope
   state.rootScope.focusableNodes = [];
   collectFocusableInScope(state.root, state.rootScope);
 
-  const { focusableNodes } = state.rootScope;
+  // Search ALL focusables (including nested scopes) for autoFocus or first focusable
+  const allFocusables = collectAllFocusables(state.root);
 
-  // Find autoFocus node
-  const autoFocusIndex = focusableNodes.findIndex((n) => n.autoFocus);
-
-  if (autoFocusIndex !== -1) {
-    state.rootScope.focusedIndex = autoFocusIndex;
-    state.focusedNode = focusableNodes[autoFocusIndex];
-  } else if (focusableNodes.length > 0) {
-    state.rootScope.focusedIndex = 0;
-    state.focusedNode = focusableNodes[0];
+  if (allFocusables.length === 0) {
+    return; // Nothing focusable
   }
+
+  // Prefer autoFocus node, otherwise use first focusable
+  const targetNode = allFocusables.find((n) => n.autoFocus) ?? allFocusables[0];
+
+  // Find which scope contains this node and update its state
+  const scope = findScopeForNode(state.root, targetNode, state.rootScope);
+  const index = scope.focusableNodes.indexOf(targetNode);
+  if (index !== -1) {
+    scope.focusedIndex = index;
+  }
+  state.setFocusedNode(targetNode);
+}
+
+/**
+ * Find the scope that contains a node by traversing scope boundaries.
+ */
+function findScopeForNode(
+  root: Node,
+  target: Node,
+  defaultScope: FocusScope,
+): FocusScope {
+  // Walk up from target to find the nearest scope
+  let current: Node | undefined = target;
+  while (current) {
+    const scope = (current as NodeWithFocusScope)._focusScope;
+    if (scope?.focusableNodes.includes(target)) {
+      return scope;
+    }
+    current = current._parent;
+  }
+  return defaultScope;
 }
 
 /**
@@ -1574,6 +1785,9 @@ export function mount(component: () => Node, options?: MountOptions): App {
   const opts: Required<MountOptions> = { ...DEFAULT_MOUNT_OPTIONS, ...options };
   const { stdin, stdout } = opts;
 
+  // Create reactive signal for focus tracking
+  const [focusedNode, setFocusedNode] = createSignal<Node | null>(null);
+
   // Initialize state
   const state: RuntimeState = {
     root: undefined as unknown as Node,
@@ -1584,7 +1798,8 @@ export function mount(component: () => Node, options?: MountOptions): App {
     frameInterval: null,
     options: opts,
     pendingEvents: [],
-    focusedNode: null,
+    focusedNode,
+    setFocusedNode,
     rootScope: {
       parent: null,
       focusableNodes: [],
