@@ -1593,6 +1593,9 @@ function nodeToLayoutNode(node: Node): LayoutNode {
 /**
  * Recursively paint nodes using layout results.
  * Uses screenX/screenY from layout results for absolute positioning.
+ *
+ * Handles `display: "contents"` nodes by painting their children directly
+ * with the corresponding layout results (matching how layout hoists them).
  */
 function paintNode(node: Node, layout: LayoutResult, buffer: Buffer): void {
   const { screenX, screenY, width, height } = layout;
@@ -1609,12 +1612,81 @@ function paintNode(node: Node, layout: LayoutResult, buffer: Buffer): void {
       : (node.children ?? []);
   const childLayouts = layout.children ?? [];
 
-  // Paint children
-  for (let i = 0; i < children.length; i++) {
-    if (childLayouts[i]) {
-      paintNode(children[i], childLayouts[i], buffer);
+  // Paint children, handling display: "contents" nodes
+  paintChildren(children, childLayouts, buffer);
+}
+
+/**
+ * Paint children nodes with their corresponding layout results.
+ * Handles `display: "contents"` nodes by recursively painting their children
+ * with layout results (since layout hoists them to be direct children).
+ */
+function paintChildren(
+  children: Node[],
+  layouts: LayoutResult[],
+  buffer: Buffer,
+): void {
+  let layoutIndex = 0;
+
+  for (const child of children) {
+    const style =
+      typeof child.style === "function" ? child.style() : child.style;
+
+    if (style.display === "contents") {
+      // For display: "contents" nodes, their children are hoisted in layout.
+      // Recursively paint this node's children using the next layout results.
+      const grandchildren =
+        typeof child.children === "function"
+          ? (child.children as () => Node[])()
+          : (child.children ?? []);
+
+      // Paint the grandchildren with the corresponding layout results
+      for (const grandchild of grandchildren) {
+        const grandchildStyle =
+          typeof grandchild.style === "function"
+            ? grandchild.style()
+            : grandchild.style;
+
+        if (grandchildStyle.display === "contents") {
+          // Recursively handle nested display: "contents"
+          const greatGrandchildren =
+            typeof grandchild.children === "function"
+              ? (grandchild.children as () => Node[])()
+              : (grandchild.children ?? []);
+          paintChildren(greatGrandchildren, layouts.slice(layoutIndex), buffer);
+          // Count how many layouts were consumed
+          layoutIndex += countHoistedChildren(grandchild);
+        } else if (layouts[layoutIndex]) {
+          paintNode(grandchild, layouts[layoutIndex], buffer);
+          layoutIndex++;
+        }
+      }
+    } else if (layouts[layoutIndex]) {
+      paintNode(child, layouts[layoutIndex], buffer);
+      layoutIndex++;
     }
   }
+}
+
+/**
+ * Count how many layout children a node contributes when hoisted.
+ * For display: "contents" nodes, this is the sum of their children's contributions.
+ */
+function countHoistedChildren(node: Node): number {
+  const style = typeof node.style === "function" ? node.style() : node.style;
+
+  if (style.display === "contents") {
+    const children =
+      typeof node.children === "function"
+        ? (node.children as () => Node[])()
+        : (node.children ?? []);
+    return children.reduce(
+      (sum, child) => sum + countHoistedChildren(child),
+      0,
+    );
+  }
+
+  return 1;
 }
 
 /**
