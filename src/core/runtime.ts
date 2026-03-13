@@ -591,7 +591,7 @@ export interface BoxProps extends Partial<FlexStyle> {
   backgroundColor?: Color | (() => Color);
   border?: BorderProp | (() => BorderProp);
   borderColor?: Color | (() => Color);
-  borderStyle?: BorderStyleName;
+  borderStyle?: BorderStyleName | (() => BorderStyleName);
   focusable?: boolean;
   autoFocus?: boolean;
   ref?: Ref;
@@ -652,6 +652,9 @@ export const BORDER_CHARS: Record<BorderStyleName, BorderChars> = {
   ascii: { tl: "+", tr: "+", bl: "+", br: "+", h: "-", v: "|" },
 };
 
+/** Text wrap mode. */
+export type WrapMode = "wrap" | "truncate" | "truncate-end" | "truncate-start";
+
 /** Props for Text component. */
 export interface TextProps {
   content: string | (() => string);
@@ -663,7 +666,7 @@ export interface TextProps {
   dim?: boolean | (() => boolean);
   strikethrough?: boolean | (() => boolean);
   inverse?: boolean | (() => boolean);
-  wrap?: "wrap" | "truncate" | "truncate-end" | "truncate-start";
+  wrap?: WrapMode | (() => WrapMode);
   focusable?: boolean;
   autoFocus?: boolean;
   ref?: Ref;
@@ -728,7 +731,7 @@ export function wrapLine(line: string, maxWidth: number): string[] {
 export function measureText(
   text: string,
   availableWidth: number,
-  wrap: "wrap" | "truncate" | "truncate-end" | "truncate-start",
+  wrap: WrapMode,
 ): { width: number; height: number } {
   if (text.length === 0) {
     return { width: 0, height: 0 };
@@ -862,13 +865,13 @@ function renderText(
   const fg = resolveValue(props.color) ?? DEFAULT_COLOR;
   const bg = resolveValue(props.backgroundColor) ?? DEFAULT_COLOR;
   const modifiers = computeModifiers(props);
-  const wrap = props.wrap ?? "wrap";
+  const wrapValue = resolveValue(props.wrap) ?? "wrap";
 
   const lines = text.split("\n");
   const displayLines =
-    wrap === "wrap"
+    wrapValue === "wrap"
       ? lines.flatMap((line) => wrapLine(line, width))
-      : lines.map((line) => truncateLine(line, width, wrap));
+      : lines.map((line) => truncateLine(line, width, wrapValue));
 
   for (let row = 0; row < Math.min(displayLines.length, height); row++) {
     const line = displayLines[row];
@@ -1104,7 +1107,9 @@ export function Box(props: BoxProps): Node {
                 : DEFAULT_COLOR;
             const borderValue =
               typeof border === "function" ? border() : border;
-            const styleName = getBorderStyleName(borderValue, borderStyle);
+            const borderStyleValue =
+              typeof borderStyle === "function" ? borderStyle() : borderStyle;
+            const styleName = getBorderStyleName(borderValue, borderStyleValue);
             renderBorder(
               buffer,
               x,
@@ -1152,11 +1157,13 @@ export function Text(props: TextProps): Node {
     onMouseMove,
     onScroll,
     onHover,
-    wrap = "wrap",
+    wrap,
     ...styleProps
   } = props;
 
   const getContent = typeof content === "function" ? content : () => content;
+  const getWrap = (): WrapMode =>
+    (typeof wrap === "function" ? wrap() : wrap) ?? "wrap";
 
   const node: Node = {
     style: DEFAULT_FLEX_STYLE,
@@ -1170,7 +1177,7 @@ export function Text(props: TextProps): Node {
     onHover,
 
     measure(availableWidth: number, _availableHeight: number) {
-      return measureText(getContent(), availableWidth, wrap);
+      return measureText(getContent(), availableWidth, getWrap());
     },
 
     render(
@@ -1183,7 +1190,7 @@ export function Text(props: TextProps): Node {
       renderText(buffer, x, y, width, height, getContent(), {
         ...styleProps,
         content,
-        wrap,
+        wrap: getWrap(),
       });
     },
   };

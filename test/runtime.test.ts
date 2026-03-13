@@ -18,6 +18,7 @@ import {
 import type { LayoutResult } from "../src/core/layout.ts";
 import {
   BORDER_CHARS,
+  type BorderStyleName,
   Box,
   DEFAULT_MOUNT_OPTIONS,
   type FocusController,
@@ -29,6 +30,7 @@ import {
   Show,
   TabFocus,
   Text,
+  type WrapMode,
   buildPathToRoot,
   cleanupSubtreeState,
   collectFocusableInScope,
@@ -624,6 +626,28 @@ describe("Box borders", () => {
     assert.strictEqual(style.borderTop, true);
   });
 
+  it("reactive borderStyle prop updates", () => {
+    const [style, setStyle] = createSignal<BorderStyleName>("single");
+    const node = Box({ border: true, borderStyle: style, width: 5, height: 3 });
+    assert.ok(node.render);
+
+    const buffer = new RenderBuffer(5, 3);
+
+    // Initially single style
+    node.render(0, 0, 5, 3, buffer);
+    assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.single.tl);
+
+    // Change to double style
+    setStyle("double");
+    node.render(0, 0, 5, 3, buffer);
+    assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.double.tl);
+
+    // Change to round style
+    setStyle("round");
+    node.render(0, 0, 5, 3, buffer);
+    assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.round.tl);
+  });
+
   it("empty box with border renders correctly", () => {
     const node = Box({ border: true, width: 3, height: 2 });
     assert.ok(node.render);
@@ -830,6 +854,27 @@ describe("Text", () => {
     const ref = createRef();
     const node = Text({ content: "hello", ref });
     assert.strictEqual(ref.current, node);
+  });
+
+  it("reactive wrap prop updates", () => {
+    const [wrap, setWrap] = createSignal<WrapMode>("wrap");
+    const content = "hello world";
+    const node = Text({ content, wrap });
+    assert.ok(node.measure);
+
+    // With wrap mode, text wraps within available width
+    const sizeWrapped = node.measure(5, 100);
+    assert.strictEqual(sizeWrapped.height, 3); // "hello", " worl", "d"
+
+    // Switch to truncate mode - no wrapping
+    setWrap("truncate");
+    const sizeTruncated = node.measure(5, 100);
+    assert.strictEqual(sizeTruncated.height, 1); // single line, truncated
+
+    // Switch back to wrap
+    setWrap("wrap");
+    const sizeWrappedAgain = node.measure(5, 100);
+    assert.strictEqual(sizeWrappedAgain.height, 3);
   });
 });
 
