@@ -67,6 +67,7 @@ export {
   lineDisplayWidth,
   wrapLine,
   truncateLine,
+  BORDER_CHARS,
   DEFAULT_MOUNT_OPTIONS,
   type Node,
   type Ref,
@@ -79,4 +80,6 @@ export {
   type FocusController,
   type MountOptions,
   type App,
+  type BorderStyleName,
+  type BorderProp,
 } from "./runtime.ts";

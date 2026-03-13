@@ -17,6 +17,7 @@ import {
 } from "../src/core/layout.ts";
 import type { LayoutResult } from "../src/core/layout.ts";
 import {
+  BORDER_CHARS,
   Box,
   DEFAULT_MOUNT_OPTIONS,
   type FocusController,
@@ -372,6 +373,396 @@ describe("Box backgroundColor", () => {
     // The render function fills from (0,0) to (10,6) with the background
     const output = buffer.flush();
     assert.ok(output.length > 0);
+  });
+});
+
+describe("Box borders", () => {
+  it("border: true uses single style on all sides", () => {
+    const node = Box({ border: true, width: 5, height: 3 });
+
+    const style = typeof node.style === "function" ? node.style() : node.style;
+    assert.strictEqual(style.borderTop, true);
+    assert.strictEqual(style.borderEnd, true);
+    assert.strictEqual(style.borderBottom, true);
+    assert.strictEqual(style.borderStart, true);
+    assert.ok(node.render, "render should be defined when border is set");
+  });
+
+  it("border: false has no borders", () => {
+    const node = Box({ border: false, width: 5, height: 3 });
+
+    const style = typeof node.style === "function" ? node.style() : node.style;
+    assert.strictEqual(style.borderTop, false);
+    assert.strictEqual(style.borderEnd, false);
+    assert.strictEqual(style.borderBottom, false);
+    assert.strictEqual(style.borderStart, false);
+    assert.strictEqual(node.render, undefined);
+  });
+
+  it("border: 'round' sets style on all sides", () => {
+    const node = Box({ border: "round", width: 5, height: 3 });
+
+    const style = typeof node.style === "function" ? node.style() : node.style;
+    assert.strictEqual(style.borderTop, true);
+    assert.strictEqual(style.borderEnd, true);
+    assert.strictEqual(style.borderBottom, true);
+    assert.strictEqual(style.borderStart, true);
+  });
+
+  it("selective borders: { top: true } renders only top", () => {
+    const node = Box({ border: { top: true }, width: 5, height: 3 });
+
+    const style = typeof node.style === "function" ? node.style() : node.style;
+    assert.strictEqual(style.borderTop, true);
+    assert.strictEqual(style.borderEnd, false);
+    assert.strictEqual(style.borderBottom, false);
+    assert.strictEqual(style.borderStart, false);
+  });
+
+  it("selective borders: { left: true, right: true } renders only sides", () => {
+    const node = Box({
+      border: { left: true, right: true },
+      width: 5,
+      height: 3,
+    });
+
+    const style = typeof node.style === "function" ? node.style() : node.style;
+    assert.strictEqual(style.borderTop, false);
+    assert.strictEqual(style.borderEnd, true);
+    assert.strictEqual(style.borderBottom, false);
+    assert.strictEqual(style.borderStart, true);
+  });
+
+  it("borderStyle overrides border style", () => {
+    const node = Box({
+      border: "single",
+      borderStyle: "double",
+      width: 5,
+      height: 3,
+    });
+
+    // The style name is used internally during rendering, not stored in FlexStyle
+    // Just verify both border and borderStyle are handled without error
+    assert.ok(node.render, "render should be defined");
+  });
+
+  it("renders single border correctly", () => {
+    const node = Box({ border: true, width: 5, height: 3 });
+    assert.ok(node.render);
+
+    const buffer = new RenderBuffer(5, 3);
+    node.render(0, 0, 5, 3, buffer);
+
+    // Check corners
+    assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.single.tl);
+    assert.strictEqual(buffer.getSymbol(4, 0), BORDER_CHARS.single.tr);
+    assert.strictEqual(buffer.getSymbol(0, 2), BORDER_CHARS.single.bl);
+    assert.strictEqual(buffer.getSymbol(4, 2), BORDER_CHARS.single.br);
+
+    // Check horizontal edges
+    assert.strictEqual(buffer.getSymbol(1, 0), BORDER_CHARS.single.h);
+    assert.strictEqual(buffer.getSymbol(2, 0), BORDER_CHARS.single.h);
+    assert.strictEqual(buffer.getSymbol(3, 0), BORDER_CHARS.single.h);
+
+    // Check vertical edges
+    assert.strictEqual(buffer.getSymbol(0, 1), BORDER_CHARS.single.v);
+    assert.strictEqual(buffer.getSymbol(4, 1), BORDER_CHARS.single.v);
+  });
+
+  it("renders round border correctly", () => {
+    const node = Box({ border: "round", width: 5, height: 3 });
+    assert.ok(node.render);
+
+    const buffer = new RenderBuffer(5, 3);
+    node.render(0, 0, 5, 3, buffer);
+
+    assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.round.tl);
+    assert.strictEqual(buffer.getSymbol(4, 0), BORDER_CHARS.round.tr);
+    assert.strictEqual(buffer.getSymbol(0, 2), BORDER_CHARS.round.bl);
+    assert.strictEqual(buffer.getSymbol(4, 2), BORDER_CHARS.round.br);
+  });
+
+  it("renders double border correctly", () => {
+    const node = Box({ border: "double", width: 5, height: 3 });
+    assert.ok(node.render);
+
+    const buffer = new RenderBuffer(5, 3);
+    node.render(0, 0, 5, 3, buffer);
+
+    assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.double.tl);
+    assert.strictEqual(buffer.getSymbol(4, 0), BORDER_CHARS.double.tr);
+  });
+
+  it("renders bold border correctly", () => {
+    const node = Box({ border: "bold", width: 5, height: 3 });
+    assert.ok(node.render);
+
+    const buffer = new RenderBuffer(5, 3);
+    node.render(0, 0, 5, 3, buffer);
+
+    assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.bold.tl);
+    assert.strictEqual(buffer.getSymbol(4, 0), BORDER_CHARS.bold.tr);
+  });
+
+  it("renders dashed border correctly", () => {
+    const node = Box({ border: "dashed", width: 5, height: 3 });
+    assert.ok(node.render);
+
+    const buffer = new RenderBuffer(5, 3);
+    node.render(0, 0, 5, 3, buffer);
+
+    assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.dashed.tl);
+    assert.strictEqual(buffer.getSymbol(1, 0), BORDER_CHARS.dashed.h);
+  });
+
+  it("renders ascii border correctly", () => {
+    const node = Box({ border: "ascii", width: 5, height: 3 });
+    assert.ok(node.render);
+
+    const buffer = new RenderBuffer(5, 3);
+    node.render(0, 0, 5, 3, buffer);
+
+    assert.strictEqual(buffer.getSymbol(0, 0), "+");
+    assert.strictEqual(buffer.getSymbol(1, 0), "-");
+    assert.strictEqual(buffer.getSymbol(0, 1), "|");
+  });
+
+  it("no corners when only one adjacent border", () => {
+    // Only top border - no corners, just horizontal line
+    const node = Box({ border: { top: true }, width: 5, height: 3 });
+    assert.ok(node.render);
+
+    const buffer = new RenderBuffer(5, 3);
+    node.render(0, 0, 5, 3, buffer);
+
+    // All positions on top row should be horizontal line (including corners)
+    assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.single.h);
+    assert.strictEqual(buffer.getSymbol(1, 0), BORDER_CHARS.single.h);
+    assert.strictEqual(buffer.getSymbol(4, 0), BORDER_CHARS.single.h);
+
+    // No vertical lines or corners elsewhere
+    assert.strictEqual(buffer.getSymbol(0, 1), " ");
+  });
+
+  it("corner only where two edges meet", () => {
+    // Top and left borders - corner at top-left
+    const node = Box({
+      border: { top: true, left: true },
+      width: 5,
+      height: 3,
+    });
+    assert.ok(node.render);
+
+    const buffer = new RenderBuffer(5, 3);
+    node.render(0, 0, 5, 3, buffer);
+
+    // Top-left corner
+    assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.single.tl);
+    // Top-right extends horizontal (no corner)
+    assert.strictEqual(buffer.getSymbol(4, 0), BORDER_CHARS.single.h);
+    // Bottom-left extends vertical (no corner)
+    assert.strictEqual(buffer.getSymbol(0, 2), BORDER_CHARS.single.v);
+  });
+
+  it("applies border color", () => {
+    const color: Color = { type: "rgb", r: 255, g: 0, b: 0 };
+    const node = Box({ border: true, borderColor: color, width: 5, height: 3 });
+    assert.ok(node.render);
+
+    const buffer = new RenderBuffer(5, 3);
+    node.render(0, 0, 5, 3, buffer);
+
+    // Check that border cells have the specified foreground color
+    const fg = buffer.getFg(0, 0);
+    assert.strictEqual(fg.type, "rgb");
+    if (fg.type === "rgb") {
+      assert.strictEqual(fg.r, 255);
+      assert.strictEqual(fg.g, 0);
+      assert.strictEqual(fg.b, 0);
+    }
+  });
+
+  it("reactive border color updates", () => {
+    const [color, setColor] = createSignal<Color>({ type: "named", index: 1 });
+    const node = Box({ border: true, borderColor: color, width: 5, height: 3 });
+    assert.ok(node.render);
+
+    const buffer = new RenderBuffer(5, 3);
+    node.render(0, 0, 5, 3, buffer);
+    buffer.flush();
+
+    setColor({ type: "rgb", r: 0, g: 255, b: 0 });
+    node.render(0, 0, 5, 3, buffer);
+
+    const fg = buffer.getFg(0, 0);
+    assert.strictEqual(fg.type, "rgb");
+    if (fg.type === "rgb") {
+      assert.strictEqual(fg.r, 0);
+      assert.strictEqual(fg.g, 255);
+    }
+  });
+
+  it("empty box with border renders correctly", () => {
+    const node = Box({ border: true, width: 3, height: 2 });
+    assert.ok(node.render);
+
+    const buffer = new RenderBuffer(3, 2);
+    // Should not throw
+    node.render(0, 0, 3, 2, buffer);
+
+    assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.single.tl);
+    assert.strictEqual(buffer.getSymbol(2, 0), BORDER_CHARS.single.tr);
+  });
+
+  it("border with padding: both add to spacing", () => {
+    const node = Box({
+      border: true,
+      paddingTop: 1,
+      paddingBottom: 1,
+      paddingStart: 1,
+      paddingEnd: 1,
+      width: 10,
+      height: 6,
+    });
+
+    const style = typeof node.style === "function" ? node.style() : node.style;
+
+    // Layout should account for both border (1 cell each side) and padding
+    assert.strictEqual(style.paddingTop, 1);
+    assert.strictEqual(style.borderTop, true);
+  });
+
+  it("borders consume exactly 1 cell per side in layout", () => {
+    // Create a box with border and compute its layout
+    const boxNode = Box({ border: true, width: 10, height: 5 });
+    const textNode = Text({ content: "test" });
+    const parent = Box({
+      children: [boxNode, textNode],
+      flexDirection: "column",
+      width: 10,
+      height: 10,
+    });
+
+    const layoutNode: LayoutNode = {
+      style: typeof parent.style === "function" ? parent.style() : parent.style,
+      children: [
+        {
+          style:
+            typeof boxNode.style === "function"
+              ? boxNode.style()
+              : boxNode.style,
+        },
+        {
+          style: DEFAULT_FLEX_STYLE,
+          measure: (w) => ({ width: Math.min(4, w), height: 1 }),
+        },
+      ],
+    };
+
+    const layout = computeLayout(layoutNode, 10, 10);
+
+    // First child (box with border) should be 10x5
+    assert.strictEqual(layout.children[0].width, 10);
+    assert.strictEqual(layout.children[0].height, 5);
+  });
+
+  it("border works with flexGrow", () => {
+    const child = Box({ border: true, flexGrow: 1 });
+    const parent = Box({
+      children: [child],
+      width: 20,
+      height: 10,
+    });
+
+    const layoutNode: LayoutNode = {
+      style: typeof parent.style === "function" ? parent.style() : parent.style,
+      children: [
+        {
+          style:
+            typeof child.style === "function" ? child.style() : child.style,
+        },
+      ],
+    };
+
+    const layout = computeLayout(layoutNode, 20, 10);
+
+    // Child should grow to fill parent (flexGrow: 1)
+    assert.strictEqual(layout.children[0].width, 20);
+  });
+
+  it("children are positioned inside border", () => {
+    // Verify that children are offset by the border
+    const child = Text({ content: "Hi" });
+    const parent = Box({ border: true, children: [child] });
+
+    const parentStyle =
+      typeof parent.style === "function" ? parent.style() : parent.style;
+
+    const layoutNode: LayoutNode = {
+      style: parentStyle,
+      children: [
+        {
+          style: DEFAULT_FLEX_STYLE,
+          measure: () => ({ width: 2, height: 1 }),
+        },
+      ],
+    };
+
+    const layout = computeLayout(layoutNode, 10, 5);
+
+    // Child should be positioned after border (x=1, y=1)
+    assert.strictEqual(layout.children[0].x, 1);
+    assert.strictEqual(layout.children[0].y, 1);
+  });
+
+  it("nested boxes with borders", () => {
+    const inner = Box({ border: true, width: 5, height: 3 });
+    const outer = Box({ border: true, children: [inner] });
+
+    const outerStyle =
+      typeof outer.style === "function" ? outer.style() : outer.style;
+    const innerStyle =
+      typeof inner.style === "function" ? inner.style() : inner.style;
+
+    const layoutNode: LayoutNode = {
+      style: outerStyle,
+      children: [{ style: innerStyle }],
+    };
+
+    const layout = computeLayout(layoutNode, 20, 10);
+
+    // Inner box should be positioned inside outer's border
+    assert.strictEqual(layout.children[0].x, 1);
+    assert.strictEqual(layout.children[0].y, 1);
+
+    // Inner should keep its explicit size
+    assert.strictEqual(layout.children[0].width, 5);
+    assert.strictEqual(layout.children[0].height, 3);
+  });
+
+  it("border with backgroundColor renders both", () => {
+    const bgColor: Color = { type: "named", index: 4 };
+    const borderColor: Color = { type: "rgb", r: 255, g: 255, b: 255 };
+    const node = Box({
+      border: true,
+      backgroundColor: bgColor,
+      borderColor: borderColor,
+      width: 5,
+      height: 3,
+    });
+
+    assert.ok(node.render);
+
+    const buffer = new RenderBuffer(5, 3);
+    node.render(0, 0, 5, 3, buffer);
+
+    // Border corners should have border color as foreground
+    const cornerFg = buffer.getFg(0, 0);
+    assert.strictEqual(cornerFg.type, "rgb");
+
+    // Interior cells should have background
+    const interiorBg = buffer.getBg(2, 1);
+    assert.strictEqual(interiorBg.type, "named");
   });
 });
 

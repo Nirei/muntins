@@ -53,6 +53,12 @@ export interface FlexStyle {
   end: number | "auto";
   bottom: number | "auto";
   start: number | "auto";
+
+  // Borders (always exactly 1 cell when true)
+  borderTop: boolean;
+  borderEnd: boolean;
+  borderBottom: boolean;
+  borderStart: boolean;
 }
 
 /**
@@ -124,6 +130,10 @@ export const DEFAULT_FLEX_STYLE: FlexStyle = {
   end: "auto",
   bottom: "auto",
   start: "auto",
+  borderTop: false,
+  borderEnd: false,
+  borderBottom: false,
+  borderStart: false,
 };
 
 /**
@@ -275,6 +285,18 @@ function getCrossMargin(style: FlexStyle, isRow: boolean): number {
     : style.marginStart + style.marginEnd;
 }
 
+function getMainBorder(style: FlexStyle, isRow: boolean): number {
+  return isRow
+    ? (style.borderStart ? 1 : 0) + (style.borderEnd ? 1 : 0)
+    : (style.borderTop ? 1 : 0) + (style.borderBottom ? 1 : 0);
+}
+
+function getCrossBorder(style: FlexStyle, isRow: boolean): number {
+  return isRow
+    ? (style.borderTop ? 1 : 0) + (style.borderBottom ? 1 : 0)
+    : (style.borderStart ? 1 : 0) + (style.borderEnd ? 1 : 0);
+}
+
 /**
  * Distributes a total amount proportionally among weights using integer arithmetic.
  * Remainder is distributed to the first items.
@@ -327,7 +349,9 @@ function collectLines(
 ): FlexLine[] {
   const style = box.style;
   const availableMain =
-    (isRow ? box.width : box.height) - getMainPadding(style, isRow);
+    (isRow ? box.width : box.height) -
+    getMainPadding(style, isRow) -
+    getMainBorder(style, isRow);
 
   // For space-* justification, gap is computed dynamically, not from style.gap.
   const effectiveGap = isSpaceJustify(style.justifyContent) ? 0 : style.gap;
@@ -385,11 +409,14 @@ function calculateIntrinsicSize(
   const isMainAxis =
     (axis === "width" && isRow) || (axis === "height" && !isRow);
 
-  // Select padding properties based on axis
-  const [paddingBefore, paddingAfter] =
+  // Select padding and border properties based on axis
+  const [paddingBefore, paddingAfter, borderBefore, borderAfter] =
     axis === "width"
-      ? (["paddingStart", "paddingEnd"] as const)
-      : (["paddingTop", "paddingBottom"] as const);
+      ? (["paddingStart", "paddingEnd", "borderStart", "borderEnd"] as const)
+      : (["paddingTop", "paddingBottom", "borderTop", "borderBottom"] as const);
+
+  const borderBeforeSize = style[borderBefore] ? 1 : 0;
+  const borderAfterSize = style[borderAfter] ? 1 : 0;
 
   // Collect visible children (excluding absolute positioned, which are out of flow)
   const visibleChildren: LayoutBox[] = [];
@@ -400,7 +427,12 @@ function calculateIntrinsicSize(
   }
 
   if (visibleChildren.length === 0) {
-    return style[paddingBefore] + style[paddingAfter];
+    return (
+      style[paddingBefore] +
+      style[paddingAfter] +
+      borderBeforeSize +
+      borderAfterSize
+    );
   }
 
   // Note: For cross-axis intrinsic size with wrap, we can't compute actual lines
@@ -427,7 +459,13 @@ function calculateIntrinsicSize(
     }
   }
 
-  return contentSize + style[paddingBefore] + style[paddingAfter];
+  return (
+    contentSize +
+    style[paddingBefore] +
+    style[paddingAfter] +
+    borderBeforeSize +
+    borderAfterSize
+  );
 }
 
 function resolveIntrinsicSize(box: LayoutBox): void {
@@ -458,22 +496,40 @@ function resolveIntrinsicSize(box: LayoutBox): void {
   // 3. If measure function (leaf node like Text), use it for remaining auto dimensions
   if (box.node.measure) {
     // Calculate available space from parent's content area.
-    // If explicit size or flexBasis already set a dimension, use that minus padding.
+    // If explicit size or flexBasis already set a dimension, use that minus padding and border.
     // Otherwise Infinity (unconstrained).
     const paddingStart = style.paddingStart;
     const paddingEnd = style.paddingEnd;
     const paddingTop = style.paddingTop;
     const paddingBottom = style.paddingBottom;
+    const borderStartSize = style.borderStart ? 1 : 0;
+    const borderEndSize = style.borderEnd ? 1 : 0;
+    const borderTopSize = style.borderTop ? 1 : 0;
+    const borderBottomSize = style.borderBottom ? 1 : 0;
 
     // box.width may already be set by flexBasis or explicit width
     const widthKnown = box.width > 0;
     const heightKnown = box.height > 0;
 
     const availW = widthKnown
-      ? Math.max(0, box.width - paddingStart - paddingEnd)
+      ? Math.max(
+          0,
+          box.width -
+            paddingStart -
+            paddingEnd -
+            borderStartSize -
+            borderEndSize,
+        )
       : Number.POSITIVE_INFINITY;
     const availH = heightKnown
-      ? Math.max(0, box.height - paddingTop - paddingBottom)
+      ? Math.max(
+          0,
+          box.height -
+            paddingTop -
+            paddingBottom -
+            borderTopSize -
+            borderBottomSize,
+        )
       : Number.POSITIVE_INFINITY;
 
     const measured = box.node.measure(availW, availH);
@@ -587,7 +643,9 @@ function calculateAvailableMainSpaceForLine(
   const style = box.style;
   const isRow = style.flexDirection === "row";
   const availableMain =
-    (isRow ? box.width : box.height) - getMainPadding(style, isRow);
+    (isRow ? box.width : box.height) -
+    getMainPadding(style, isRow) -
+    getMainBorder(style, isRow);
 
   return availableMain - line.mainSize;
 }
@@ -603,12 +661,21 @@ function applyJustifyContentForLine(
   if (count === 0) return;
 
   const availableMain =
-    (isRow ? box.width : box.height) - getMainPadding(style, isRow);
+    (isRow ? box.width : box.height) -
+    getMainPadding(style, isRow) -
+    getMainBorder(style, isRow);
 
   const remaining = availableMain - line.mainSize;
 
-  // Starting position (after padding)
-  let pos = isRow ? style.paddingStart : style.paddingTop;
+  // Starting position (after border and padding)
+  const borderStart = isRow
+    ? style.borderStart
+      ? 1
+      : 0
+    : style.borderTop
+      ? 1
+      : 0;
+  let pos = (isRow ? style.paddingStart : style.paddingTop) + borderStart;
 
   // Adjust starting position based on justifyContent
   switch (style.justifyContent) {
@@ -733,11 +800,25 @@ function positionAbsoluteChildren(
 ): void {
   const style = box.style;
 
-  // Content area bounds (inside padding)
-  const contentLeft = style.paddingStart;
-  const contentTop = style.paddingTop;
-  const contentWidth = box.width - style.paddingStart - style.paddingEnd;
-  const contentHeight = box.height - style.paddingTop - style.paddingBottom;
+  // Content area bounds (inside border and padding)
+  const borderStartSize = style.borderStart ? 1 : 0;
+  const borderEndSize = style.borderEnd ? 1 : 0;
+  const borderTopSize = style.borderTop ? 1 : 0;
+  const borderBottomSize = style.borderBottom ? 1 : 0;
+  const contentLeft = borderStartSize + style.paddingStart;
+  const contentTop = borderTopSize + style.paddingTop;
+  const contentWidth =
+    box.width -
+    borderStartSize -
+    borderEndSize -
+    style.paddingStart -
+    style.paddingEnd;
+  const contentHeight =
+    box.height -
+    borderTopSize -
+    borderBottomSize -
+    style.paddingTop -
+    style.paddingBottom;
 
   for (const child of absoluteChildren) {
     const childStyle = child.style;
@@ -816,10 +897,19 @@ function resolveFlexAndPosition(box: LayoutBox): void {
 
   // 6. Position items within each line (main axis) and lines on cross axis
   const crossPadding = getCrossPadding(style, isRow);
+  const crossBorder = getCrossBorder(style, isRow);
+  const borderCrossStart = isRow
+    ? style.borderTop
+      ? 1
+      : 0
+    : style.borderStart
+      ? 1
+      : 0;
   const paddingCrossStart = isRow ? style.paddingTop : style.paddingStart;
 
   // Calculate container's cross-axis content size (used for nowrap single line)
-  const containerCrossSize = (isRow ? box.height : box.width) - crossPadding;
+  const containerCrossSize =
+    (isRow ? box.height : box.width) - crossPadding - crossBorder;
 
   // For space-* justification, gap is computed dynamically, not from style.gap
   const justifyGap = isSpaceJustify(style.justifyContent) ? 0 : style.gap;
@@ -838,7 +928,7 @@ function resolveFlexAndPosition(box: LayoutBox): void {
   }
 
   // Calculate alignContent parameters (only for wrap with multiple lines)
-  let crossPos = paddingCrossStart;
+  let crossPos = borderCrossStart + paddingCrossStart;
   let lineCrossGap = style.gap;
   let stretchPerLine = 0;
 
@@ -926,7 +1016,7 @@ function resolveFlexAndPosition(box: LayoutBox): void {
   if (style.flexWrap === "wrap" && updatedLines.length > 1) {
     const crossSizeProp = isRow ? "height" : "width";
     if (style[crossSizeProp] === "auto") {
-      box[crossSizeProp] = totalCrossSize + crossPadding;
+      box[crossSizeProp] = totalCrossSize + crossPadding + crossBorder;
     }
   }
 

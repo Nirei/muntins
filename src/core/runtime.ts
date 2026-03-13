@@ -589,6 +589,9 @@ export function flushFrame(stdout: NodeJS.WriteStream, content: string): void {
 export interface BoxProps extends Partial<FlexStyle> {
   children?: Node[];
   backgroundColor?: Color | (() => Color);
+  border?: BorderProp;
+  borderColor?: Color | (() => Color);
+  borderStyle?: BorderStyleName;
   focusable?: boolean;
   autoFocus?: boolean;
   ref?: Ref;
@@ -599,6 +602,55 @@ export interface BoxProps extends Partial<FlexStyle> {
   onScroll?: (event: ScrollEvent) => void;
   onHover?: (hovering: boolean) => void;
 }
+
+/** Border style names. */
+export type BorderStyleName =
+  | "single"
+  | "round"
+  | "double"
+  | "bold"
+  | "dashed"
+  | "ascii";
+
+/**
+ * Border prop for BoxProps.
+ * - boolean: true = 'single' on all sides
+ * - BorderStyleName: style on all sides
+ * - object: selective borders per side
+ */
+export type BorderProp =
+  | boolean
+  | BorderStyleName
+  | {
+      top?: boolean;
+      right?: boolean;
+      bottom?: boolean;
+      left?: boolean;
+    };
+
+/**
+ * Border character set for a style.
+ */
+interface BorderChars {
+  tl: string; // top-left corner
+  tr: string; // top-right corner
+  bl: string; // bottom-left corner
+  br: string; // bottom-right corner
+  h: string; // horizontal
+  v: string; // vertical
+}
+
+/**
+ * Border character sets for each style.
+ */
+export const BORDER_CHARS: Record<BorderStyleName, BorderChars> = {
+  single: { tl: "┌", tr: "┐", bl: "└", br: "┘", h: "─", v: "│" },
+  round: { tl: "╭", tr: "╮", bl: "╰", br: "╯", h: "─", v: "│" },
+  double: { tl: "╔", tr: "╗", bl: "╚", br: "╝", h: "═", v: "║" },
+  bold: { tl: "┏", tr: "┓", bl: "┗", br: "┛", h: "━", v: "┃" },
+  dashed: { tl: "┌", tr: "┐", bl: "└", br: "┘", h: "┄", v: "┆" },
+  ascii: { tl: "+", tr: "+", bl: "+", br: "+", h: "-", v: "|" },
+};
 
 /** Props for Text component. */
 export interface TextProps {
@@ -825,16 +877,171 @@ function renderText(
 }
 
 /**
+ * Parse BorderProp into individual border flags for each side.
+ */
+function parseBorderProp(border: BorderProp | undefined): {
+  top: boolean;
+  end: boolean;
+  bottom: boolean;
+  start: boolean;
+} {
+  if (border === undefined || border === false) {
+    return { top: false, end: false, bottom: false, start: false };
+  }
+
+  if (border === true || typeof border === "string") {
+    // All sides
+    return { top: true, end: true, bottom: true, start: true };
+  }
+
+  // Selective borders object - map right to end, left to start
+  return {
+    top: border.top ?? false,
+    end: border.right ?? false,
+    bottom: border.bottom ?? false,
+    start: border.left ?? false,
+  };
+}
+
+/**
+ * Determine the border style name from props.
+ */
+function getBorderStyleName(
+  border: BorderProp | undefined,
+  borderStyle: BorderStyleName | undefined,
+): BorderStyleName {
+  // borderStyle prop overrides everything
+  if (borderStyle) {
+    return borderStyle;
+  }
+  // If border is a style name string, use it
+  if (typeof border === "string") {
+    return border;
+  }
+  // Default to 'single'
+  return "single";
+}
+
+/**
+ * Render border onto the buffer.
+ * Uses correct corner logic: corners only render when both adjacent edges exist.
+ */
+function renderBorder(
+  buffer: Buffer,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  borders: { top: boolean; end: boolean; bottom: boolean; start: boolean },
+  styleName: BorderStyleName,
+  color: Color,
+): void {
+  const chars = BORDER_CHARS[styleName];
+  const { top, end, bottom, start } = borders;
+
+  // Draw top edge
+  if (top) {
+    const startCol = start ? x + 1 : x;
+    const endCol = end ? x + width - 1 : x + width;
+    for (let col = startCol; col < endCol; col++) {
+      buffer.set(col, y, chars.h, color, DEFAULT_COLOR, 0);
+    }
+  }
+
+  // Draw bottom edge
+  if (bottom) {
+    const startCol = start ? x + 1 : x;
+    const endCol = end ? x + width - 1 : x + width;
+    for (let col = startCol; col < endCol; col++) {
+      buffer.set(col, y + height - 1, chars.h, color, DEFAULT_COLOR, 0);
+    }
+  }
+
+  // Draw left (start) edge
+  if (start) {
+    const startRow = top ? y + 1 : y;
+    const endRow = bottom ? y + height - 1 : y + height;
+    for (let row = startRow; row < endRow; row++) {
+      buffer.set(x, row, chars.v, color, DEFAULT_COLOR, 0);
+    }
+  }
+
+  // Draw right (end) edge
+  if (end) {
+    const startRow = top ? y + 1 : y;
+    const endRow = bottom ? y + height - 1 : y + height;
+    for (let row = startRow; row < endRow; row++) {
+      buffer.set(x + width - 1, row, chars.v, color, DEFAULT_COLOR, 0);
+    }
+  }
+
+  // Draw corners (only when both adjacent edges exist)
+  // Top-left corner
+  if (top && start) {
+    buffer.set(x, y, chars.tl, color, DEFAULT_COLOR, 0);
+  } else if (top && !start) {
+    // Extend top edge to left corner position
+    buffer.set(x, y, chars.h, color, DEFAULT_COLOR, 0);
+  } else if (start && !top) {
+    // Extend left edge to top corner position
+    buffer.set(x, y, chars.v, color, DEFAULT_COLOR, 0);
+  }
+
+  // Top-right corner
+  if (top && end) {
+    buffer.set(x + width - 1, y, chars.tr, color, DEFAULT_COLOR, 0);
+  } else if (top && !end) {
+    // Extend top edge to right corner position
+    buffer.set(x + width - 1, y, chars.h, color, DEFAULT_COLOR, 0);
+  } else if (end && !top) {
+    // Extend right edge to top corner position
+    buffer.set(x + width - 1, y, chars.v, color, DEFAULT_COLOR, 0);
+  }
+
+  // Bottom-left corner
+  if (bottom && start) {
+    buffer.set(x, y + height - 1, chars.bl, color, DEFAULT_COLOR, 0);
+  } else if (bottom && !start) {
+    // Extend bottom edge to left corner position
+    buffer.set(x, y + height - 1, chars.h, color, DEFAULT_COLOR, 0);
+  } else if (start && !bottom) {
+    // Extend left edge to bottom corner position
+    buffer.set(x, y + height - 1, chars.v, color, DEFAULT_COLOR, 0);
+  }
+
+  // Bottom-right corner
+  if (bottom && end) {
+    buffer.set(
+      x + width - 1,
+      y + height - 1,
+      chars.br,
+      color,
+      DEFAULT_COLOR,
+      0,
+    );
+  } else if (bottom && !end) {
+    // Extend bottom edge to right corner position
+    buffer.set(x + width - 1, y + height - 1, chars.h, color, DEFAULT_COLOR, 0);
+  } else if (end && !bottom) {
+    // Extend right edge to bottom corner position
+    buffer.set(x + width - 1, y + height - 1, chars.v, color, DEFAULT_COLOR, 0);
+  }
+}
+
+/**
  * Creates a Box node - a layout container that supports reactive styles and event handlers.
  *
  * Box is the fundamental container primitive. When backgroundColor is set, Box renders
- * its background; otherwise it's a pure layout container with no render overhead.
+ * its background; when border is set, Box renders its border.
  * Size is determined by flexbox layout based on its children.
  */
 export function Box(props: BoxProps): Node {
   const {
     children = [],
     backgroundColor,
+    border,
+    borderColor,
+    borderStyle,
     focusable,
     autoFocus,
     ref,
@@ -847,6 +1054,17 @@ export function Box(props: BoxProps): Node {
     ...styleProps
   } = props;
 
+  // Parse border prop into individual side flags
+  const borderFlags = parseBorderProp(border);
+  const hasBorder =
+    borderFlags.top ||
+    borderFlags.end ||
+    borderFlags.bottom ||
+    borderFlags.start;
+
+  // Determine if we need a render function
+  const needsRender = backgroundColor !== undefined || hasBorder;
+
   const node: Node = {
     get style() {
       // Resolve any reactive style props
@@ -855,7 +1073,15 @@ export function Box(props: BoxProps): Node {
         resolved[key] =
           typeof value === "function" ? (value as () => unknown)() : value;
       }
-      return { ...DEFAULT_FLEX_STYLE, ...resolved } as FlexStyle;
+      // Add border flags to FlexStyle for layout
+      return {
+        ...DEFAULT_FLEX_STYLE,
+        ...resolved,
+        borderTop: borderFlags.top,
+        borderEnd: borderFlags.end,
+        borderBottom: borderFlags.bottom,
+        borderStart: borderFlags.start,
+      } as FlexStyle;
     },
     children,
     focusable,
@@ -867,14 +1093,38 @@ export function Box(props: BoxProps): Node {
     onScroll,
     onHover,
 
-    // Add render function when backgroundColor is set
-    render: backgroundColor
+    // Render function when backgroundColor or border is set
+    render: needsRender
       ? (x, y, width, height, buffer) => {
-          const bg =
-            typeof backgroundColor === "function"
-              ? backgroundColor()
-              : backgroundColor;
-          buffer.fillRect(x, y, width, height, " ", DEFAULT_COLOR, bg, 0);
+          // Render background first (if set)
+          if (backgroundColor !== undefined) {
+            const bg =
+              typeof backgroundColor === "function"
+                ? backgroundColor()
+                : backgroundColor;
+            buffer.fillRect(x, y, width, height, " ", DEFAULT_COLOR, bg, 0);
+          }
+
+          // Render border (if set)
+          if (hasBorder) {
+            const color =
+              borderColor !== undefined
+                ? typeof borderColor === "function"
+                  ? borderColor()
+                  : borderColor
+                : DEFAULT_COLOR;
+            const styleName = getBorderStyleName(border, borderStyle);
+            renderBorder(
+              buffer,
+              x,
+              y,
+              width,
+              height,
+              borderFlags,
+              styleName,
+              color,
+            );
+          }
         }
       : undefined,
   };
