@@ -268,6 +268,12 @@ export function teardownTerminal(
   if (stdin.isTTY) {
     stdin.setRawMode(false);
   }
+
+  // Allow process to exit naturally by unreferencing stdin.
+  // The unref method may not exist on mock streams in tests.
+  if (typeof stdin.unref === "function") {
+    stdin.unref();
+  }
 }
 
 // Parser state machine states (const object pattern for strip-types compatibility)
