@@ -105,6 +105,8 @@ export interface MountOptions {
   stdin?: NodeJS.ReadStream;
   mouse?: boolean;
   alternateScreen?: boolean;
+  /** Max renders per second. Default: 240. Set to 0 for unlimited. */
+  fpsLimit?: number;
 }
 
 /**
@@ -115,6 +117,7 @@ export const DEFAULT_MOUNT_OPTIONS: Required<MountOptions> = {
   stdin: process.stdin,
   mouse: false,
   alternateScreen: true,
+  fpsLimit: 240,
 };
 
 /**
@@ -140,6 +143,10 @@ export interface RuntimeState {
   layoutResult: import("./layout.ts").LayoutResult | null;
   renderScheduled: boolean;
   options: Required<MountOptions>;
+
+  // Throttling
+  lastRenderTime: number;
+  throttleTimeout: ReturnType<typeof setTimeout> | null;
 
   // Input
   stdin: NodeJS.ReadStream;
@@ -2085,16 +2092,48 @@ function findScopeForNode(target: Node, defaultScope: FocusScope): FocusScope {
 }
 
 /**
- * Schedule a render for the next microtask.
+ * Execute render and update lastRenderTime.
+ */
+function doRender(state: RuntimeState): void {
+  state.renderScheduled = false;
+  state.lastRenderTime = performance.now();
+  renderFrame(state);
+}
+
+/**
+ * Schedule a render with optional FPS throttling.
  * Coalesces multiple signal updates into a single render.
+ *
+ * When fpsLimit is 0 or negative, renders immediately via microtask.
+ * Otherwise, throttles to the specified frame interval.
  */
 function scheduleRender(state: RuntimeState): void {
   if (state.renderScheduled) return;
   state.renderScheduled = true;
-  queueMicrotask(() => {
-    state.renderScheduled = false;
-    renderFrame(state);
-  });
+
+  const { fpsLimit } = state.options;
+
+  // Unlimited mode: render immediately via microtask
+  if (fpsLimit <= 0) {
+    queueMicrotask(() => doRender(state));
+    return;
+  }
+
+  const frameInterval = 1000 / fpsLimit;
+  const now = performance.now();
+  const elapsed = now - state.lastRenderTime;
+
+  if (elapsed >= frameInterval) {
+    // Enough time has passed, render immediately via microtask
+    queueMicrotask(() => doRender(state));
+  } else {
+    // Too soon, schedule for remaining time
+    const remaining = frameInterval - elapsed;
+    state.throttleTimeout = setTimeout(() => {
+      state.throttleTimeout = null;
+      doRender(state);
+    }, remaining);
+  }
 }
 
 /**
@@ -2131,6 +2170,12 @@ function unmountState(state: RuntimeState, cleanupHandlers?: () => void): void {
     cleanupHandlers();
   }
 
+  // Clear pending throttle timeout
+  if (state.throttleTimeout) {
+    clearTimeout(state.throttleTimeout);
+    state.throttleTimeout = null;
+  }
+
   // Dispose component tree
   state.rootDispose();
 
@@ -2165,6 +2210,8 @@ export function mount(component: () => Node, options?: MountOptions): App {
     buffer: new Buffer(stdout.columns, stdout.rows),
     layoutResult: null,
     renderScheduled: false,
+    lastRenderTime: 0,
+    throttleTimeout: null,
     inputParser: undefined as unknown as { destroy: () => void },
     options: opts,
     focusedNode,

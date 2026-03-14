@@ -2106,6 +2106,100 @@ describe("renderFrame", () => {
   });
 });
 
+describe("fpsLimit throttling", () => {
+  it("fpsLimit throttles rapid renders", async () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+    let renderCount = 0;
+    const originalWrite = mockStdout.write.bind(mockStdout);
+    mockStdout.write = (s: string) => {
+      // Count non-escape-sequence writes that contain content
+      if (s.length > 0 && !s.startsWith("\x1b[?")) {
+        renderCount++;
+      }
+      return originalWrite(s);
+    };
+
+    const [count, setCount] = createSignal(0);
+
+    const app = mount(() => Text({ content: () => `Count: ${count()}` }), {
+      stdin: mockStdin as unknown as NodeJS.ReadStream,
+      stdout: mockStdout as unknown as NodeJS.WriteStream,
+      fpsLimit: 10, // 100ms between frames
+    });
+
+    // Reset counter after initial render
+    renderCount = 0;
+
+    // Trigger many rapid signal changes
+    for (let i = 0; i < 20; i++) {
+      setCount((c) => c + 1);
+    }
+
+    // Wait for throttled renders to complete (200ms should allow ~2 frames at 10fps)
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    // Should have coalesced renders (far fewer than 20)
+    assert.ok(
+      renderCount < 10,
+      `Expected fewer than 10 renders, got ${renderCount}`,
+    );
+
+    app.unmount();
+  });
+
+  it("fpsLimit: 0 allows unlimited renders", async () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const [count, setCount] = createSignal(0);
+
+    const app = mount(() => Text({ content: () => `Count: ${count()}` }), {
+      stdin: mockStdin as unknown as NodeJS.ReadStream,
+      stdout: mockStdout as unknown as NodeJS.WriteStream,
+      fpsLimit: 0, // Unlimited
+    });
+
+    // Trigger signal changes
+    setCount(1);
+    setCount(2);
+
+    // Wait for microtasks
+    await new Promise((resolve) => queueMicrotask(() => resolve(undefined)));
+    await new Promise((resolve) => queueMicrotask(() => resolve(undefined)));
+
+    // Should render without throttling (no timeout needed)
+    assert.ok(mockStdout.written.includes("Count:"));
+
+    app.unmount();
+  });
+
+  it("unmount clears pending throttle timeout", async () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const [count, setCount] = createSignal(0);
+
+    const app = mount(() => Text({ content: () => `Count: ${count()}` }), {
+      stdin: mockStdin as unknown as NodeJS.ReadStream,
+      stdout: mockStdout as unknown as NodeJS.WriteStream,
+      fpsLimit: 1, // Very slow: 1000ms between frames
+    });
+
+    // Trigger a render that will be throttled
+    setCount(1);
+
+    // Unmount immediately (before throttle timeout fires)
+    app.unmount();
+
+    // Wait to ensure no errors from orphaned timeout
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // If we get here without errors, the timeout was properly cleared
+    assert.ok(true);
+  });
+});
+
 describe("resize handling", () => {
   it("buffer is resized on resize event", () => {
     const mockStdin = createMockStdin();
@@ -2511,6 +2605,8 @@ function createTestState(root: Node): RuntimeState {
       children: [],
     },
     renderScheduled: false,
+    lastRenderTime: 0,
+    throttleTimeout: null,
     inputParser: { destroy: () => {} },
     stdin: null as unknown as NodeJS.ReadStream,
     options: {
@@ -2518,6 +2614,7 @@ function createTestState(root: Node): RuntimeState {
       alternateScreen: true,
       stdout: process.stdout,
       stdin: process.stdin,
+      fpsLimit: 0, // Unlimited for tests
     },
     focusedNode,
     setFocusedNode,

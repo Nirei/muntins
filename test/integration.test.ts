@@ -281,7 +281,7 @@ describe("integration", () => {
             },
             children: [Text({ content: () => `Count: ${count()}` })],
           }),
-        { stdin, stdout },
+        { stdin, stdout, fpsLimit: 0 },
       );
 
       // Initial render
@@ -771,7 +771,7 @@ describe("integration", () => {
               }),
             ],
           }),
-        { stdin, stdout },
+        { stdin, stdout, fpsLimit: 0 },
       );
 
       assert.ok(screen.contains("VISIBLE"), "Initially visible");

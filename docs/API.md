@@ -389,6 +389,7 @@ const app = mount(App, {
   stdin: process.stdin,     // default
   mouse: true,              // enable mouse tracking (default: false)
   alternateScreen: true,    // alternate screen buffer (default: true)
+  fpsLimit: 240,            // max renders/second (default: 240, 0 = unlimited)
 });
 
 app.unmount();  // manual cleanup if needed
