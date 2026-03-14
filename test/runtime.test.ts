@@ -74,7 +74,6 @@ describe("runtime core types", () => {
   });
 
   it("DEFAULT_MOUNT_OPTIONS has expected values", () => {
-    assert.strictEqual(DEFAULT_MOUNT_OPTIONS.fps, 60);
     assert.strictEqual(DEFAULT_MOUNT_OPTIONS.mouse, false);
     assert.strictEqual(DEFAULT_MOUNT_OPTIONS.alternateScreen, true);
   });
@@ -1491,7 +1490,6 @@ describe("focus cleanup on Show disposal", () => {
       {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
-        fps: 0,
       },
     );
 
@@ -1535,7 +1533,6 @@ describe("focus cleanup on Show disposal", () => {
       {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
-        fps: 0,
       },
     );
 
@@ -1606,7 +1603,6 @@ describe("stale focusableNodes cleanup", () => {
       {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
-        fps: 0,
       },
     );
 
@@ -1678,7 +1674,6 @@ describe("focus cleanup on For disposal", () => {
       {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
-        fps: 0,
       },
     );
 
@@ -1719,7 +1714,6 @@ describe("hover cleanup on Show disposal", () => {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
         mouse: true,
-        fps: 0,
       },
     );
 
@@ -1947,7 +1941,7 @@ describe("mount", () => {
     const app = mount(() => Text({ content: () => `Count: ${count()}` }), {
       stdin: mockStdin as unknown as NodeJS.ReadStream,
       stdout: mockStdout as unknown as NodeJS.WriteStream,
-      fps: 0, // Immediate mode
+      // Immediate mode
     });
 
     // The output contains both "Count:" and "0" - they may be separated by
@@ -1955,9 +1949,8 @@ describe("mount", () => {
     assert.ok(mockStdout.written.includes("Count:"));
     assert.ok(mockStdout.written.includes("0"));
 
-    // Update signal - in fps: 0 mode, updates are queued but need an event to trigger render
-    // The signal change itself doesn't trigger re-render automatically
-    // (that's expected - the component tree is built once, signals drive updates through effects)
+    // Signal changes trigger re-renders via reactive scheduling
+    // (the component tree is built once, signals drive updates through effects)
     app.unmount();
   });
 
@@ -2028,7 +2021,6 @@ describe("mount", () => {
       {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
-        fps: 0,
       },
     );
 
@@ -2184,7 +2176,6 @@ describe("keyboard routing", () => {
       {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
-        fps: 0,
       },
     );
 
@@ -2222,7 +2213,6 @@ describe("keyboard routing", () => {
       {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
-        fps: 0,
       },
     );
 
@@ -2260,7 +2250,6 @@ describe("keyboard routing", () => {
       {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
-        fps: 0,
       },
     );
 
@@ -2389,7 +2378,6 @@ describe("hover tracking", () => {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
         mouse: true,
-        fps: 0,
       },
     );
 
@@ -2425,7 +2413,6 @@ describe("hover tracking", () => {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
         mouse: true,
-        fps: 0,
       },
     );
 
@@ -2459,7 +2446,6 @@ describe("mouse events", () => {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
         mouse: true,
-        fps: 0,
       },
     );
 
@@ -2489,7 +2475,6 @@ describe("scroll events", () => {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
         mouse: true,
-        fps: 0,
       },
     );
 
@@ -2525,17 +2510,15 @@ function createTestState(root: Node): RuntimeState {
       height: 24,
       children: [],
     },
+    renderScheduled: false,
     inputParser: { destroy: () => {} },
     stdin: null as unknown as NodeJS.ReadStream,
-    frameInterval: null,
     options: {
-      fps: 60,
       mouse: false,
       alternateScreen: true,
       stdout: process.stdout,
       stdin: process.stdin,
     },
-    pendingEvents: [],
     focusedNode,
     setFocusedNode,
     rootScope,
@@ -2786,7 +2769,6 @@ describe("useFocus", () => {
       {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
-        fps: 0,
       },
     );
 
@@ -2957,7 +2939,6 @@ describe("focus.set with nested scopes", () => {
       {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
-        fps: 0,
       },
     );
 
@@ -3006,7 +2987,6 @@ describe("TabFocus component", () => {
       {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
-        fps: 0,
       },
     );
 
@@ -3054,7 +3034,6 @@ describe("TabFocus component", () => {
       {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
-        fps: 0,
       },
     );
 
@@ -3094,7 +3073,6 @@ describe("scroll event bubbling", () => {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
         mouse: true,
-        fps: 0,
       },
     );
 
@@ -3129,7 +3107,6 @@ describe("scroll event bubbling", () => {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
         mouse: true,
-        fps: 0,
       },
     );
 
@@ -3169,7 +3146,6 @@ describe("paste event bubbling", () => {
       {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
-        fps: 0,
       },
     );
 
@@ -3201,7 +3177,6 @@ describe("paste event bubbling", () => {
       {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
-        fps: 0,
       },
     );
 
@@ -3231,7 +3206,6 @@ describe("paste event bubbling", () => {
       {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
-        fps: 0,
       },
     );
 
@@ -3283,7 +3257,6 @@ describe("dynamic focus collection", () => {
       {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
-        fps: 0,
       },
     );
 
@@ -3330,7 +3303,6 @@ describe("dynamic focus collection", () => {
       {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
-        fps: 0,
       },
     );
 
@@ -3396,7 +3368,6 @@ describe("nested scope autoFocus", () => {
       {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
-        fps: 0,
       },
     );
 

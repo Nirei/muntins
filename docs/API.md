@@ -387,7 +387,6 @@ function App() {
 const app = mount(App, {
   stdout: process.stdout,   // default
   stdin: process.stdin,     // default
-  fps: 60,                  // max redraws per second (default: 60)
   mouse: true,              // enable mouse tracking (default: false)
   alternateScreen: true,    // alternate screen buffer (default: true)
 });

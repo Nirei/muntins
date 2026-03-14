@@ -103,7 +103,6 @@ export function createRef(): Ref {
 export interface MountOptions {
   stdout?: NodeJS.WriteStream;
   stdin?: NodeJS.ReadStream;
-  fps?: number;
   mouse?: boolean;
   alternateScreen?: boolean;
 }
@@ -114,7 +113,6 @@ export interface MountOptions {
 export const DEFAULT_MOUNT_OPTIONS: Required<MountOptions> = {
   stdout: process.stdout,
   stdin: process.stdin,
-  fps: 60,
   mouse: false,
   alternateScreen: true,
 };
@@ -140,13 +138,12 @@ export interface RuntimeState {
   // Rendering
   buffer: Buffer;
   layoutResult: import("./layout.ts").LayoutResult | null;
-  frameInterval: ReturnType<typeof setInterval> | null;
+  renderScheduled: boolean;
   options: Required<MountOptions>;
 
   // Input
   stdin: NodeJS.ReadStream;
   inputParser: { destroy: () => void };
-  pendingEvents: InputEvent[];
 
   // Focus (reactive signal for tracking focus changes)
   focusedNode: Accessor<Node | null>;
@@ -1712,9 +1709,6 @@ function renderFrame(state: RuntimeState): void {
   if (output.length > 0) {
     flushFrame(stdout, output);
   }
-
-  // Clear pending events
-  state.pendingEvents = [];
 }
 
 /**
@@ -2091,14 +2085,27 @@ function findScopeForNode(target: Node, defaultScope: FocusScope): FocusScope {
 }
 
 /**
+ * Schedule a render for the next microtask.
+ * Coalesces multiple signal updates into a single render.
+ */
+function scheduleRender(state: RuntimeState): void {
+  if (state.renderScheduled) return;
+  state.renderScheduled = true;
+  queueMicrotask(() => {
+    state.renderScheduled = false;
+    renderFrame(state);
+  });
+}
+
+/**
  * Handle incoming input events.
- * Resize events are handled immediately; others are routed and queued.
+ * Resize events trigger immediate render; others route events and schedule render.
  */
 function handleEvent(state: RuntimeState, event: InputEvent): void {
-  // Handle resize immediately
+  // Handle resize immediately (buffer must be resized before next render)
   if (event.type === "resize") {
     state.buffer.resize(event.width, event.height);
-    renderFrame(state);
+    scheduleRender(state);
     return;
   }
 
@@ -2108,13 +2115,8 @@ function handleEvent(state: RuntimeState, event: InputEvent): void {
     routeEvent(state, event);
   });
 
-  // Queue event for render
-  state.pendingEvents.push(event);
-
-  // If no fps limit, render immediately
-  if (state.options.fps === 0) {
-    renderFrame(state);
-  }
+  // Schedule render after event processing
+  scheduleRender(state);
 }
 
 /**
@@ -2127,12 +2129,6 @@ function unmountState(state: RuntimeState, cleanupHandlers?: () => void): void {
   // Remove signal handlers if provided
   if (cleanupHandlers) {
     cleanupHandlers();
-  }
-
-  // Stop render loop
-  if (state.frameInterval) {
-    clearInterval(state.frameInterval);
-    state.frameInterval = null;
   }
 
   // Dispose component tree
@@ -2168,10 +2164,9 @@ export function mount(component: () => Node, options?: MountOptions): App {
     rootDispose: undefined as unknown as () => void,
     buffer: new Buffer(stdout.columns, stdout.rows),
     layoutResult: null,
+    renderScheduled: false,
     inputParser: undefined as unknown as { destroy: () => void },
-    frameInterval: null,
     options: opts,
-    pendingEvents: [],
     focusedNode,
     setFocusedNode,
     rootScope: {
@@ -2210,16 +2205,6 @@ export function mount(component: () => Node, options?: MountOptions): App {
 
   // Initial render
   renderFrame(state);
-
-  // Start render loop if fps is set
-  if (opts.fps > 0) {
-    const interval = Math.floor(1000 / opts.fps);
-    state.frameInterval = setInterval(() => {
-      if (state.pendingEvents.length > 0) {
-        renderFrame(state);
-      }
-    }, interval);
-  }
 
   // Track if already unmounted to prevent double cleanup
   let unmounted = false;

@@ -175,6 +175,13 @@ function emitKeypress(
   stdin.emit("keypress", char, { ...key, sequence: char });
 }
 
+/**
+ * Wait for the next microtask (render scheduling uses queueMicrotask).
+ */
+function nextTick(): Promise<void> {
+  return new Promise((resolve) => queueMicrotask(resolve));
+}
+
 describe("integration", () => {
   describe("render pipeline", () => {
     it("renders Text content to screen", () => {
@@ -183,7 +190,6 @@ describe("integration", () => {
       const app = mount(() => Text({ content: "Hello World" }), {
         stdin,
         stdout,
-        fps: 0,
       });
 
       assert.ok(
@@ -207,7 +213,7 @@ describe("integration", () => {
               Text({ content: "Line 3" }),
             ],
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       assert.ok(screen.contains("Line 1"), "Should render Line 1");
@@ -224,7 +230,6 @@ describe("integration", () => {
       const app = mount(() => Text({ content: text }), {
         stdin,
         stdout,
-        fps: 0,
       });
 
       assert.ok(
@@ -251,7 +256,7 @@ describe("integration", () => {
               }),
             ],
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       assert.ok(screen.contains("Deeply nested"), "Should render nested text");
@@ -261,7 +266,7 @@ describe("integration", () => {
   });
 
   describe("reactive updates via events", () => {
-    it("updates Text content when signal changes during keypress", () => {
+    it("updates Text content when signal changes during keypress", async () => {
       const { stdin, stdout, screen } = createMockStreams();
       const [count, setCount] = createSignal(0);
 
@@ -276,7 +281,7 @@ describe("integration", () => {
             },
             children: [Text({ content: () => `Count: ${count()}` })],
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       // Initial render
@@ -284,6 +289,7 @@ describe("integration", () => {
 
       // Trigger update
       emitKeypress(stdin, "x", { name: "x" });
+      await nextTick();
       assert.ok(
         screen.contains("Count: 1"),
         `After keypress should show Count: 1, got: '${screen.getRow(0)}'`,
@@ -291,12 +297,13 @@ describe("integration", () => {
 
       // Trigger another update
       emitKeypress(stdin, "x", { name: "x" });
+      await nextTick();
       assert.ok(screen.contains("Count: 2"), "Should show Count: 2");
 
       app.unmount();
     });
 
-    it("batches multiple signal updates within single event", () => {
+    it("batches multiple signal updates within single event", async () => {
       const { stdin, stdout, screen } = createMockStreams();
       const [a, setA] = createSignal(0);
       const [b, setB] = createSignal(0);
@@ -327,7 +334,7 @@ describe("integration", () => {
               }),
             ],
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       // Initial render should show A=0 B=0
@@ -338,6 +345,7 @@ describe("integration", () => {
       );
 
       emitKeypress(stdin, "x", { name: "x" });
+      await nextTick();
 
       assert.ok(screen.contains("A=1"), "Should show A=1");
       assert.ok(screen.contains("B=2"), "Should show B=2");
@@ -353,7 +361,7 @@ describe("integration", () => {
       app.unmount();
     });
 
-    it("memo values update correctly", () => {
+    it("memo values update correctly", async () => {
       const { stdin, stdout, screen } = createMockStreams();
       const [count, setCount] = createSignal(1);
       const doubled = createMemo(() => count() * 2);
@@ -369,12 +377,13 @@ describe("integration", () => {
             },
             children: [Text({ content: () => `Doubled: ${doubled()}` })],
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       assert.ok(screen.contains("Doubled: 2"), "Initial: 1*2=2");
 
       emitKeypress(stdin, "x", { name: "x" });
+      await nextTick();
       assert.ok(screen.contains("Doubled: 4"), "After update: 2*2=4");
 
       app.unmount();
@@ -410,7 +419,7 @@ describe("integration", () => {
               }),
             ],
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       emitKeypress(stdin, "x", { name: "x" });
@@ -452,7 +461,7 @@ describe("integration", () => {
               }),
             ],
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       emitKeypress(stdin, "x", { name: "x" });
@@ -497,7 +506,7 @@ describe("integration", () => {
               }),
             ],
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       emitKeypress(stdin, "x", { name: "x" });
@@ -531,7 +540,7 @@ describe("integration", () => {
             },
             children: [Text({ content: "Input" })],
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       emitKeypress(stdin, "a", { name: "a", ctrl: true, shift: true });
@@ -582,7 +591,7 @@ describe("integration", () => {
               }),
             ],
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       // Initially first is focused
@@ -639,7 +648,7 @@ describe("integration", () => {
               }),
             ],
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       // Initially third is focused
@@ -688,7 +697,7 @@ describe("integration", () => {
               }),
             ],
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       // Tab twice to wrap back to first
@@ -713,7 +722,7 @@ describe("integration", () => {
             when: visible,
             children: () => Text({ content: "Visible content" }),
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       assert.ok(screen.contains("Visible content"), "Should render children");
@@ -732,7 +741,7 @@ describe("integration", () => {
             children: () => Text({ content: "Shown" }),
             fallback: () => Text({ content: "Fallback" }),
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       assert.ok(!screen.contains("Shown"), "Should not render children");
@@ -741,7 +750,7 @@ describe("integration", () => {
       app.unmount();
     });
 
-    it("switches branches when condition changes via event", () => {
+    it("switches branches when condition changes via event", async () => {
       const { stdin, stdout, screen } = createMockStreams();
       const [visible, setVisible] = createSignal(true);
 
@@ -762,15 +771,17 @@ describe("integration", () => {
               }),
             ],
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       assert.ok(screen.contains("VISIBLE"), "Initially visible");
 
       emitKeypress(stdin, "x", { name: "x" });
+      await nextTick();
       assert.ok(screen.contains("HIDDEN"), "After toggle: hidden");
 
       emitKeypress(stdin, "x", { name: "x" });
+      await nextTick();
       assert.ok(screen.contains("VISIBLE"), "After second toggle: visible");
 
       app.unmount();
@@ -804,7 +815,7 @@ describe("integration", () => {
               }),
             ],
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       assert.deepStrictEqual(cleanups, [], "No cleanups initially");
@@ -834,7 +845,7 @@ describe("integration", () => {
             each: items,
             render: (item) => Text({ content: item }),
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       assert.ok(screen.contains("apple"), "Should render apple");
@@ -860,7 +871,7 @@ describe("integration", () => {
               }),
             ],
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       assert.ok(screen.contains("0: x"), "Should render 0: x");
@@ -870,7 +881,7 @@ describe("integration", () => {
       app.unmount();
     });
 
-    it("adds new items when list grows", () => {
+    it("adds new items when list grows", async () => {
       const { stdin, stdout, screen } = createMockStreams();
       const [items, setItems] = createSignal(["a", "b"]);
 
@@ -890,7 +901,7 @@ describe("integration", () => {
               }),
             ],
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       assert.ok(screen.contains("a"), "Initial: has a");
@@ -898,6 +909,7 @@ describe("integration", () => {
       assert.ok(!screen.contains("c"), "Initial: no c");
 
       emitKeypress(stdin, "x", { name: "x" });
+      await nextTick();
 
       assert.ok(screen.contains("c"), "After add: has c");
       assert.ok(screen.contains("d"), "After add: has d");
@@ -930,7 +942,7 @@ describe("integration", () => {
               }),
             ],
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       emitKeypress(stdin, "x", { name: "x" });
@@ -966,7 +978,7 @@ describe("integration", () => {
               }),
             ],
           }),
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       const initialCreates = createCount.value;
@@ -997,7 +1009,7 @@ describe("integration", () => {
           });
           return Text({ content: "Test" });
         },
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       assert.ok(!cleanupCalled, "Cleanup not called before unmount");
@@ -1026,7 +1038,7 @@ describe("integration", () => {
             children: [Text({ content: "Test" })],
           });
         },
-        { stdin, stdout, fps: 0 },
+        { stdin, stdout },
       );
 
       const runsBeforeUnmount = effectRuns;
@@ -1051,7 +1063,6 @@ describe("integration", () => {
         stdin,
         stdout,
         alternateScreen: true,
-        fps: 0,
       });
 
       assert.ok(
@@ -1069,7 +1080,6 @@ describe("integration", () => {
         stdin,
         stdout,
         alternateScreen: false,
-        fps: 0,
       });
 
       assert.ok(
@@ -1086,7 +1096,6 @@ describe("integration", () => {
       const app = mount(() => Text({ content: "Test" }), {
         stdin,
         stdout,
-        fps: 0,
       });
 
       assert.ok(
@@ -1104,7 +1113,6 @@ describe("integration", () => {
         stdin,
         stdout,
         alternateScreen: true,
-        fps: 0,
       });
 
       screen.clearRawOutput();
@@ -1121,7 +1129,6 @@ describe("integration", () => {
       const app = mount(() => Text({ content: "Test" }), {
         stdin,
         stdout,
-        fps: 0,
       });
 
       assert.ok(
