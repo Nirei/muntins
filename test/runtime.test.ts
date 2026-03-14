@@ -1339,7 +1339,7 @@ describe("Show", () => {
 
       const layout = computeLayout(toLayoutNode(parent), 90, 1);
 
-      // With display: "contents", Show is transparent — its child (Box B) is
+      // With display: "contents", Show is transparent, its child (Box B) is
       // hoisted to be a direct child of the parent for layout purposes.
       // All three boxes should have equal width (90 / 3 = 30)
       assert.strictEqual(

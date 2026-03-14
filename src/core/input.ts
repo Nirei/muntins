@@ -174,7 +174,7 @@ export function setupKeyboardInput(
   onKey: (event: KeyEvent) => void,
 ): () => void {
   // Enable keypress events on stdin
-  // NOTE: This is a one-way operation in Node.js — there's no way to "disable" it.
+  // NOTE: This is a one-way operation in Node.js, there's no way to "disable" it.
   // The keypress events will continue until the process exits.
   readline.emitKeypressEvents(stdin);
 

@@ -382,7 +382,7 @@ export function focusNext(state: RuntimeState, scope: FocusScope): void {
   const { focusableNodes, focusedIndex } = scope;
 
   if (focusableNodes.length === 0) {
-    // No focusables in this scope — try parent if not trapped
+    // No focusables in this scope, try parent if not trapped
     if (!scope.trap && scope.parent) {
       focusNext(state, scope.parent);
     }
@@ -390,7 +390,7 @@ export function focusNext(state: RuntimeState, scope: FocusScope): void {
   }
 
   if (focusedIndex === -1) {
-    // Nothing focused — focus first
+    // Nothing focused, focus first
     scope.focusedIndex = 0;
     state.setFocusedNode(focusableNodes[0]);
     return;
@@ -409,7 +409,7 @@ export function focusNext(state: RuntimeState, scope: FocusScope): void {
       scope.focusedIndex = -1;
       focusNext(state, scope.parent);
     } else {
-      // No parent focusables or at root — wrap
+      // No parent focusables or at root, wrap
       scope.focusedIndex = 0;
       state.setFocusedNode(focusableNodes[0]);
     }
@@ -434,7 +434,7 @@ export function focusPrev(state: RuntimeState, scope: FocusScope): void {
   }
 
   if (focusedIndex === -1) {
-    // Nothing focused — focus last
+    // Nothing focused, focus last
     scope.focusedIndex = focusableNodes.length - 1;
     state.setFocusedNode(focusableNodes[scope.focusedIndex]);
     return;
@@ -452,7 +452,7 @@ export function focusPrev(state: RuntimeState, scope: FocusScope): void {
       scope.focusedIndex = -1;
       focusPrev(state, scope.parent);
     } else {
-      // No parent focusables or at root — wrap
+      // No parent focusables or at root, wrap
       scope.focusedIndex = focusableNodes.length - 1;
       state.setFocusedNode(focusableNodes[scope.focusedIndex]);
     }
@@ -878,7 +878,7 @@ export function measureText(
     };
   }
 
-  // No wrapping — single line per input line
+  // No wrapping, single line per input line
   const maxWidth = Math.max(...lines.map((line) => lineDisplayWidth(line)));
   return {
     width: Math.min(maxWidth, availableWidth),
@@ -1615,13 +1615,13 @@ export function For<T>(props: ForProps<T>): Node {
     for (const [key, entries] of itemRoots) {
       const needed = keyCounts.get(key) ?? 0;
       if (needed === 0) {
-        // Key no longer exists — dispose all entries
+        // Key no longer exists, dispose all entries
         for (const entry of entries) {
           disposeEntry(entry);
         }
         itemRoots.delete(key);
       } else if (entries.length > needed) {
-        // More entries than needed — dispose excess
+        // More entries than needed, dispose excess
         const excess = entries.splice(needed);
         for (const entry of excess) {
           disposeEntry(entry);
@@ -1891,7 +1891,7 @@ function renderFrame(state: RuntimeState): void {
   const { root, options, buffer } = state;
   const { stdout } = options;
 
-  // Phase 1: Build — already done reactively
+  // Phase 1: Build, already done reactively
   // (component tree exists, signals drive updates)
 
   // Phase 2: Layout

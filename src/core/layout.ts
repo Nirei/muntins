@@ -191,7 +191,7 @@ function collectLayoutChildren(
         collectLayoutChildren(child.children, parent);
       }
     } else {
-      // Normal child — create a box
+      // Normal child, create a box
       parent.children.push(buildLayoutTree(child, parent));
     }
   }
