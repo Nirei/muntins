@@ -8,6 +8,7 @@ import {
   DIM,
   INVERSE,
   ITALIC,
+  type InheritableColor,
   STRIKETHROUGH,
   UNDERLINE,
   graphemeDisplayWidth,
@@ -58,7 +59,21 @@ export interface Node {
     width: number,
     height: number,
     buffer: Buffer,
+    inherited: InheritedStyle,
   ) => void;
+
+  // Inheritable style props (resolved at paint time)
+  _inheritableProps?: {
+    backgroundColor?: InheritableColor | (() => InheritableColor);
+    borderColor?: InheritableColor | (() => InheritableColor);
+    color?: InheritableColor | (() => InheritableColor);
+    bold?: InheritableBool | (() => InheritableBool);
+    dim?: InheritableBool | (() => InheritableBool);
+    italic?: InheritableBool | (() => InheritableBool);
+    underline?: InheritableBool | (() => InheritableBool);
+    strikethrough?: InheritableBool | (() => InheritableBool);
+    inverse?: InheritableBool | (() => InheritableBool);
+  };
 
   // Tree structure (set during tree construction by runtime)
   _parent?: Node;
@@ -589,12 +604,118 @@ export function flushFrame(stdout: NodeJS.WriteStream, content: string): void {
   stdout.write(content);
 }
 
+/**
+ * Inherited style values passed down through the node tree during paint.
+ * All properties are resolved (no "inherit" values).
+ */
+export interface InheritedStyle {
+  color: Color;
+  backgroundColor: Color;
+  borderColor: Color;
+  bold: boolean;
+  dim: boolean;
+  italic: boolean;
+  underline: boolean;
+  strikethrough: boolean;
+  inverse: boolean;
+}
+
+/**
+ * Default inherited style values.
+ * Used at the root when no parent style exists.
+ */
+export const DEFAULT_INHERITED_STYLE: InheritedStyle = {
+  color: DEFAULT_COLOR,
+  backgroundColor: DEFAULT_COLOR,
+  borderColor: DEFAULT_COLOR,
+  bold: false,
+  dim: false,
+  italic: false,
+  underline: false,
+  strikethrough: false,
+  inverse: false,
+};
+
+/** Inheritable boolean value for text modifiers. */
+export type InheritableBool = boolean | "inherit";
+
+/**
+ * Resolve an inheritable color value.
+ * Returns the inherited value if the prop is undefined or "inherit".
+ */
+function resolveInheritableColor(
+  value: InheritableColor | (() => InheritableColor) | undefined,
+  inherited: Color,
+): Color {
+  if (value === undefined || value === "inherit") {
+    return inherited;
+  }
+  if (typeof value === "function") {
+    const resolved = value();
+    return resolved === "inherit" ? inherited : resolved;
+  }
+  return value;
+}
+
+/**
+ * Resolve an inheritable boolean value.
+ * Returns the inherited value if the prop is undefined or "inherit".
+ */
+function resolveInheritableBool(
+  value: InheritableBool | (() => InheritableBool) | undefined,
+  inherited: boolean,
+): boolean {
+  if (value === undefined || value === "inherit") {
+    return inherited;
+  }
+  if (typeof value === "function") {
+    const resolved = value();
+    return resolved === "inherit" ? inherited : resolved;
+  }
+  return value;
+}
+
+/**
+ * Compute resolved inherited style from a node's inheritable props.
+ * Merges with parent inherited style, resolving any "inherit" values.
+ */
+function computeInheritedStyle(
+  node: Node,
+  parentStyle: InheritedStyle,
+): InheritedStyle {
+  const props = node._inheritableProps;
+  if (!props) {
+    return parentStyle;
+  }
+
+  return {
+    color: resolveInheritableColor(props.color, parentStyle.color),
+    backgroundColor: resolveInheritableColor(
+      props.backgroundColor,
+      parentStyle.backgroundColor,
+    ),
+    borderColor: resolveInheritableColor(
+      props.borderColor,
+      parentStyle.borderColor,
+    ),
+    bold: resolveInheritableBool(props.bold, parentStyle.bold),
+    dim: resolveInheritableBool(props.dim, parentStyle.dim),
+    italic: resolveInheritableBool(props.italic, parentStyle.italic),
+    underline: resolveInheritableBool(props.underline, parentStyle.underline),
+    strikethrough: resolveInheritableBool(
+      props.strikethrough,
+      parentStyle.strikethrough,
+    ),
+    inverse: resolveInheritableBool(props.inverse, parentStyle.inverse),
+  };
+}
+
 /** Props for Box component. */
 export interface BoxProps extends Partial<FlexStyle> {
   children?: Node[];
-  backgroundColor?: Color | (() => Color);
+  backgroundColor?: InheritableColor | (() => InheritableColor);
   border?: BorderProp | (() => BorderProp);
-  borderColor?: Color | (() => Color);
+  borderColor?: InheritableColor | (() => InheritableColor);
   borderStyle?: BorderStyleName | (() => BorderStyleName);
   focusable?: boolean;
   autoFocus?: boolean;
@@ -662,14 +783,14 @@ export type WrapMode = "wrap" | "truncate" | "truncate-end" | "truncate-start";
 /** Props for Text component. */
 export interface TextProps {
   content: string | (() => string);
-  color?: Color | (() => Color);
-  backgroundColor?: Color | (() => Color);
-  bold?: boolean | (() => boolean);
-  italic?: boolean | (() => boolean);
-  underline?: boolean | (() => boolean);
-  dim?: boolean | (() => boolean);
-  strikethrough?: boolean | (() => boolean);
-  inverse?: boolean | (() => boolean);
+  color?: InheritableColor | (() => InheritableColor);
+  backgroundColor?: InheritableColor | (() => InheritableColor);
+  bold?: InheritableBool | (() => InheritableBool);
+  italic?: InheritableBool | (() => InheritableBool);
+  underline?: InheritableBool | (() => InheritableBool);
+  dim?: InheritableBool | (() => InheritableBool);
+  strikethrough?: InheritableBool | (() => InheritableBool);
+  inverse?: InheritableBool | (() => InheritableBool);
   wrap?: WrapMode | (() => WrapMode);
   focusable?: boolean;
   autoFocus?: boolean;
@@ -840,16 +961,18 @@ function resolveValue<T>(value: T | (() => T) | undefined): T | undefined {
 }
 
 /**
- * Computes the modifier bitmask from TextProps.
+ * Computes the modifier bitmask from TextProps using inherited styles.
  */
-function computeModifiers(props: TextProps): number {
+function computeModifiers(props: TextProps, inherited: InheritedStyle): number {
   let mods = 0;
-  if (resolveValue(props.bold)) mods |= BOLD;
-  if (resolveValue(props.dim)) mods |= DIM;
-  if (resolveValue(props.italic)) mods |= ITALIC;
-  if (resolveValue(props.underline)) mods |= UNDERLINE;
-  if (resolveValue(props.strikethrough)) mods |= STRIKETHROUGH;
-  if (resolveValue(props.inverse)) mods |= INVERSE;
+  if (resolveInheritableBool(props.bold, inherited.bold)) mods |= BOLD;
+  if (resolveInheritableBool(props.dim, inherited.dim)) mods |= DIM;
+  if (resolveInheritableBool(props.italic, inherited.italic)) mods |= ITALIC;
+  if (resolveInheritableBool(props.underline, inherited.underline))
+    mods |= UNDERLINE;
+  if (resolveInheritableBool(props.strikethrough, inherited.strikethrough))
+    mods |= STRIKETHROUGH;
+  if (resolveInheritableBool(props.inverse, inherited.inverse)) mods |= INVERSE;
   return mods;
 }
 
@@ -864,11 +987,15 @@ function renderText(
   height: number,
   text: string,
   props: TextProps,
+  inherited: InheritedStyle,
 ): void {
-  // Resolve reactive props
-  const fg = resolveValue(props.color) ?? DEFAULT_COLOR;
-  const bg = resolveValue(props.backgroundColor) ?? DEFAULT_COLOR;
-  const modifiers = computeModifiers(props);
+  // Resolve reactive props with inheritance
+  const fg = resolveInheritableColor(props.color, inherited.color);
+  const bg = resolveInheritableColor(
+    props.backgroundColor,
+    inherited.backgroundColor,
+  );
+  const modifiers = computeModifiers(props, inherited);
   const wrapValue = resolveValue(props.wrap) ?? "wrap";
 
   const lines = text.split("\n");
@@ -1078,18 +1205,23 @@ export function Box(props: BoxProps): Node {
     onScroll,
     onHover,
 
+    // Store inheritable props for style resolution during paint
+    _inheritableProps: {
+      backgroundColor,
+      borderColor,
+    },
+
     // Render function when backgroundColor or border is set
     render: needsRender
-      ? (x, y, width, height, buffer) => {
-          // Resolve background color (may be reactive)
-          const bg =
-            backgroundColor !== undefined
-              ? typeof backgroundColor === "function"
-                ? backgroundColor()
-                : backgroundColor
-              : DEFAULT_COLOR;
+      ? (x, y, width, height, buffer, inherited) => {
+          // Resolve background color with inheritance
+          const bg = resolveInheritableColor(
+            backgroundColor,
+            inherited.backgroundColor,
+          );
 
-          // Render background first (if set)
+          // Render background first (if set or inherited)
+          // Only fill if we have an explicit backgroundColor prop
           if (backgroundColor !== undefined) {
             buffer.fillRect(x, y, width, height, " ", DEFAULT_COLOR, bg, 0);
           }
@@ -1103,12 +1235,10 @@ export function Box(props: BoxProps): Node {
             borderFlags.start;
 
           if (hasBorder) {
-            const fg =
-              borderColor !== undefined
-                ? typeof borderColor === "function"
-                  ? borderColor()
-                  : borderColor
-                : DEFAULT_COLOR;
+            const fg = resolveInheritableColor(
+              borderColor,
+              inherited.borderColor,
+            );
             const borderValue =
               typeof border === "function" ? border() : border;
             const borderStyleValue =
@@ -1152,6 +1282,14 @@ export function Box(props: BoxProps): Node {
 export function Text(props: TextProps): Node {
   const {
     content,
+    color,
+    backgroundColor,
+    bold,
+    dim,
+    italic,
+    underline,
+    strikethrough,
+    inverse,
     focusable,
     autoFocus,
     ref,
@@ -1162,7 +1300,6 @@ export function Text(props: TextProps): Node {
     onScroll,
     onHover,
     wrap,
-    ...styleProps
   } = props;
 
   const getContent = typeof content === "function" ? content : () => content;
@@ -1180,6 +1317,18 @@ export function Text(props: TextProps): Node {
     onScroll,
     onHover,
 
+    // Store inheritable props for style resolution during paint
+    _inheritableProps: {
+      color,
+      backgroundColor,
+      bold,
+      dim,
+      italic,
+      underline,
+      strikethrough,
+      inverse,
+    },
+
     measure(availableWidth: number, _availableHeight: number) {
       return measureText(getContent(), availableWidth, getWrap());
     },
@@ -1190,12 +1339,29 @@ export function Text(props: TextProps): Node {
       width: number,
       height: number,
       buffer: Buffer,
+      inherited: InheritedStyle,
     ) {
-      renderText(buffer, x, y, width, height, getContent(), {
-        ...styleProps,
-        content,
-        wrap: getWrap(),
-      });
+      renderText(
+        buffer,
+        x,
+        y,
+        width,
+        height,
+        getContent(),
+        {
+          content,
+          color,
+          backgroundColor,
+          bold,
+          dim,
+          italic,
+          underline,
+          strikethrough,
+          inverse,
+          wrap: getWrap(),
+        },
+        inherited,
+      );
     },
   };
 
@@ -1600,13 +1766,23 @@ function nodeToLayoutNode(node: Node): LayoutNode {
  *
  * Handles `display: "contents"` nodes by painting their children directly
  * with the corresponding layout results (matching how layout hoists them).
+ *
+ * @param inherited - Inherited styles from parent nodes, resolved to concrete values
  */
-function paintNode(node: Node, layout: LayoutResult, buffer: Buffer): void {
+function paintNode(
+  node: Node,
+  layout: LayoutResult,
+  buffer: Buffer,
+  inherited: InheritedStyle,
+): void {
   const { screenX, screenY, width, height } = layout;
+
+  // Compute this node's inherited style (resolves any "inherit" values)
+  const nodeInherited = computeInheritedStyle(node, inherited);
 
   // Paint this node if it has a render function
   if (node.render) {
-    node.render(screenX, screenY, width, height, buffer);
+    node.render(screenX, screenY, width, height, buffer, nodeInherited);
   }
 
   // Get children (may be a getter for Show/For)
@@ -1617,18 +1793,21 @@ function paintNode(node: Node, layout: LayoutResult, buffer: Buffer): void {
   const childLayouts = layout.children ?? [];
 
   // Paint children, handling display: "contents" nodes
-  paintChildren(children, childLayouts, buffer);
+  paintChildren(children, childLayouts, buffer, nodeInherited);
 }
 
 /**
  * Paint children nodes with their corresponding layout results.
  * Handles `display: "contents"` nodes by recursively painting their children
  * with layout results (since layout hoists them to be direct children).
+ *
+ * @param inherited - Inherited styles from parent nodes
  */
 function paintChildren(
   children: Node[],
   layouts: LayoutResult[],
   buffer: Buffer,
+  inherited: InheritedStyle,
 ): void {
   let layoutIndex = 0;
 
@@ -1638,6 +1817,9 @@ function paintChildren(
 
     if (style.display === "contents") {
       // For display: "contents" nodes, their children are hoisted in layout.
+      // Compute inherited style for this node (even though it has no layout box)
+      const childInherited = computeInheritedStyle(child, inherited);
+
       // Recursively paint this node's children using the next layout results.
       const grandchildren =
         typeof child.children === "function"
@@ -1653,20 +1835,29 @@ function paintChildren(
 
         if (grandchildStyle.display === "contents") {
           // Recursively handle nested display: "contents"
+          const grandchildInherited = computeInheritedStyle(
+            grandchild,
+            childInherited,
+          );
           const greatGrandchildren =
             typeof grandchild.children === "function"
               ? (grandchild.children as () => Node[])()
               : (grandchild.children ?? []);
-          paintChildren(greatGrandchildren, layouts.slice(layoutIndex), buffer);
+          paintChildren(
+            greatGrandchildren,
+            layouts.slice(layoutIndex),
+            buffer,
+            grandchildInherited,
+          );
           // Count how many layouts were consumed
           layoutIndex += countHoistedChildren(grandchild);
         } else if (layouts[layoutIndex]) {
-          paintNode(grandchild, layouts[layoutIndex], buffer);
+          paintNode(grandchild, layouts[layoutIndex], buffer, childInherited);
           layoutIndex++;
         }
       }
     } else if (layouts[layoutIndex]) {
-      paintNode(child, layouts[layoutIndex], buffer);
+      paintNode(child, layouts[layoutIndex], buffer, inherited);
       layoutIndex++;
     }
   }
@@ -1709,7 +1900,7 @@ function renderFrame(state: RuntimeState): void {
 
   // Phase 3: Paint
   buffer.clear();
-  paintNode(root, state.layoutResult, buffer);
+  paintNode(root, state.layoutResult, buffer, DEFAULT_INHERITED_STYLE);
 
   // Diff, serialize, and sync (all internal to Buffer)
   const output = buffer.flush();

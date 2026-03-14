@@ -301,6 +301,16 @@ export type Color =
   | { type: "rgb"; r: number; g: number; b: number };
 
 /**
+ * Color value that can be inherited from a parent node.
+ * Used in component props where inheritance is supported.
+ *
+ * - "inherit": Explicitly inherit from parent (same as undefined)
+ * - undefined: Inherit from parent (default behavior)
+ * - Color: Use this specific color value
+ */
+export type InheritableColor = Color | "inherit";
+
+/**
  * Default color (terminal's default).
  */
 export const DEFAULT_COLOR: Color = { type: "default" };

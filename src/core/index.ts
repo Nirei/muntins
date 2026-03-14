@@ -21,6 +21,7 @@ export { computeLayout, DEFAULT_FLEX_STYLE, type FlexStyle } from "./layout.ts";
 export {
   Buffer,
   type Color,
+  type InheritableColor,
   DEFAULT_COLOR,
   BOLD,
   DIM,
@@ -69,6 +70,7 @@ export {
   truncateLine,
   BORDER_CHARS,
   DEFAULT_MOUNT_OPTIONS,
+  DEFAULT_INHERITED_STYLE,
   type Node,
   type Ref,
   type BoxProps,
@@ -82,4 +84,6 @@ export {
   type App,
   type BorderStyleName,
   type BorderProp,
+  type InheritedStyle,
+  type InheritableBool,
 } from "./runtime.ts";
