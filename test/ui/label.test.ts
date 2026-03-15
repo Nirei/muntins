@@ -237,7 +237,7 @@ describe("Label", () => {
       assert.strictEqual(focusController.current(), otherRef.current);
 
       // Simulate clicking label by calling its onMousePress handler
-      // The Label's onMousePress calls focus.set(htmlFor)
+      // The Label's onMousePress calls focus.set(for)
       focusController.set(inputRef);
 
       // Input should now be focused

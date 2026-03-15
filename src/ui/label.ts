@@ -22,7 +22,7 @@ export interface LabelProps {
 /**
  * A text label for form elements, optionally associated with a focusable target.
  *
- * When `htmlFor` is provided and the label receives a mouse press, focus moves
+ * When `for` is provided and the label receives a mouse press, focus moves
  * to the referenced element. The label itself is not focusable.
  *
  * @example
@@ -33,7 +33,7 @@ export interface LabelProps {
  *   flexDirection: "column",
  *   gap: 1,
  *   children: [
- *     Label({ children: "Username", htmlFor: inputRef }),
+ *     Label({ children: "Username", for: inputRef }),
  *     Input({ ref: inputRef, value, onChange }),
  *   ],
  * });
@@ -42,13 +42,13 @@ export interface LabelProps {
 export function Label(props: LabelProps): Node {
   const { children, for: forRef, style } = props;
 
-  // Get focus controller to handle htmlFor association
+  // Get focus controller to handle for association
   // This will throw if called outside mount context, which is expected
   let focus: ReturnType<typeof useFocus> | undefined;
   try {
     focus = useFocus();
   } catch {
-    // Outside mount context - htmlFor won't work but label still renders
+    // Outside mount context - for won't work but label still renders
   }
 
   const handleMousePress = forRef
