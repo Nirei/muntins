@@ -8,3 +8,4 @@ export {
   type SeparatorProps,
   type SeparatorOrientation,
 } from "./ui/separator.ts";
+export { Switch, type SwitchProps } from "./ui/switch.ts";
