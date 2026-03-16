@@ -10,3 +10,4 @@ export {
 } from "./ui/separator.ts";
 export { Switch, type SwitchProps } from "./ui/switch.ts";
 export { Button, type ButtonProps } from "./ui/button.ts";
+export { Checkbox, type CheckboxProps } from "./ui/checkbox.ts";
