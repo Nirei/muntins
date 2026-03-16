@@ -31,3 +31,12 @@ export {
   type SelectTriggerRenderProps,
   type SelectOptionRenderProps,
 } from "./ui/select.ts";
+export {
+  Menubar,
+  type MenubarProps,
+  type Menu,
+  type MenuItem,
+  type MenuSeparator,
+  type MenuLabelRenderProps,
+  type MenuItemRenderProps,
+} from "./ui/menubar.ts";
