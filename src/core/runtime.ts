@@ -1465,6 +1465,26 @@ export function Show<T>(props: ShowProps<T>): Node {
     }
   };
 
+  // Helper to create child node with proper context
+  const createChildNode = (
+    factory: () => Node,
+    dispose: () => void,
+  ): (() => void) => {
+    // Run factory with captured context to support components that need it
+    // (e.g., TabFocus which calls getContext())
+    const node = ctx ? withContext(ctx, factory) : factory();
+    node._parent = container;
+    children.push(node);
+    currentChild = node;
+
+    // Register focusable nodes from new subtree
+    if (ctx) {
+      registerSubtreeFocusables(ctx.state, node);
+    }
+
+    return dispose;
+  };
+
   // Create a reactive effect that updates the child
   createEffect(() => {
     const value = condition();
@@ -1477,33 +1497,13 @@ export function Show<T>(props: ShowProps<T>): Node {
 
     // Create new subtree in a fresh root
     if (value) {
-      currentDispose = createRoot((dispose) => {
-        const node = childrenBranch(value);
-        node._parent = container;
-        children.push(node);
-        currentChild = node;
-
-        // Register focusable nodes from new subtree
-        if (ctx) {
-          registerSubtreeFocusables(ctx.state, node);
-        }
-
-        return dispose;
-      });
+      currentDispose = createRoot((dispose) =>
+        createChildNode(() => childrenBranch(value), dispose),
+      );
     } else if (fallback) {
-      currentDispose = createRoot((dispose) => {
-        const node = fallback();
-        node._parent = container;
-        children.push(node);
-        currentChild = node;
-
-        // Register focusable nodes from new subtree
-        if (ctx) {
-          registerSubtreeFocusables(ctx.state, node);
-        }
-
-        return dispose;
-      });
+      currentDispose = createRoot((dispose) =>
+        createChildNode(fallback, dispose),
+      );
     }
   });
 

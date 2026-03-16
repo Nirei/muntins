@@ -18,3 +18,4 @@ export {
   type RadioOptionRenderProps,
 } from "./ui/radiogroup.ts";
 export { Textarea, type TextareaProps } from "./ui/textarea.ts";
+export { Dialog, type DialogProps } from "./ui/dialog.ts";
