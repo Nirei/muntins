@@ -5,8 +5,14 @@ import { graphemeDisplayWidth, graphemes } from "../core/buffer.ts";
 import { type KeyEvent, isPrintable } from "../core/input.ts";
 import { DEFAULT_FLEX_STYLE, type FlexStyle } from "../core/layout.ts";
 import type { InheritedStyle, Node, Ref } from "../core/runtime.ts";
-import { getActiveContext } from "../core/runtime.ts";
-import { type Accessor, createEffect, createSignal } from "../core/signals.ts";
+import { Box, getActiveContext } from "../core/runtime.ts";
+import {
+  type Accessor,
+  createEffect,
+  createSignal,
+  untrack,
+} from "../core/signals.ts";
+import { ScrollArea } from "./scroll-area.ts";
 
 /**
  * Props for the Textarea component.
@@ -23,6 +29,12 @@ export interface TextareaProps {
 
   /** Width in characters. Default: 40 */
   width?: number | (() => number);
+
+  /**
+   * Maximum visible height. When content exceeds this, scrolling is enabled
+   * and a scrollbar appears. When undefined, textarea grows with content.
+   */
+  maxHeight?: number | (() => number);
 
   /** Disable the textarea */
   disabled?: boolean | (() => boolean);
@@ -60,21 +72,6 @@ function graphemeCount(str: string): number {
     count++;
   }
   return count;
-}
-
-/**
- * Slice a string by grapheme positions.
- */
-function graphemeSlice(str: string, start: number, end?: number): string {
-  let result = "";
-  let i = 0;
-  for (const grapheme of graphemes(str)) {
-    if (i >= start && (end === undefined || i < end)) {
-      result += grapheme;
-    }
-    i++;
-  }
-  return result;
 }
 
 /**
@@ -134,9 +131,29 @@ function textLength(text: string): number {
   for (const _ of graphemes(text)) {
     count++;
   }
-  // Count newlines explicitly since they're part of the text
   return count;
 }
+
+/**
+ * Convert grapheme position to character index in the string.
+ * This handles the fact that some graphemes may be multi-byte.
+ */
+function posToCharIndex(text: string, graphemePos: number): number {
+  let charIndex = 0;
+  let graphemeIndex = 0;
+
+  for (const grapheme of graphemes(text)) {
+    if (graphemeIndex >= graphemePos) break;
+    charIndex += grapheme.length;
+    graphemeIndex++;
+  }
+
+  return charIndex;
+}
+
+// Modifier constants
+const DIM = 2;
+const INVERSE = 32;
 
 /**
  * A multi-line text input field with cursor navigation and editing support.
@@ -144,6 +161,10 @@ function textLength(text: string): number {
  * The textarea is intentionally unstyled - it renders text with no default
  * border, padding, or colors. Use composition or style overrides to add
  * visual styling.
+ *
+ * When `maxHeight` is set and content exceeds it, the textarea becomes
+ * scrollable with a scrollbar on the right. The view automatically scrolls
+ * to keep the cursor visible.
  *
  * @example
  * ```typescript
@@ -155,6 +176,14 @@ function textLength(text: string): number {
  *   placeholder: "Enter your message...",
  * });
  *
+ * // With max height (scrollable)
+ * Textarea({
+ *   value: message,
+ *   onChange: setMessage,
+ *   width: 60,
+ *   maxHeight: 10,
+ * });
+ *
  * // With styling
  * Box({
  *   border: "single",
@@ -163,7 +192,7 @@ function textLength(text: string): number {
  *       value: message,
  *       onChange: setMessage,
  *       width: 60,
- *       height: 10,
+ *       maxHeight: 10,
  *     }),
  *   ],
  * });
@@ -171,10 +200,12 @@ function textLength(text: string): number {
  */
 export function Textarea(props: TextareaProps): Node {
   const [cursorPos, setCursorPos] = createSignal(0);
+  const [scrollTop, setScrollTop] = createSignal(0);
 
   const getValue = () => resolve(props.value) ?? "";
   const isDisabled = () => resolve(props.disabled) ?? false;
   const getWidth = () => resolve(props.width) ?? 40;
+  const getMaxHeight = () => resolve(props.maxHeight);
   const getPlaceholder = () => resolve(props.placeholder) ?? "";
 
   // Try to get focus accessor from context (may be null in tests)
@@ -182,8 +213,8 @@ export function Textarea(props: TextareaProps): Node {
   const focusedNodeAccessor: Accessor<Node | null> | null =
     ctx?.state.focusedNode ?? null;
 
-  // Declare node first so we can reference it in isFocused
-  let node: Node;
+  // The focusable node that receives keyboard events
+  let focusableNode: Node;
 
   // Clamp cursor when value changes externally
   createEffect(() => {
@@ -191,6 +222,42 @@ export function Textarea(props: TextareaProps): Node {
     const len = textLength(val);
     if (cursorPos() > len) {
       setCursorPos(len);
+    }
+  });
+
+  // Auto-scroll to keep cursor visible
+  createEffect(() => {
+    const maxHeight = getMaxHeight();
+    if (maxHeight === undefined) return; // No scrolling without maxHeight
+
+    const val = getValue();
+    const cursorLineCol = posToLineCol(val, cursorPos());
+    const cursorLine = cursorLineCol.line;
+    // Read scrollTop without tracking to avoid circular dependency
+    const currentScrollTop = untrack(scrollTop);
+
+    // If cursor is above visible area, scroll up
+    if (cursorLine < currentScrollTop) {
+      setScrollTop(cursorLine);
+    }
+    // If cursor is below visible area, scroll down
+    else if (cursorLine >= currentScrollTop + maxHeight) {
+      setScrollTop(cursorLine - maxHeight + 1);
+    }
+  });
+
+  // Clamp scrollTop when content shrinks
+  createEffect(() => {
+    const maxHeight = getMaxHeight();
+    if (maxHeight === undefined) return;
+
+    const val = getValue();
+    const lineCount = val.length === 0 ? 1 : val.split("\n").length;
+    const maxScroll = Math.max(0, lineCount - maxHeight);
+
+    // Read scrollTop without tracking to avoid circular dependency
+    if (untrack(scrollTop) > maxScroll) {
+      setScrollTop(maxScroll);
     }
   });
 
@@ -257,7 +324,6 @@ export function Textarea(props: TextareaProps): Node {
     }
 
     if (key.name === "backspace" && pos > 0) {
-      // If at start of line and not first line, join with previous line
       const beforeCursor = val.slice(0, posToCharIndex(val, pos - 1));
       const afterCursor = val.slice(posToCharIndex(val, pos));
       const newVal = beforeCursor + afterCursor;
@@ -276,10 +342,6 @@ export function Textarea(props: TextareaProps): Node {
 
     if (key.ctrl && key.name === "k") {
       // Delete from cursor to end of current line
-      const currentLineStart = lineColToPos(val, {
-        line: cursorLineCol.line,
-        column: 0,
-      });
       const currentLineEnd = lineColToPos(val, {
         line: cursorLineCol.line,
         column: graphemeCount(lines[cursorLineCol.line]),
@@ -335,23 +397,25 @@ export function Textarea(props: TextareaProps): Node {
     return false;
   };
 
-  // Check if this node is focused (used in render)
+  // Check if the focusable node is focused (used in render)
   const isFocused = (): boolean => {
     if (!focusedNodeAccessor) return false;
-    return focusedNodeAccessor() === node;
+    return focusedNodeAccessor() === focusableNode;
   };
 
-  node = {
+  // Create the content node that renders the text
+  const contentNode: Node = {
     get style() {
+      const val = getValue();
+      const lineCount = val.length === 0 ? 1 : val.split("\n").length;
+
       return {
         ...DEFAULT_FLEX_STYLE,
         width: getWidth(),
+        height: lineCount,
         ...props.style,
       } as FlexStyle;
     },
-    focusable: props.focusable ?? true,
-    autoFocus: props.autoFocus,
-    onKeyPress: handleKeyPress,
 
     measure(_availableWidth: number, _availableHeight: number) {
       const val = getValue();
@@ -372,7 +436,6 @@ export function Textarea(props: TextareaProps): Node {
       const disabled = isDisabled();
       const pos = cursorPos();
 
-      // Determine colors
       const fg = inherited.color;
       const bg = inherited.backgroundColor;
 
@@ -396,6 +459,7 @@ export function Textarea(props: TextareaProps): Node {
 
       // Render value with cursor
       const showCursor = !disabled && isFocused();
+
       renderTextareaContent(
         buffer,
         x,
@@ -412,37 +476,51 @@ export function Textarea(props: TextareaProps): Node {
     },
   };
 
-  // Bind ref
+  const maxHeight = getMaxHeight();
+
+  if (maxHeight !== undefined) {
+    // With maxHeight: wrap content in ScrollArea
+    // Use a Box wrapper to be the focusable element
+    // Build props as Record to allow reactive width (Box resolves functions at runtime)
+    const boxProps: Record<string, unknown> = {
+      width: props.width ?? 40,
+      focusable: props.focusable ?? true,
+      autoFocus: props.autoFocus,
+      onKeyPress: handleKeyPress,
+      ...props.style,
+      children: [
+        ScrollArea({
+          height: maxHeight,
+          width: props.width ?? 40,
+          scrollTop: scrollTop,
+          onScroll: setScrollTop,
+          focusable: false,
+          children: [contentNode],
+        }),
+      ],
+    };
+    focusableNode = Box(boxProps as Parameters<typeof Box>[0]);
+  } else {
+    // Without maxHeight: content node is the focusable element
+    focusableNode = {
+      ...contentNode,
+      focusable: props.focusable ?? true,
+      autoFocus: props.autoFocus,
+      onKeyPress: handleKeyPress,
+    };
+  }
+
+  // Bind ref to the focusable node
   if (props.ref) {
-    props.ref.current = node;
+    props.ref.current = focusableNode;
   }
 
-  return node;
+  return focusableNode;
 }
-
-/**
- * Convert grapheme position to character index in the string.
- * This handles the fact that some graphemes may be multi-byte.
- */
-function posToCharIndex(text: string, graphemePos: number): number {
-  let charIndex = 0;
-  let graphemeIndex = 0;
-
-  for (const grapheme of graphemes(text)) {
-    if (graphemeIndex >= graphemePos) break;
-    charIndex += grapheme.length;
-    graphemeIndex++;
-  }
-
-  return charIndex;
-}
-
-// DIM modifier constant
-const DIM = 2;
-const INVERSE = 32;
 
 /**
  * Render textarea content with optional cursor.
+ * When inside ScrollArea, height is the visible portion and content is clipped.
  */
 function renderTextareaContent(
   buffer: Buffer,
@@ -460,11 +538,8 @@ function renderTextareaContent(
   const lines = text.split("\n");
   let globalGraphemeIndex = 0;
 
-  for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-    // Stop if below visible area
-    if (lineIdx >= height) break;
-
-    const line = lines[lineIdx];
+  for (let row = 0; row < Math.min(lines.length, height); row++) {
+    const line = lines[row];
     let col = 0;
 
     for (const grapheme of graphemes(line)) {
@@ -479,11 +554,11 @@ function renderTextareaContent(
       }
 
       // Write grapheme to buffer
-      buffer.set(x + col, y + lineIdx, grapheme, fg, bg, modifiers);
+      buffer.set(x + col, y + row, grapheme, fg, bg, modifiers);
 
       // Handle double-width chars
       if (graphemeWidth === 2 && col + 1 < width) {
-        buffer.set(x + col + 1, y + lineIdx, "", fg, bg, modifiers);
+        buffer.set(x + col + 1, y + row, "", fg, bg, modifiers);
       }
 
       col += graphemeWidth;
@@ -495,21 +570,22 @@ function renderTextareaContent(
       showCursor &&
       globalGraphemeIndex === cursorPos &&
       col < width &&
-      lineIdx < lines.length - 1
+      row < lines.length - 1
     ) {
       // Cursor is on the newline character
-      buffer.set(x + col, y + lineIdx, " ", fg, bg, INVERSE);
+      buffer.set(x + col, y + row, " ", fg, bg, INVERSE);
     }
 
     // Account for newline in position tracking (except for last line)
-    if (lineIdx < lines.length - 1) {
+    if (row < lines.length - 1) {
       globalGraphemeIndex++; // newline
     }
   }
 
-  // Draw cursor at very end of text if it's there
+  // Draw cursor at very end of text if it's there and visible
   if (showCursor && cursorPos === textLength(text)) {
     const cursorLineCol = posToLineCol(text, cursorPos);
+
     if (cursorLineCol.line < height) {
       const line = lines[cursorLineCol.line] ?? "";
       const cursorCol = displayWidthToPosition(line, cursorLineCol.column);

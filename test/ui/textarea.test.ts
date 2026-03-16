@@ -604,6 +604,234 @@ describe("Textarea", () => {
     });
   });
 
+  describe("maxHeight and scrolling", () => {
+    // Helper to strip ANSI escape codes from output
+    function stripAnsi(s: string): string {
+      // Match ESC [ followed by params and command letter
+      const ESC = String.fromCharCode(0x1b);
+      const pattern = new RegExp(`${ESC}\\[[0-9;?]*[a-zA-Z]`, "g");
+      return s.replace(pattern, "");
+    }
+
+    // Helper to wait for microtask (render is scheduled via queueMicrotask)
+    function flushMicrotasks(): Promise<void> {
+      return new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    // Helper to mount textarea and return utilities for testing
+    function mountTextarea(
+      initialValue: string,
+      options: { width?: number; maxHeight?: number } = {},
+    ) {
+      const [value, setValue] = createSignal(initialValue);
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout(80, 24);
+      const ref = createRef();
+
+      const app = mount(
+        () =>
+          Box({
+            children: [
+              Textarea({
+                value,
+                onChange: setValue,
+                width: options.width ?? 10,
+                maxHeight: options.maxHeight,
+                ref,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+        },
+      );
+
+      // Helper to check if stripped output contains a string
+      const outputContains = (s: string) =>
+        stripAnsi(mockStdout.written).includes(s);
+
+      // Helper to send key via stdin (triggers full event cycle)
+      const sendKey = async (name: string) => {
+        mockStdin.emit("keypress", name.length === 1 ? name : undefined, {
+          name,
+          sequence: name,
+        });
+        await flushMicrotasks();
+      };
+
+      // Helper to clear output
+      const clearOutput = () => {
+        mockStdout.written = "";
+      };
+
+      return {
+        app,
+        ref,
+        setValue,
+        getValue: value,
+        outputContains,
+        sendKey,
+        clearOutput,
+        getOutput: () => stripAnsi(mockStdout.written),
+        mockStdin,
+      };
+    }
+
+    it("shows scrollbar when content exceeds maxHeight", () => {
+      const { app, outputContains } = mountTextarea(
+        "1\n2\n3\n4\n5\n6\n7\n8\n9\n10",
+        { width: 10, maxHeight: 5 },
+      );
+
+      // Scrollbar uses box drawing characters
+      const hasScrollbar = outputContains("\u2502") || outputContains("\u2503");
+      assert.ok(hasScrollbar, "Should render scrollbar characters");
+
+      app.unmount();
+    });
+
+    it("shows first lines initially", () => {
+      const { app, outputContains } = mountTextarea(
+        "AAA\nBBB\nCCC\nDDD\nEEE\nFFF",
+        { width: 10, maxHeight: 3 },
+      );
+
+      // First three lines should be visible
+      assert.ok(outputContains("AAA"), "First line should be visible");
+      assert.ok(outputContains("BBB"), "Second line should be visible");
+      assert.ok(outputContains("CCC"), "Third line should be visible");
+      // Line 4 should not be visible initially
+      assert.ok(!outputContains("DDD"), "Fourth line should NOT be visible");
+
+      app.unmount();
+    });
+
+    it("scrolls down when cursor moves past visible area", async () => {
+      const { app, sendKey, outputContains } = mountTextarea(
+        "AAA\nBBB\nCCC\nDDD\nEEE\nFFF",
+        { width: 10, maxHeight: 3 },
+      );
+
+      // Initially DDD should not be visible
+      assert.ok(
+        !outputContains("DDD"),
+        "Line 4 should NOT be visible initially",
+      );
+
+      // Move cursor down 3 times (to line 4, which is past visible area)
+      await sendKey("down"); // line 2
+      await sendKey("down"); // line 3
+      await sendKey("down"); // line 4 - should trigger scroll
+
+      // Now line 4 (DDD) should be visible in cumulative output
+      assert.ok(outputContains("DDD"), "Line 4 should be visible after scroll");
+
+      app.unmount();
+    });
+
+    it("scrolls up when cursor moves above visible area", async () => {
+      const { app, sendKey, outputContains } = mountTextarea(
+        "AAA\nBBB\nCCC\nDDD\nEEE\nFFF",
+        { width: 10, maxHeight: 3 },
+      );
+
+      // Move down to line 5
+      for (let i = 0; i < 4; i++) {
+        await sendKey("down");
+      }
+
+      // At this point, EEE should be visible (line 5)
+      assert.ok(
+        outputContains("EEE"),
+        "Line 5 should be visible after scrolling down",
+      );
+
+      // Move back up - BBB should become visible when we reach line 2
+      await sendKey("up"); // line 4
+      await sendKey("up"); // line 3
+      await sendKey("up"); // line 2 - should trigger scroll up
+
+      // Line 2 (BBB) should be visible again (was scrolled out of view then back)
+      assert.ok(
+        outputContains("BBB"),
+        "Line 2 should be visible after scroll up",
+      );
+
+      app.unmount();
+    });
+
+    it("cursor stays visible at bottom of content", async () => {
+      const { app, sendKey, outputContains } = mountTextarea(
+        "AAA\nBBB\nCCC\nDDD\nEEE",
+        { width: 10, maxHeight: 3 },
+      );
+
+      // Initially EEE should not be visible
+      assert.ok(
+        !outputContains("EEE"),
+        "Last line should NOT be visible initially",
+      );
+
+      // Move to last line
+      for (let i = 0; i < 4; i++) {
+        await sendKey("down");
+      }
+
+      // Last line (EEE) should be visible after scrolling
+      assert.ok(
+        outputContains("EEE"),
+        "Last line should be visible when cursor is there",
+      );
+
+      app.unmount();
+    });
+
+    it("without maxHeight, shows all content", () => {
+      const node = Textarea({
+        value: "1\n2\n3\n4\n5\n6\n7\n8\n9\n10",
+        width: 20,
+        // No maxHeight
+      });
+
+      // Without maxHeight, textarea should measure to full content height
+      assert.ok(node.measure);
+      const size = node.measure(100, 100);
+      assert.strictEqual(
+        size.height,
+        10,
+        "Should measure to full content height",
+      );
+    });
+
+    it("handles content shrinking", async () => {
+      const { app, sendKey, setValue, clearOutput, outputContains } =
+        mountTextarea("AAA\nBBB\nCCC\nDDD\nEEE\nFFF\nGGG\nHHH", {
+          width: 10,
+          maxHeight: 3,
+        });
+
+      // Move cursor to last line
+      for (let i = 0; i < 7; i++) {
+        await sendKey("down");
+      }
+
+      // Shrink content - cursor will be clamped
+      setValue("AAA\nBBB\nCCC");
+
+      clearOutput();
+      await sendKey("left"); // Trigger re-render
+
+      // Should show the remaining content without crashing
+      assert.ok(
+        outputContains("CCC"),
+        "Should show last line of shrunk content",
+      );
+
+      app.unmount();
+    });
+  });
+
   describe("integration", () => {
     it("works within mounted app", () => {
       const mockStdin = createMockStdin();
@@ -631,6 +859,33 @@ describe("Textarea", () => {
       // Verify component structure is correct
       assert.ok(app.unmount);
 
+      app.unmount();
+    });
+
+    it("works with maxHeight in mounted app", () => {
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout();
+
+      const [value, setValue] = createSignal("1\n2\n3\n4\n5\n6\n7\n8\n9\n10");
+
+      const app = mount(
+        () =>
+          Box({
+            children: [
+              Textarea({
+                value,
+                onChange: setValue,
+                maxHeight: 5,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+        },
+      );
+
+      assert.ok(app.unmount);
       app.unmount();
     });
   });
