@@ -17,3 +17,4 @@ export {
   type RadioOption,
   type RadioOptionRenderProps,
 } from "./ui/radiogroup.ts";
+export { Textarea, type TextareaProps } from "./ui/textarea.ts";
