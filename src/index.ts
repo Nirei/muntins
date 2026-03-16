@@ -24,3 +24,10 @@ export {
   type PopoverProps,
   type PopoverPlacement,
 } from "./ui/popover.ts";
+export {
+  Select,
+  type SelectProps,
+  type SelectOption,
+  type SelectTriggerRenderProps,
+  type SelectOptionRenderProps,
+} from "./ui/select.ts";
