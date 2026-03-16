@@ -19,3 +19,8 @@ export {
 } from "./ui/radiogroup.ts";
 export { Textarea, type TextareaProps } from "./ui/textarea.ts";
 export { Dialog, type DialogProps } from "./ui/dialog.ts";
+export {
+  Popover,
+  type PopoverProps,
+  type PopoverPlacement,
+} from "./ui/popover.ts";
