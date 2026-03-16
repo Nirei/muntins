@@ -90,6 +90,9 @@ export interface Node {
   onMouseMove?: (event: MouseEvent) => void;
   onScroll?: (event: ScrollEvent) => void;
   onHover?: (hovering: boolean) => void;
+
+  // Portal marker (for root-level rendering)
+  _isPortal?: boolean;
 }
 
 /**
@@ -1373,6 +1376,45 @@ export function Text(props: TextProps): Node {
   return node;
 }
 
+/** Props for Portal component. */
+export interface PortalProps {
+  /** Content to render at root level */
+  children: Node | Node[];
+}
+
+/**
+ * Renders children at the root of the render tree, regardless of where
+ * the Portal appears in the component hierarchy.
+ *
+ * Portals enable viewport-level floating elements like dialogs, popovers,
+ * and toasts. The children are rendered visually at root level (above all
+ * other content) while maintaining their logical position in the tree for
+ * reactivity and cleanup.
+ *
+ * Multiple Portals stack in document order (later Portals appear above earlier ones).
+ * Portal children participate in focus management via the logical tree.
+ */
+export function Portal(props: PortalProps): Node {
+  const children = Array.isArray(props.children)
+    ? props.children
+    : [props.children];
+
+  const node: Node = {
+    // Portal uses display: "contents" so it's invisible in layout
+    // (only its children render, and they render at root level)
+    style: { ...DEFAULT_FLEX_STYLE, display: "contents" },
+    children,
+    _isPortal: true,
+  };
+
+  // Set parent references on children
+  for (const child of children) {
+    child._parent = node;
+  }
+
+  return node;
+}
+
 /** Props for Show component. */
 export interface ShowProps<T> {
   when: () => T;
@@ -1743,6 +1785,7 @@ export function TabFocus(props: TabFocusProps): Node {
 /**
  * Convert runtime Node to layout system's LayoutNode.
  * Resolves reactive styles and handles children as either array or getter function.
+ * Skips portal nodes (their children are laid out separately at root level).
  */
 function nodeToLayoutNode(node: Node): LayoutNode {
   const style = typeof node.style === "function" ? node.style() : node.style;
@@ -1753,9 +1796,12 @@ function nodeToLayoutNode(node: Node): LayoutNode {
       ? (node.children as () => Node[])()
       : node.children;
 
+  // Filter out portal children - they're laid out separately at root level
+  const filteredChildren = children?.filter((child) => !child._isPortal);
+
   return {
     style,
-    children: children?.map(nodeToLayoutNode),
+    children: filteredChildren?.map(nodeToLayoutNode),
     measure: node.measure,
   };
 }
@@ -1800,6 +1846,7 @@ function paintNode(
  * Paint children nodes with their corresponding layout results.
  * Handles `display: "contents"` nodes by recursively painting their children
  * with layout results (since layout hoists them to be direct children).
+ * Skips portal children (they are painted separately at root level).
  *
  * @param inherited - Inherited styles from parent nodes
  */
@@ -1812,6 +1859,11 @@ function paintChildren(
   let layoutIndex = 0;
 
   for (const child of children) {
+    // Skip portal children - they're painted separately at root level
+    if (child._isPortal) {
+      continue;
+    }
+
     const style =
       typeof child.style === "function" ? child.style() : child.style;
 
@@ -1828,6 +1880,11 @@ function paintChildren(
 
       // Paint the grandchildren with the corresponding layout results
       for (const grandchild of grandchildren) {
+        // Skip portal grandchildren
+        if (grandchild._isPortal) {
+          continue;
+        }
+
         const grandchildStyle =
           typeof grandchild.style === "function"
             ? grandchild.style()
@@ -1885,6 +1942,64 @@ function countHoistedChildren(node: Node): number {
 }
 
 /**
+ * Collects all portal children from a node tree.
+ * Portals are identified by the _isPortal flag.
+ * Returns an array of {node, inherited} pairs for each portal's children.
+ */
+function collectPortals(
+  node: Node,
+  inherited: InheritedStyle,
+): Array<{ node: Node; inherited: InheritedStyle }> {
+  const portals: Array<{ node: Node; inherited: InheritedStyle }> = [];
+
+  // Compute this node's inherited style
+  const nodeInherited = computeInheritedStyle(node, inherited);
+
+  // If this is a portal, collect its children
+  if (node._isPortal) {
+    const children =
+      typeof node.children === "function"
+        ? (node.children as () => Node[])()
+        : (node.children ?? []);
+    for (const child of children) {
+      portals.push({ node: child, inherited: nodeInherited });
+    }
+  }
+
+  // Recursively search children (even portals can contain nested portals)
+  const children =
+    typeof node.children === "function"
+      ? (node.children as () => Node[])()
+      : (node.children ?? []);
+
+  for (const child of children) {
+    portals.push(...collectPortals(child, nodeInherited));
+  }
+
+  return portals;
+}
+
+/**
+ * Paint portal children at root level.
+ * Each portal child is laid out using the full viewport dimensions.
+ */
+function paintPortals(
+  portals: Array<{ node: Node; inherited: InheritedStyle }>,
+  viewportWidth: number,
+  viewportHeight: number,
+  buffer: Buffer,
+): void {
+  for (const { node, inherited } of portals) {
+    // Layout this portal child as if it were a root
+    const layoutNode = nodeToLayoutNode(node);
+    const layout = computeLayout(layoutNode, viewportWidth, viewportHeight);
+
+    // Paint it (on top of everything)
+    paintNode(node, layout, buffer, inherited);
+  }
+}
+
+/**
  * The three-phase render pipeline.
  */
 function renderFrame(state: RuntimeState): void {
@@ -1900,7 +2015,15 @@ function renderFrame(state: RuntimeState): void {
 
   // Phase 3: Paint
   buffer.clear();
+
+  // Paint main tree (portals are transparent due to display: "contents")
   paintNode(root, state.layoutResult, buffer, DEFAULT_INHERITED_STYLE);
+
+  // Collect and paint portal children at root level (on top)
+  const portals = collectPortals(root, DEFAULT_INHERITED_STYLE);
+  if (portals.length > 0) {
+    paintPortals(portals, stdout.columns, stdout.rows, buffer);
+  }
 
   // Diff, serialize, and sync (all internal to Buffer)
   const output = buffer.flush();

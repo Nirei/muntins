@@ -54,6 +54,7 @@ export {
 export {
   Box,
   Text,
+  Portal,
   Show,
   For,
   TabFocus,
@@ -75,6 +76,7 @@ export {
   type Ref,
   type BoxProps,
   type TextProps,
+  type PortalProps,
   type ShowProps,
   type ForProps,
   type TabFocusProps,
