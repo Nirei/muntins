@@ -1,8 +1,9 @@
 // Progress component - progress bar showing completion percentage
 
 import type { InheritableColor } from "../core/buffer.ts";
-import { DEFAULT_FLEX_STYLE, type FlexStyle } from "../core/layout.ts";
-import type { InheritedStyle, Node } from "../core/runtime.ts";
+import type { FlexStyle } from "../core/layout.ts";
+import type { Node } from "../core/runtime.ts";
+import { Box, Text } from "../core/runtime.ts";
 
 /**
  * Block characters for sub-cell precision, indexed by eighths (0-8).
@@ -84,59 +85,36 @@ export function Progress(props: ProgressProps): Node {
   const getValue = (): number => clampValue(resolveValue(value, 0));
   const getWidth = (): number => resolveValue(width, 20);
 
-  return {
-    get style() {
-      return {
-        ...DEFAULT_FLEX_STYLE,
-        width: getWidth(),
-        height: 1,
-        ...style,
-      } as FlexStyle;
-    },
+  // Generate progress bar string reactively
+  const getContent = (): string => {
+    const barWidth = getWidth();
+    const currentValue = getValue();
 
-    _inheritableProps: {
-      color,
-      backgroundColor,
-    },
+    // Calculate total eighths filled (8 eighths per cell)
+    const totalEighths = Math.round((currentValue / 100) * barWidth * 8);
+    const fullCells = Math.floor(totalEighths / 8);
+    const remainder = totalEighths % 8;
 
-    measure(_availableWidth: number, _availableHeight: number) {
-      return { width: getWidth(), height: 1 };
-    },
+    // Build the bar string
+    const full = BLOCKS[8].repeat(fullCells);
+    const partial = remainder > 0 ? BLOCKS[remainder] : "";
+    const emptyCount = barWidth - fullCells - (remainder > 0 ? 1 : 0);
+    const empty = BLOCKS[0].repeat(emptyCount);
 
-    render(
-      x: number,
-      y: number,
-      _width: number,
-      _height: number,
-      buffer,
-      inherited: InheritedStyle,
-    ) {
-      const fg = inherited.color;
-      const bg = inherited.backgroundColor;
-
-      const barWidth = getWidth();
-      const currentValue = getValue();
-
-      // Calculate total eighths filled (8 eighths per cell)
-      const totalEighths = Math.round((currentValue / 100) * barWidth * 8);
-      const fullCells = Math.floor(totalEighths / 8);
-      const remainder = totalEighths % 8;
-
-      // Render full cells
-      for (let i = 0; i < fullCells; i++) {
-        buffer.set(x + i, y, BLOCKS[8], fg, bg, 0);
-      }
-
-      // Render partial cell if there's a remainder
-      if (remainder > 0 && fullCells < barWidth) {
-        buffer.set(x + fullCells, y, BLOCKS[remainder], fg, bg, 0);
-      }
-
-      // Render empty cells (spaces)
-      const emptyStart = remainder > 0 ? fullCells + 1 : fullCells;
-      for (let i = emptyStart; i < barWidth; i++) {
-        buffer.set(x + i, y, BLOCKS[0], fg, bg, 0);
-      }
-    },
+    return full + partial + empty;
   };
+
+  return Box({
+    width: getWidth(),
+    height: 1,
+    overflow: "hidden" as const,
+    ...style,
+    children: [
+      Text({
+        content: getContent,
+        color,
+        backgroundColor,
+      }),
+    ],
+  });
 }

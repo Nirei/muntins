@@ -406,8 +406,11 @@ describe("Popover", () => {
             Box({
               // Container that doesn't fill viewport so popover has room
               height: 12,
-              // Add top padding so "top" placements have room above the trigger
+              // Add padding so placements have room:
+              // - top padding for "top-*" placements
+              // - start padding for "left-*" placements
               paddingTop: 3,
+              paddingStart: placement.startsWith("left") ? 10 : 0,
               children: [
                 Popover({
                   open: true,

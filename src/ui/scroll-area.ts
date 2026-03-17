@@ -260,9 +260,10 @@ export function ScrollArea(props: ScrollAreaProps): Node {
   return Box({
     ...styleProps,
     children: [
-      // Content container with fixed height for clipping
+      // Content container with overflow: hidden for clipping
       Box({
         flexGrow: 1,
+        overflow: "hidden" as const,
         maxHeight: props.height as unknown as number,
         children: [contentBox],
       }),

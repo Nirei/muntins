@@ -60,6 +60,7 @@ export interface Node {
     height: number,
     buffer: Buffer,
     inherited: InheritedStyle,
+    clip: ClipRect,
   ) => void;
 
   // Inheritable style props (resolved at paint time)
@@ -643,6 +644,57 @@ export const DEFAULT_INHERITED_STYLE: InheritedStyle = {
 export type InheritableBool = boolean | "inherit";
 
 /**
+ * Clipping rectangle for paint-time clipping.
+ * Coordinates are absolute screen positions.
+ */
+export interface ClipRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Default clip rect covering the full terminal.
+ * Used when no parent clipping is in effect.
+ */
+export const DEFAULT_CLIP: ClipRect = {
+  x: 0,
+  y: 0,
+  width: Number.POSITIVE_INFINITY,
+  height: Number.POSITIVE_INFINITY,
+};
+
+/**
+ * Intersect two clip rects, returning the overlapping region.
+ * Returns a zero-area rect if there's no overlap.
+ */
+export function intersectClipRect(a: ClipRect, b: ClipRect): ClipRect {
+  const x = Math.max(a.x, b.x);
+  const y = Math.max(a.y, b.y);
+  const right = Math.min(a.x + a.width, b.x + b.width);
+  const bottom = Math.min(a.y + a.height, b.y + b.height);
+  return {
+    x,
+    y,
+    width: Math.max(0, right - x),
+    height: Math.max(0, bottom - y),
+  };
+}
+
+/**
+ * Check if a point is within the clip rect.
+ */
+export function isInClipRect(x: number, y: number, clip: ClipRect): boolean {
+  return (
+    x >= clip.x &&
+    x < clip.x + clip.width &&
+    y >= clip.y &&
+    y < clip.y + clip.height
+  );
+}
+
+/**
  * Resolve an inheritable color value.
  * Returns the inherited value if the prop is undefined or "inherit".
  */
@@ -991,7 +1043,18 @@ function renderText(
   text: string,
   props: TextProps,
   inherited: InheritedStyle,
+  clip: ClipRect,
 ): void {
+  // Early out if entirely outside clip rect
+  if (
+    x >= clip.x + clip.width ||
+    x + width <= clip.x ||
+    y >= clip.y + clip.height ||
+    y + height <= clip.y
+  ) {
+    return;
+  }
+
   // Resolve reactive props with inheritance
   const fg = resolveInheritableColor(props.color, inherited.color);
   const bg = resolveInheritableColor(
@@ -1008,8 +1071,21 @@ function renderText(
       : lines.map((line) => truncateLine(line, width, wrapValue));
 
   for (let row = 0; row < Math.min(displayLines.length, height); row++) {
+    const screenY = y + row;
+    // Skip rows outside clip
+    if (screenY < clip.y || screenY >= clip.y + clip.height) continue;
+
     const line = displayLines[row];
-    buffer.writeText(x, y + row, line, fg, bg, modifiers);
+    // For each grapheme, check if it's in clip
+    let col = x;
+    for (const char of graphemes(line)) {
+      const charWidth = graphemeDisplayWidth(char);
+      if (col >= clip.x && col < clip.x + clip.width) {
+        buffer.set(col, screenY, char, fg, bg, modifiers);
+      }
+      col += charWidth;
+      if (col >= clip.x + clip.width) break;
+    }
   }
 }
 
@@ -1091,6 +1167,7 @@ function renderBorder(
   styleName: BorderStyleName,
   fg: Color,
   bg: Color,
+  clip: ClipRect,
 ): void {
   const chars = BORDER_CHARS[styleName];
   const { top, end, bottom, start } = borders;
@@ -1100,14 +1177,18 @@ function renderBorder(
     const startCol = start ? x + 1 : x;
     const endCol = end ? x + width - 1 : x + width;
     for (let col = startCol; col < endCol; col++) {
-      buffer.set(col, y, chars.h, fg, bg, 0);
+      if (isInClipRect(col, y, clip)) {
+        buffer.set(col, y, chars.h, fg, bg, 0);
+      }
     }
   }
   if (bottom) {
     const startCol = start ? x + 1 : x;
     const endCol = end ? x + width - 1 : x + width;
     for (let col = startCol; col < endCol; col++) {
-      buffer.set(col, y + height - 1, chars.h, fg, bg, 0);
+      if (isInClipRect(col, y + height - 1, clip)) {
+        buffer.set(col, y + height - 1, chars.h, fg, bg, 0);
+      }
     }
   }
 
@@ -1116,14 +1197,18 @@ function renderBorder(
     const startRow = top ? y + 1 : y;
     const endRow = bottom ? y + height - 1 : y + height;
     for (let row = startRow; row < endRow; row++) {
-      buffer.set(x, row, chars.v, fg, bg, 0);
+      if (isInClipRect(x, row, clip)) {
+        buffer.set(x, row, chars.v, fg, bg, 0);
+      }
     }
   }
   if (end) {
     const startRow = top ? y + 1 : y;
     const endRow = bottom ? y + height - 1 : y + height;
     for (let row = startRow; row < endRow; row++) {
-      buffer.set(x + width - 1, row, chars.v, fg, bg, 0);
+      if (isInClipRect(x + width - 1, row, clip)) {
+        buffer.set(x + width - 1, row, chars.v, fg, bg, 0);
+      }
     }
   }
 
@@ -1138,7 +1223,7 @@ function renderBorder(
 
   for (const [cx, cy, hasHoriz, hasVert, corner, hChar, vChar] of corners) {
     const char = getCornerChar(chars, hasHoriz, hasVert, corner, hChar, vChar);
-    if (char) {
+    if (char && isInClipRect(cx, cy, clip)) {
       buffer.set(cx, cy, char, fg, bg, 0);
     }
   }
@@ -1223,7 +1308,17 @@ export function Box(props: BoxProps): Node {
 
     // Render function when backgroundColor or border is set
     render: needsRender
-      ? (x, y, width, height, buffer, inherited) => {
+      ? (x, y, width, height, buffer, inherited, clip) => {
+          // Early out if entirely outside clip rect
+          if (
+            x >= clip.x + clip.width ||
+            x + width <= clip.x ||
+            y >= clip.y + clip.height ||
+            y + height <= clip.y
+          ) {
+            return;
+          }
+
           // Resolve background color with inheritance
           const bg = resolveInheritableColor(
             backgroundColor,
@@ -1233,7 +1328,25 @@ export function Box(props: BoxProps): Node {
           // Render background first (if set or inherited)
           // Only fill if we have an explicit backgroundColor prop
           if (backgroundColor !== undefined) {
-            buffer.fillRect(x, y, width, height, " ", DEFAULT_COLOR, bg, 0);
+            // Clip background fill to clip rect
+            const fillX = Math.max(x, clip.x);
+            const fillY = Math.max(y, clip.y);
+            const fillRight = Math.min(x + width, clip.x + clip.width);
+            const fillBottom = Math.min(y + height, clip.y + clip.height);
+            const fillWidth = fillRight - fillX;
+            const fillHeight = fillBottom - fillY;
+            if (fillWidth > 0 && fillHeight > 0) {
+              buffer.fillRect(
+                fillX,
+                fillY,
+                fillWidth,
+                fillHeight,
+                " ",
+                DEFAULT_COLOR,
+                bg,
+                0,
+              );
+            }
           }
 
           // Render border (if set) - reactive evaluation
@@ -1264,6 +1377,7 @@ export function Box(props: BoxProps): Node {
               styleName,
               fg,
               bg,
+              clip,
             );
           }
         }
@@ -1350,6 +1464,7 @@ export function Text(props: TextProps): Node {
       height: number,
       buffer: Buffer,
       inherited: InheritedStyle,
+      clip: ClipRect,
     ) {
       renderText(
         buffer,
@@ -1371,6 +1486,7 @@ export function Text(props: TextProps): Node {
           wrap: getWrap(),
         },
         inherited,
+        clip,
       );
     },
   };
@@ -1821,22 +1937,41 @@ function nodeToLayoutNode(node: Node): LayoutNode {
  * with the corresponding layout results (matching how layout hoists them).
  *
  * @param inherited - Inherited styles from parent nodes, resolved to concrete values
+ * @param clip - Current clipping rectangle
  */
 function paintNode(
   node: Node,
   layout: LayoutResult,
   buffer: Buffer,
   inherited: InheritedStyle,
+  clip: ClipRect,
 ): void {
   const { screenX, screenY, width, height } = layout;
+
+  // Early out if entirely outside clip rect
+  if (
+    screenX >= clip.x + clip.width ||
+    screenX + width <= clip.x ||
+    screenY >= clip.y + clip.height ||
+    screenY + height <= clip.y
+  ) {
+    return;
+  }
 
   // Compute this node's inherited style (resolves any "inherit" values)
   const nodeInherited = computeInheritedStyle(node, inherited);
 
   // Paint this node if it has a render function
   if (node.render) {
-    node.render(screenX, screenY, width, height, buffer, nodeInherited);
+    node.render(screenX, screenY, width, height, buffer, nodeInherited, clip);
   }
+
+  // Compute child clip - if this node has overflow: hidden, clip to its bounds
+  const style = typeof node.style === "function" ? node.style() : node.style;
+  const childClip =
+    style.overflow === "hidden"
+      ? intersectClipRect(clip, { x: screenX, y: screenY, width, height })
+      : clip;
 
   // Get children (may be a getter for Show/For)
   const children =
@@ -1846,7 +1981,7 @@ function paintNode(
   const childLayouts = layout.children ?? [];
 
   // Paint children, handling display: "contents" nodes
-  paintChildren(children, childLayouts, buffer, nodeInherited);
+  paintChildren(children, childLayouts, buffer, nodeInherited, childClip);
 }
 
 /**
@@ -1856,12 +1991,14 @@ function paintNode(
  * Skips portal children (they are painted separately at root level).
  *
  * @param inherited - Inherited styles from parent nodes
+ * @param clip - Current clipping rectangle
  */
 function paintChildren(
   children: Node[],
   layouts: LayoutResult[],
   buffer: Buffer,
   inherited: InheritedStyle,
+  clip: ClipRect,
 ): void {
   let layoutIndex = 0;
 
@@ -1912,16 +2049,23 @@ function paintChildren(
             layouts.slice(layoutIndex),
             buffer,
             grandchildInherited,
+            clip,
           );
           // Count how many layouts were consumed
           layoutIndex += countHoistedChildren(grandchild);
         } else if (layouts[layoutIndex]) {
-          paintNode(grandchild, layouts[layoutIndex], buffer, childInherited);
+          paintNode(
+            grandchild,
+            layouts[layoutIndex],
+            buffer,
+            childInherited,
+            clip,
+          );
           layoutIndex++;
         }
       }
     } else if (layouts[layoutIndex]) {
-      paintNode(child, layouts[layoutIndex], buffer, inherited);
+      paintNode(child, layouts[layoutIndex], buffer, inherited, clip);
       layoutIndex++;
     }
   }
@@ -1996,13 +2140,21 @@ function paintPortals(
   viewportHeight: number,
   buffer: Buffer,
 ): void {
+  // Portals use full viewport clip (no clipping from parent context)
+  const portalClip: ClipRect = {
+    x: 0,
+    y: 0,
+    width: viewportWidth,
+    height: viewportHeight,
+  };
+
   for (const { node, inherited } of portals) {
     // Layout this portal child as if it were a root
     const layoutNode = nodeToLayoutNode(node);
     const layout = computeLayout(layoutNode, viewportWidth, viewportHeight);
 
     // Paint it (on top of everything)
-    paintNode(node, layout, buffer, inherited);
+    paintNode(node, layout, buffer, inherited, portalClip);
   }
 }
 
@@ -2023,8 +2175,22 @@ function renderFrame(state: RuntimeState): void {
   // Phase 3: Paint
   buffer.clear();
 
+  // Root clip covers full viewport
+  const rootClip: ClipRect = {
+    x: 0,
+    y: 0,
+    width: stdout.columns,
+    height: stdout.rows,
+  };
+
   // Paint main tree (portals are transparent due to display: "contents")
-  paintNode(root, state.layoutResult, buffer, DEFAULT_INHERITED_STYLE);
+  paintNode(
+    root,
+    state.layoutResult,
+    buffer,
+    DEFAULT_INHERITED_STYLE,
+    rootClip,
+  );
 
   // Collect and paint portal children at root level (on top)
   const portals = collectPortals(root, DEFAULT_INHERITED_STYLE);

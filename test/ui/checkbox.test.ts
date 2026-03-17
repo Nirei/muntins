@@ -1,7 +1,11 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { Buffer as RenderBuffer } from "../../src/core/buffer.ts";
-import { DEFAULT_INHERITED_STYLE, createRef } from "../../src/core/runtime.ts";
+import {
+  DEFAULT_CLIP,
+  DEFAULT_INHERITED_STYLE,
+  createRef,
+} from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { Checkbox } from "../../src/ui/checkbox.ts";
 
@@ -14,7 +18,15 @@ describe("Checkbox", () => {
       assert.ok(textNode?.render);
 
       const buffer = new RenderBuffer(1, 1);
-      textNode.render(0, 0, 1, 1, buffer, DEFAULT_INHERITED_STYLE);
+      textNode.render(
+        0,
+        0,
+        1,
+        1,
+        buffer,
+        DEFAULT_INHERITED_STYLE,
+        DEFAULT_CLIP,
+      );
 
       assert.strictEqual(buffer.getSymbol(0, 0), "☐");
     });
@@ -26,7 +38,15 @@ describe("Checkbox", () => {
       assert.ok(textNode?.render);
 
       const buffer = new RenderBuffer(1, 1);
-      textNode.render(0, 0, 1, 1, buffer, DEFAULT_INHERITED_STYLE);
+      textNode.render(
+        0,
+        0,
+        1,
+        1,
+        buffer,
+        DEFAULT_INHERITED_STYLE,
+        DEFAULT_CLIP,
+      );
 
       assert.strictEqual(buffer.getSymbol(0, 0), "☑");
     });
@@ -41,13 +61,29 @@ describe("Checkbox", () => {
       const buffer = new RenderBuffer(1, 1);
 
       // Initial: unchecked
-      textNode.render(0, 0, 1, 1, buffer, DEFAULT_INHERITED_STYLE);
+      textNode.render(
+        0,
+        0,
+        1,
+        1,
+        buffer,
+        DEFAULT_INHERITED_STYLE,
+        DEFAULT_CLIP,
+      );
       assert.strictEqual(buffer.getSymbol(0, 0), "☐");
 
       // Update to checked
       setChecked(true);
       buffer.flush();
-      textNode.render(0, 0, 1, 1, buffer, DEFAULT_INHERITED_STYLE);
+      textNode.render(
+        0,
+        0,
+        1,
+        1,
+        buffer,
+        DEFAULT_INHERITED_STYLE,
+        DEFAULT_CLIP,
+      );
       assert.strictEqual(buffer.getSymbol(0, 0), "☑");
     });
   });

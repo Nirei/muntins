@@ -1,9 +1,68 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { type Color, Buffer as RenderBuffer } from "../../src/core/buffer.ts";
-import { DEFAULT_INHERITED_STYLE } from "../../src/core/runtime.ts";
+import {
+  type LayoutNode,
+  type LayoutResult,
+  computeLayout,
+} from "../../src/core/layout.ts";
+import {
+  type ClipRect,
+  DEFAULT_CLIP,
+  DEFAULT_INHERITED_STYLE,
+  type InheritedStyle,
+  type Node,
+} from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { Progress } from "../../src/ui/progress.ts";
+
+// Helper to convert Node tree to LayoutNode tree for computeLayout
+function toLayoutNode(node: Node): LayoutNode {
+  const style = typeof node.style === "function" ? node.style() : node.style;
+  const children =
+    typeof node.children === "function"
+      ? (node.children as () => Node[])()
+      : node.children;
+  return {
+    style,
+    measure: node.measure,
+    children: children?.map(toLayoutNode),
+  };
+}
+
+// Helper to paint a node tree recursively
+function paintTree(
+  node: Node,
+  layout: LayoutResult,
+  buffer: RenderBuffer,
+  inherited: InheritedStyle,
+  clip: ClipRect,
+): void {
+  const { screenX, screenY, width, height } = layout;
+
+  if (node.render) {
+    node.render(screenX, screenY, width, height, buffer, inherited, clip);
+  }
+
+  const children =
+    typeof node.children === "function"
+      ? (node.children as () => Node[])()
+      : (node.children ?? []);
+  const childLayouts = layout.children ?? [];
+
+  for (let i = 0; i < children.length && i < childLayouts.length; i++) {
+    paintTree(children[i], childLayouts[i], buffer, inherited, clip);
+  }
+}
+
+// Helper to render a Progress node to a buffer
+function renderProgress(node: Node, width: number): RenderBuffer {
+  const buffer = new RenderBuffer(width + 5, 1);
+  const layoutNode = toLayoutNode(node);
+  const layout = computeLayout(layoutNode, width + 5, 1);
+  paintTree(node, layout, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+  return buffer;
+}
 
 // Block characters indexed by eighths (0-8)
 const BLOCKS = [
@@ -22,10 +81,7 @@ describe("Progress", () => {
   describe("basic rendering", () => {
     it("renders empty bar at value=0", () => {
       const node = Progress({ value: 0 });
-      assert.ok(node.render);
-
-      const buffer = new RenderBuffer(25, 1);
-      node.render(0, 0, 20, 1, buffer, DEFAULT_INHERITED_STYLE);
+      const buffer = renderProgress(node, 20);
 
       // All cells should be spaces
       for (let x = 0; x < 20; x++) {
@@ -35,10 +91,7 @@ describe("Progress", () => {
 
     it("renders full bar at value=100", () => {
       const node = Progress({ value: 100 });
-      assert.ok(node.render);
-
-      const buffer = new RenderBuffer(25, 1);
-      node.render(0, 0, 20, 1, buffer, DEFAULT_INHERITED_STYLE);
+      const buffer = renderProgress(node, 20);
 
       // All cells should be full blocks
       for (let x = 0; x < 20; x++) {
@@ -48,10 +101,7 @@ describe("Progress", () => {
 
     it("renders half fill at value=50", () => {
       const node = Progress({ value: 50 });
-      assert.ok(node.render);
-
-      const buffer = new RenderBuffer(25, 1);
-      node.render(0, 0, 20, 1, buffer, DEFAULT_INHERITED_STYLE);
+      const buffer = renderProgress(node, 20);
 
       // 50% of 20 cells = 10 full cells, 10 empty
       for (let x = 0; x < 10; x++) {
@@ -68,10 +118,7 @@ describe("Progress", () => {
       // 12.5% of 20 cells = 20 eighths = 2 full cells + 4/8 partial
       // Actually: 0.125 * 20 * 8 = 20 eighths = 2 full + 4 remainder
       const node = Progress({ value: 12.5 });
-      assert.ok(node.render);
-
-      const buffer = new RenderBuffer(25, 1);
-      node.render(0, 0, 20, 1, buffer, DEFAULT_INHERITED_STYLE);
+      const buffer = renderProgress(node, 20);
 
       // 2 full cells
       assert.strictEqual(buffer.getSymbol(0, 0), BLOCKS[8]); // █
@@ -88,10 +135,7 @@ describe("Progress", () => {
       // 0.625% of 20 cells = 1 eighth
       // 0.00625 * 20 * 8 = 1
       const node = Progress({ value: 0.625 });
-      assert.ok(node.render);
-
-      const buffer = new RenderBuffer(25, 1);
-      node.render(0, 0, 20, 1, buffer, DEFAULT_INHERITED_STYLE);
+      const buffer = renderProgress(node, 20);
 
       assert.strictEqual(buffer.getSymbol(0, 0), BLOCKS[1]); // ▏
       for (let x = 1; x < 20; x++) {
@@ -103,10 +147,7 @@ describe("Progress", () => {
       // We want: 0 full cells + 7/8 partial
       // 7 eighths out of 160 total = 7/160 = 4.375%
       const node = Progress({ value: 4.375 });
-      assert.ok(node.render);
-
-      const buffer = new RenderBuffer(25, 1);
-      node.render(0, 0, 20, 1, buffer, DEFAULT_INHERITED_STYLE);
+      const buffer = renderProgress(node, 20);
 
       assert.strictEqual(buffer.getSymbol(0, 0), BLOCKS[7]); // ▉
       for (let x = 1; x < 20; x++) {
@@ -121,10 +162,7 @@ describe("Progress", () => {
       for (let eighths = 0; eighths <= 160; eighths++) {
         const value = (eighths / 160) * 100;
         const node = Progress({ value });
-        assert.ok(node.render);
-
-        const buffer = new RenderBuffer(25, 1);
-        node.render(0, 0, 20, 1, buffer, DEFAULT_INHERITED_STYLE);
+        const buffer = renderProgress(node, 20);
 
         // Capture the visual state
         let state = "";
@@ -142,10 +180,7 @@ describe("Progress", () => {
   describe("value clamping", () => {
     it("clamps values below 0 to 0", () => {
       const node = Progress({ value: -50 });
-      assert.ok(node.render);
-
-      const buffer = new RenderBuffer(25, 1);
-      node.render(0, 0, 20, 1, buffer, DEFAULT_INHERITED_STYLE);
+      const buffer = renderProgress(node, 20);
 
       // All cells should be spaces
       for (let x = 0; x < 20; x++) {
@@ -155,10 +190,7 @@ describe("Progress", () => {
 
     it("clamps values above 100 to 100", () => {
       const node = Progress({ value: 150 });
-      assert.ok(node.render);
-
-      const buffer = new RenderBuffer(25, 1);
-      node.render(0, 0, 20, 1, buffer, DEFAULT_INHERITED_STYLE);
+      const buffer = renderProgress(node, 20);
 
       // All cells should be full blocks
       for (let x = 0; x < 20; x++) {
@@ -170,14 +202,13 @@ describe("Progress", () => {
   describe("custom width", () => {
     it("respects custom width", () => {
       const node = Progress({ value: 50, width: 10 });
-      assert.ok(node.measure);
-      assert.ok(node.render);
 
-      const size = node.measure(100, 100);
-      assert.strictEqual(size.width, 10);
+      // Check style has the custom width
+      const style =
+        typeof node.style === "function" ? node.style() : node.style;
+      assert.strictEqual(style.width, 10);
 
-      const buffer = new RenderBuffer(15, 1);
-      node.render(0, 0, 10, 1, buffer, DEFAULT_INHERITED_STYLE);
+      const buffer = renderProgress(node, 10);
 
       // 50% of 10 = 5 full cells
       for (let x = 0; x < 5; x++) {
@@ -191,10 +222,7 @@ describe("Progress", () => {
     it("sub-cell precision works with custom width", () => {
       // 10% of 10 cells = 8 eighths = 1 full cell
       const node = Progress({ value: 10, width: 10 });
-      assert.ok(node.render);
-
-      const buffer = new RenderBuffer(15, 1);
-      node.render(0, 0, 10, 1, buffer, DEFAULT_INHERITED_STYLE);
+      const buffer = renderProgress(node, 10);
 
       assert.strictEqual(buffer.getSymbol(0, 0), BLOCKS[8]); // █
       for (let x = 1; x < 10; x++) {
@@ -207,20 +235,16 @@ describe("Progress", () => {
     it("updates when value signal changes", () => {
       const [value, setValue] = createSignal(0);
       const node = Progress({ value });
-      assert.ok(node.render);
-
-      const buffer = new RenderBuffer(25, 1);
 
       // Initial: empty bar
-      node.render(0, 0, 20, 1, buffer, DEFAULT_INHERITED_STYLE);
+      let buffer = renderProgress(node, 20);
       for (let x = 0; x < 20; x++) {
         assert.strictEqual(buffer.getSymbol(x, 0), " ");
       }
 
-      // Update to 100
+      // Update to 100 and re-render
       setValue(100);
-      buffer.flush();
-      node.render(0, 0, 20, 1, buffer, DEFAULT_INHERITED_STYLE);
+      buffer = renderProgress(node, 20);
       for (let x = 0; x < 20; x++) {
         assert.strictEqual(buffer.getSymbol(x, 0), BLOCKS[8]); // █
       }
@@ -229,16 +253,21 @@ describe("Progress", () => {
     it("updates when width signal changes", () => {
       const [width, setWidth] = createSignal(20);
       const node = Progress({ value: 100, width });
-      assert.ok(node.measure);
 
-      // Initial width
-      let size = node.measure(100, 100);
-      assert.strictEqual(size.width, 20);
+      // Initial render
+      let buffer = renderProgress(node, 20);
+      // At width 20, 100% should fill all 20 cells
+      for (let x = 0; x < 20; x++) {
+        assert.strictEqual(buffer.getSymbol(x, 0), BLOCKS[8]); // █
+      }
 
-      // Change width
-      setWidth(30);
-      size = node.measure(100, 100);
-      assert.strictEqual(size.width, 30);
+      // Change width and re-render - content adapts reactively
+      setWidth(10);
+      buffer = renderProgress(node, 10);
+      // At width 10, 100% should fill all 10 cells
+      for (let x = 0; x < 10; x++) {
+        assert.strictEqual(buffer.getSymbol(x, 0), BLOCKS[8]); // █
+      }
     });
   });
 
@@ -267,25 +296,26 @@ describe("Progress", () => {
   });
 
   describe("measure", () => {
-    it("returns fixed dimensions", () => {
+    it("returns fixed dimensions via layout", () => {
       const node = Progress({ value: 50 });
-      assert.ok(node.measure);
 
-      const size = node.measure(100, 100);
-      assert.strictEqual(size.width, 20);
-      assert.strictEqual(size.height, 1);
+      // Layout should use the explicit width/height from style
+      const layoutNode = toLayoutNode(node);
+      const layout = computeLayout(layoutNode, 100, 100);
+      assert.strictEqual(layout.width, 20);
+      assert.strictEqual(layout.height, 1);
     });
 
     it("ignores available space", () => {
       const node = Progress({ value: 50 });
-      assert.ok(node.measure);
 
       // Should return same size regardless of available space
-      const size1 = node.measure(10, 10);
-      const size2 = node.measure(1000, 1000);
+      const layoutNode = toLayoutNode(node);
+      const layout1 = computeLayout(layoutNode, 10, 10);
+      const layout2 = computeLayout(layoutNode, 1000, 1000);
 
-      assert.strictEqual(size1.width, size2.width);
-      assert.strictEqual(size1.height, size2.height);
+      assert.strictEqual(layout1.width, layout2.width);
+      assert.strictEqual(layout1.height, layout2.height);
     });
   });
 
@@ -299,10 +329,7 @@ describe("Progress", () => {
   describe("edge cases", () => {
     it("handles width of 1", () => {
       const node = Progress({ value: 50, width: 1 });
-      assert.ok(node.render);
-
-      const buffer = new RenderBuffer(5, 1);
-      node.render(0, 0, 1, 1, buffer, DEFAULT_INHERITED_STYLE);
+      const buffer = renderProgress(node, 1);
 
       // 50% of 1 cell = 4 eighths = half block
       assert.strictEqual(buffer.getSymbol(0, 0), BLOCKS[4]); // ▌
@@ -310,20 +337,15 @@ describe("Progress", () => {
 
     it("handles width of 0", () => {
       const node = Progress({ value: 50, width: 0 });
-      assert.ok(node.render);
-
-      const buffer = new RenderBuffer(5, 1);
-      // Should not throw
-      node.render(0, 0, 0, 1, buffer, DEFAULT_INHERITED_STYLE);
+      // Should not throw when rendering
+      const buffer = renderProgress(node, 0);
+      assert.ok(buffer);
     });
 
     it("rounds to nearest eighth", () => {
       // 1% of 20 cells = 1.6 eighths, rounds to 2
       const node = Progress({ value: 1 });
-      assert.ok(node.render);
-
-      const buffer = new RenderBuffer(25, 1);
-      node.render(0, 0, 20, 1, buffer, DEFAULT_INHERITED_STYLE);
+      const buffer = renderProgress(node, 20);
 
       // Should show 2/8 = 1/4 block
       assert.strictEqual(buffer.getSymbol(0, 0), BLOCKS[2]); // ▎
@@ -337,32 +359,42 @@ describe("Progress", () => {
     it("uses custom color for filled portion", () => {
       const green: Color = { type: "named", index: 2 };
       const node = Progress({ value: 100, color: green });
-      assert.ok(node.render);
 
-      // Color is resolved via _inheritableProps by the runtime
-      // Here we test that the prop is stored correctly
-      assert.ok(node._inheritableProps);
-      assert.deepStrictEqual(node._inheritableProps.color, green);
+      // Color is passed to Text child via _inheritableProps on Box
+      // The Text node inside has the color prop
+      const children = node.children as Node[];
+      assert.ok(children && children.length > 0);
+      const textChild = children[0];
+      assert.ok(textChild._inheritableProps);
+      assert.deepStrictEqual(textChild._inheritableProps.color, green);
     });
 
     it("uses custom backgroundColor", () => {
       const black: Color = { type: "named", index: 0 };
       const node = Progress({ value: 0, backgroundColor: black });
-      assert.ok(node.render);
 
-      assert.ok(node._inheritableProps);
-      assert.deepStrictEqual(node._inheritableProps.backgroundColor, black);
+      const children = node.children as Node[];
+      assert.ok(children && children.length > 0);
+      const textChild = children[0];
+      assert.ok(textChild._inheritableProps);
+      assert.deepStrictEqual(
+        textChild._inheritableProps.backgroundColor,
+        black,
+      );
     });
 
     it("supports reactive color", () => {
-      const [color, setColor] = createSignal<Color>({
+      const [color, _setColor] = createSignal<Color>({
         type: "named",
         index: 1,
       });
       const node = Progress({ value: 50, color });
 
-      assert.ok(node._inheritableProps);
-      assert.strictEqual(typeof node._inheritableProps.color, "function");
+      const children = node.children as Node[];
+      assert.ok(children && children.length > 0);
+      const textChild = children[0];
+      assert.ok(textChild._inheritableProps);
+      assert.strictEqual(typeof textChild._inheritableProps.color, "function");
     });
   });
 });

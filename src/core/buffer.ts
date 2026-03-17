@@ -14,6 +14,38 @@ export function* graphemes(text: string): Generator<string> {
   }
 }
 
+/**
+ * Counts grapheme clusters in a string.
+ * Use instead of string.length for correct Unicode handling.
+ */
+export function graphemeCount(str: string): number {
+  let count = 0;
+  for (const _ of graphemes(str)) {
+    count++;
+  }
+  return count;
+}
+
+/**
+ * Slices a string by grapheme cluster positions.
+ * Similar to string.slice() but operates on grapheme clusters.
+ */
+export function graphemeSlice(
+  str: string,
+  start: number,
+  end?: number,
+): string {
+  let result = "";
+  let i = 0;
+  for (const grapheme of graphemes(str)) {
+    if (i >= start && (end === undefined || i < end)) {
+      result += grapheme;
+    }
+    i++;
+  }
+  return result;
+}
+
 // Zero-width character ranges (sorted by start)
 const ZERO_WIDTH_RANGES: readonly [number, number][] = [
   [0x0300, 0x036f], // Combining diacriticals

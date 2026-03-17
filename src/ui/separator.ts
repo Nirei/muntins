@@ -1,15 +1,11 @@
 // Separator component - visual divider for content
 
-import type { Buffer } from "../core/buffer.ts";
-import { DEFAULT_FLEX_STYLE, type FlexStyle } from "../core/layout.ts";
-import type { InheritedStyle, Node } from "../core/runtime.ts";
+import type { FlexStyle } from "../core/layout.ts";
+import type { Node } from "../core/runtime.ts";
+import { Box } from "../core/runtime.ts";
 
 /** Orientation of the separator. */
 export type SeparatorOrientation = "horizontal" | "vertical";
-
-/** Box drawing characters for separator lines. */
-const HORIZONTAL_CHAR = "\u2500"; // ─
-const VERTICAL_CHAR = "\u2502"; // │
 
 /**
  * Props for the Separator component.
@@ -46,66 +42,21 @@ export function Separator(props: SeparatorProps): Node {
   const getOrientation = (): SeparatorOrientation =>
     resolveValue(orientation, "horizontal");
 
-  const node: Node = {
-    get style() {
-      const orient = getOrientation();
-      const isHorizontal = orient === "horizontal";
+  const isHorizontal = () => getOrientation() === "horizontal";
 
-      return {
-        ...DEFAULT_FLEX_STYLE,
-        // Horizontal: fixed height of 1, stretch to fill width (via alignSelf)
-        // Vertical: fixed width of 1, stretch to fill height (via alignSelf)
-        // alignSelf defaults to "auto" which inherits parent's alignItems (default "stretch")
-        width: isHorizontal ? "auto" : 1,
-        height: isHorizontal ? 1 : "auto",
-        ...style,
-      } as FlexStyle;
-    },
-
-    measure(availableWidth: number, availableHeight: number) {
-      const orient = getOrientation();
-      const isHorizontal = orient === "horizontal";
-
-      if (isHorizontal) {
-        // Horizontal separator: fills width, 1 cell tall
-        const width =
-          availableWidth === Number.POSITIVE_INFINITY ? 1 : availableWidth;
-        return { width, height: 1 };
-      }
-
-      // Vertical separator: 1 cell wide, fills height
-      const height =
-        availableHeight === Number.POSITIVE_INFINITY ? 1 : availableHeight;
-      return { width: 1, height };
-    },
-
-    render(
-      x: number,
-      y: number,
-      width: number,
-      height: number,
-      buffer: Buffer,
-      inherited: InheritedStyle,
-    ) {
-      const orient = getOrientation();
-      const isHorizontal = orient === "horizontal";
-
-      const fg = inherited.color;
-      const bg = inherited.backgroundColor;
-
-      if (isHorizontal) {
-        // Draw horizontal line across the width
-        for (let col = 0; col < width; col++) {
-          buffer.set(x + col, y, HORIZONTAL_CHAR, fg, bg, 0);
-        }
-      } else {
-        // Draw vertical line down the height
-        for (let row = 0; row < height; row++) {
-          buffer.set(x, y + row, VERTICAL_CHAR, fg, bg, 0);
-        }
-      }
-    },
+  // Build props as Record so Box resolves functions at runtime
+  const boxProps: Record<string, unknown> = {
+    // Use a single border edge to create the line
+    border: () => (isHorizontal() ? { top: true } : { left: true }),
+    // Horizontal: width is 'auto' (fills via alignSelf), fixed height of 1
+    // Vertical: fixed width of 1, height is 'auto' (fills via alignSelf)
+    // Using 'auto' instead of undefined to avoid overriding DEFAULT_FLEX_STYLE
+    width: () => (isHorizontal() ? "auto" : 1),
+    height: () => (isHorizontal() ? 1 : "auto"),
+    // Stretch to fill available space in the cross-axis
+    alignSelf: "stretch",
+    ...style,
   };
 
-  return node;
+  return Box(boxProps as Parameters<typeof Box>[0]);
 }

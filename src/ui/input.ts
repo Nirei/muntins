@@ -1,11 +1,15 @@
 // Input component - single-line text input with cursor and editing support
 
-import type { Buffer, Color } from "../core/buffer.ts";
-import { graphemeDisplayWidth, graphemes } from "../core/buffer.ts";
+import {
+  graphemeCount,
+  graphemeDisplayWidth,
+  graphemeSlice,
+  graphemes,
+} from "../core/buffer.ts";
 import { type KeyEvent, isPrintable } from "../core/input.ts";
-import { DEFAULT_FLEX_STYLE, type FlexStyle } from "../core/layout.ts";
-import type { InheritedStyle, Node, Ref } from "../core/runtime.ts";
-import { getActiveContext } from "../core/runtime.ts";
+import type { FlexStyle } from "../core/layout.ts";
+import type { Node, Ref } from "../core/runtime.ts";
+import { Box, Text, createRef, getActiveContext } from "../core/runtime.ts";
 import {
   type Accessor,
   createEffect,
@@ -42,32 +46,6 @@ export interface InputProps {
 
   /** Style overrides */
   style?: Partial<FlexStyle>;
-}
-
-/**
- * Count graphemes in a string.
- */
-function graphemeCount(str: string): number {
-  let count = 0;
-  for (const _ of graphemes(str)) {
-    count++;
-  }
-  return count;
-}
-
-/**
- * Slice a string by grapheme positions.
- */
-function graphemeSlice(str: string, start: number, end?: number): string {
-  let result = "";
-  let i = 0;
-  for (const grapheme of graphemes(str)) {
-    if (i >= start && (end === undefined || i < end)) {
-      result += grapheme;
-    }
-    i++;
-  }
-  return result;
 }
 
 /**
@@ -123,13 +101,13 @@ export function Input(props: InputProps): Node {
   const getWidth = () => resolve(props.width) ?? 20;
   const getPlaceholder = () => resolve(props.placeholder) ?? "";
 
+  // Create internal ref to track this node for focus checking
+  const internalRef = createRef();
+
   // Try to get focus accessor from context (may be null in tests)
   const ctx = getActiveContext();
   const focusedNodeAccessor: Accessor<Node | null> | null =
     ctx?.state.focusedNode ?? null;
-
-  // Declare node first so we can reference it in isFocused
-  let node: Node;
 
   // Clamp cursor when value changes externally
   createEffect(() => {
@@ -218,159 +196,62 @@ export function Input(props: InputProps): Node {
     return false;
   };
 
-  // Check if this node is focused (used in render)
+  // Check if this node is focused
   const isFocused = (): boolean => {
     if (!focusedNodeAccessor) return false;
-    return focusedNodeAccessor() === node;
+    return focusedNodeAccessor() === internalRef.current;
   };
 
-  node = {
-    get style() {
-      const width = getWidth();
-      return {
-        ...DEFAULT_FLEX_STYLE,
-        width,
-        height: 1,
-        ...props.style,
-      } as FlexStyle;
-    },
+  // Computed text segments
+  const beforeCursor = () => graphemeSlice(getValue(), 0, cursorPos());
+  const cursorChar = () => {
+    const char = graphemeSlice(getValue(), cursorPos(), cursorPos() + 1);
+    return char || " "; // Space at end of text
+  };
+  const afterCursor = () => graphemeSlice(getValue(), cursorPos() + 1);
+
+  // Show cursor only when focused and not disabled
+  const showCursor = () => !isDisabled() && isFocused();
+
+  // Show placeholder when value is empty
+  const showPlaceholder = () =>
+    getValue().length === 0 && getPlaceholder().length > 0;
+
+  // Bind external ref if provided
+  const boundRef = props.ref ?? internalRef;
+
+  return Box({
+    ref: boundRef,
+    overflow: "hidden" as const,
+    width: getWidth(),
+    height: 1,
     focusable: props.focusable ?? true,
     autoFocus: props.autoFocus,
     onKeyPress: handleKeyPress,
-
-    measure(_availableWidth: number, _availableHeight: number) {
-      return { width: getWidth(), height: 1 };
-    },
-
-    render(
-      x: number,
-      y: number,
-      width: number,
-      _height: number,
-      buffer: Buffer,
-      inherited: InheritedStyle,
-    ) {
-      const val = getValue();
-      const placeholder = getPlaceholder();
-      const disabled = isDisabled();
-      const pos = cursorPos();
-      const offset = scrollOffset();
-
-      // Determine colors
-      const fg = inherited.color;
-      const bg = inherited.backgroundColor;
-
-      // Show placeholder when empty
-      if (val.length === 0 && placeholder.length > 0) {
-        // Dim placeholder text
-        renderInputText(
-          buffer,
-          x,
-          y,
-          width,
-          placeholder,
-          fg,
-          bg,
-          true,
-          false,
-          -1,
-          offset,
-        );
-        return;
-      }
-
-      // Render value with cursor
-      // Cursor is only visible when focused and not disabled
-      const showCursor = !disabled && isFocused();
-      renderInputText(
-        buffer,
-        x,
-        y,
-        width,
-        val,
-        fg,
-        bg,
-        disabled,
-        showCursor,
-        pos,
-        offset,
-      );
-    },
-  };
-
-  // Bind ref
-  if (props.ref) {
-    props.ref.current = node;
-  }
-
-  return node;
-}
-
-// DIM modifier constant (from buffer.ts)
-const DIM = 2;
-const INVERSE = 32;
-
-/**
- * Render input text with optional cursor.
- */
-function renderInputText(
-  buffer: Buffer,
-  x: number,
-  y: number,
-  width: number,
-  text: string,
-  fg: Color,
-  bg: Color,
-  dim: boolean,
-  showCursor: boolean,
-  cursorPos: number,
-  scrollOffset: number,
-): void {
-  let col = 0;
-  let graphemeIndex = 0;
-  let displayCol = 0;
-
-  for (const grapheme of graphemes(text)) {
-    const graphemeWidth = graphemeDisplayWidth(grapheme);
-
-    // Skip graphemes that are scrolled out of view
-    if (displayCol + graphemeWidth <= scrollOffset) {
-      displayCol += graphemeWidth;
-      graphemeIndex++;
-      continue;
-    }
-
-    // Calculate visible position
-    const visibleCol = displayCol - scrollOffset;
-
-    // Stop if we're past the visible width
-    if (visibleCol >= width) break;
-
-    // Determine modifiers for this grapheme
-    let modifiers = dim ? DIM : 0;
-    if (showCursor && graphemeIndex === cursorPos) {
-      modifiers |= INVERSE;
-    }
-
-    // Write grapheme to buffer
-    buffer.set(x + visibleCol, y, grapheme, fg, bg, modifiers);
-
-    // Handle double-width chars
-    if (graphemeWidth === 2 && visibleCol + 1 < width) {
-      buffer.set(x + visibleCol + 1, y, "", fg, bg, modifiers);
-    }
-
-    displayCol += graphemeWidth;
-    col++;
-    graphemeIndex++;
-  }
-
-  // Draw cursor at end of text if cursor is at end position
-  if (showCursor && cursorPos === graphemeCount(text)) {
-    const cursorDisplayPos =
-      displayWidthToPosition(text, cursorPos) - scrollOffset;
-    if (cursorDisplayPos >= 0 && cursorDisplayPos < width) {
-      buffer.set(x + cursorDisplayPos, y, " ", fg, bg, INVERSE);
-    }
-  }
+    ...props.style,
+    children: [
+      // Content container with negative margin for horizontal scrolling
+      Box({
+        flexDirection: "row",
+        marginStart: -scrollOffset(),
+        children: showPlaceholder()
+          ? [
+              // Placeholder (dimmed)
+              Text({ content: getPlaceholder, dim: true }),
+            ]
+          : [
+              // Text before cursor
+              Text({ content: beforeCursor, dim: isDisabled }),
+              // Cursor character (inverse when focused)
+              Text({
+                content: cursorChar,
+                inverse: showCursor,
+                dim: isDisabled,
+              }),
+              // Text after cursor
+              Text({ content: afterCursor, dim: isDisabled }),
+            ],
+      }),
+    ],
+  });
 }

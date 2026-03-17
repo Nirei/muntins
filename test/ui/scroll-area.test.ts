@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { Buffer as RenderBuffer } from "../../src/core/buffer.ts";
 import {
   Box,
+  DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
   Text,
   createRef,
@@ -172,7 +173,15 @@ describe("ScrollArea", () => {
 
       // Render to a buffer
       const buffer = new RenderBuffer(1, 3);
-      scrollbar.render(0, 0, 1, 3, buffer, DEFAULT_INHERITED_STYLE);
+      scrollbar.render(
+        0,
+        0,
+        1,
+        3,
+        buffer,
+        DEFAULT_INHERITED_STYLE,
+        DEFAULT_CLIP,
+      );
 
       // Should render thumb characters when content fits
       const content =
@@ -535,7 +544,15 @@ describe("ScrollArea", () => {
       assert.ok(scrollbar?.render);
 
       const buffer = new RenderBuffer(1, 5);
-      scrollbar.render(0, 0, 1, 5, buffer, DEFAULT_INHERITED_STYLE);
+      scrollbar.render(
+        0,
+        0,
+        1,
+        5,
+        buffer,
+        DEFAULT_INHERITED_STYLE,
+        DEFAULT_CLIP,
+      );
 
       // Should have a mix of track and thumb characters
       let hasThumb = false;
@@ -564,13 +581,29 @@ describe("ScrollArea", () => {
 
       // Render at top
       const bufferTop = new RenderBuffer(1, 5);
-      scrollbar.render(0, 0, 1, 5, bufferTop, DEFAULT_INHERITED_STYLE);
+      scrollbar.render(
+        0,
+        0,
+        1,
+        5,
+        bufferTop,
+        DEFAULT_INHERITED_STYLE,
+        DEFAULT_CLIP,
+      );
       const topThumbPos = findThumbPosition(bufferTop, 5);
 
       // Scroll to bottom
       setScrollPos(5);
       const bufferBottom = new RenderBuffer(1, 5);
-      scrollbar.render(0, 0, 1, 5, bufferBottom, DEFAULT_INHERITED_STYLE);
+      scrollbar.render(
+        0,
+        0,
+        1,
+        5,
+        bufferBottom,
+        DEFAULT_INHERITED_STYLE,
+        DEFAULT_CLIP,
+      );
       const bottomThumbPos = findThumbPosition(bufferBottom, 5);
 
       assert.ok(

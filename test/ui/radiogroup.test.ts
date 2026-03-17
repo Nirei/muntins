@@ -7,6 +7,7 @@ import {
 import { DEFAULT_FLEX_STYLE } from "../../src/core/layout.ts";
 import {
   Box,
+  DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
   type Node,
   Text,
@@ -73,7 +74,7 @@ describe("RadioGroup", () => {
       assert.ok(glyph0?.render);
 
       const buffer0 = new RenderBuffer(1, 1);
-      glyph0.render(0, 0, 1, 1, buffer0, DEFAULT_INHERITED_STYLE);
+      glyph0.render(0, 0, 1, 1, buffer0, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
       assert.strictEqual(buffer0.getSymbol(0, 0), "○");
 
       // Check second option (selected)
@@ -83,7 +84,7 @@ describe("RadioGroup", () => {
       assert.ok(glyph1?.render);
 
       const buffer1 = new RenderBuffer(1, 1);
-      glyph1.render(0, 0, 1, 1, buffer1, DEFAULT_INHERITED_STYLE);
+      glyph1.render(0, 0, 1, 1, buffer1, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
       assert.strictEqual(buffer1.getSymbol(0, 0), "●");
     });
 
@@ -97,7 +98,15 @@ describe("RadioGroup", () => {
         const optChildren = getNodeChildren(opt);
         const glyph = optChildren[0];
         const buffer = new RenderBuffer(1, 1);
-        glyph?.render?.(0, 0, 1, 1, buffer, DEFAULT_INHERITED_STYLE);
+        glyph?.render?.(
+          0,
+          0,
+          1,
+          1,
+          buffer,
+          DEFAULT_INHERITED_STYLE,
+          DEFAULT_CLIP,
+        );
         return buffer;
       };
 
@@ -387,14 +396,14 @@ describe("RadioGroup", () => {
       assert.ok(opt0?.render);
 
       const buffer = new RenderBuffer(1, 1);
-      opt0.render(0, 0, 1, 1, buffer, DEFAULT_INHERITED_STYLE);
+      opt0.render(0, 0, 1, 1, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
       assert.strictEqual(buffer.getSymbol(0, 0), "X"); // selected
 
       const opt1 = children[1];
       assert.ok(opt1?.render);
 
       const buffer1 = new RenderBuffer(1, 1);
-      opt1.render(0, 0, 1, 1, buffer1, DEFAULT_INHERITED_STYLE);
+      opt1.render(0, 0, 1, 1, buffer1, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
       assert.strictEqual(buffer1.getSymbol(0, 0), "O"); // not selected
     });
   });

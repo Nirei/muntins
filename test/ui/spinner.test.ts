@@ -1,7 +1,11 @@
 import assert from "node:assert";
 import { describe, it, mock } from "node:test";
 import { Buffer as RenderBuffer } from "../../src/core/buffer.ts";
-import { DEFAULT_INHERITED_STYLE, mount } from "../../src/core/runtime.ts";
+import {
+  DEFAULT_CLIP,
+  DEFAULT_INHERITED_STYLE,
+  mount,
+} from "../../src/core/runtime.ts";
 import { createRoot, createSignal } from "../../src/core/signals.ts";
 import { Spinner } from "../../src/ui/spinner.ts";
 
@@ -101,7 +105,7 @@ describe("Spinner", () => {
       // Render and check content
       if (node.render) {
         const buffer = new RenderBuffer(10, 1);
-        node.render(0, 0, 10, 1, buffer, DEFAULT_INHERITED_STYLE);
+        node.render(0, 0, 10, 1, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
         // First frame of dots variant
         assert.strictEqual(buffer.getSymbol(0, 0), "⠋");
       }
@@ -136,7 +140,7 @@ describe("Spinner", () => {
       assert.ok(node);
       if (node.render) {
         const buffer = new RenderBuffer(10, 1);
-        node.render(0, 0, 10, 1, buffer, DEFAULT_INHERITED_STYLE);
+        node.render(0, 0, 10, 1, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
         // First frame of line variant is "-"
         assert.strictEqual(buffer.getSymbol(0, 0), "-");
       }
@@ -154,7 +158,7 @@ describe("Spinner", () => {
       assert.ok(node);
       if (node.render) {
         const buffer = new RenderBuffer(10, 1);
-        node.render(0, 0, 10, 1, buffer, DEFAULT_INHERITED_STYLE);
+        node.render(0, 0, 10, 1, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
         // First frame of arc variant is "◜"
         assert.strictEqual(buffer.getSymbol(0, 0), "◜");
       }
@@ -171,7 +175,15 @@ describe("Spinner", () => {
         assert.ok(node);
         if (node.render) {
           const buffer = new RenderBuffer(10, 1);
-          node.render(0, 0, 10, 1, buffer, DEFAULT_INHERITED_STYLE);
+          node.render(
+            0,
+            0,
+            10,
+            1,
+            buffer,
+            DEFAULT_INHERITED_STYLE,
+            DEFAULT_CLIP,
+          );
           assert.strictEqual(buffer.getSymbol(0, 0), "⠋");
         }
 
@@ -181,7 +193,15 @@ describe("Spinner", () => {
         // Now should use line frames
         if (node.render) {
           const buffer = new RenderBuffer(10, 1);
-          node.render(0, 0, 10, 1, buffer, DEFAULT_INHERITED_STYLE);
+          node.render(
+            0,
+            0,
+            10,
+            1,
+            buffer,
+            DEFAULT_INHERITED_STYLE,
+            DEFAULT_CLIP,
+          );
           assert.strictEqual(buffer.getSymbol(0, 0), "-");
         }
 
@@ -232,7 +252,15 @@ describe("Spinner", () => {
         // First frame
         if (node.render) {
           const buffer = new RenderBuffer(10, 1);
-          node.render(0, 0, 10, 1, buffer, DEFAULT_INHERITED_STYLE);
+          node.render(
+            0,
+            0,
+            10,
+            1,
+            buffer,
+            DEFAULT_INHERITED_STYLE,
+            DEFAULT_CLIP,
+          );
           assert.strictEqual(buffer.getSymbol(0, 0), "⠋");
         }
 
@@ -242,7 +270,15 @@ describe("Spinner", () => {
         // Second frame
         if (node.render) {
           const buffer = new RenderBuffer(10, 1);
-          node.render(0, 0, 10, 1, buffer, DEFAULT_INHERITED_STYLE);
+          node.render(
+            0,
+            0,
+            10,
+            1,
+            buffer,
+            DEFAULT_INHERITED_STYLE,
+            DEFAULT_CLIP,
+          );
           assert.strictEqual(buffer.getSymbol(0, 0), "⠙");
         }
 
@@ -254,7 +290,15 @@ describe("Spinner", () => {
         // Should wrap around (10 frames total in dots, started at 0, advanced 9 times = frame 9)
         if (node.render) {
           const buffer = new RenderBuffer(10, 1);
-          node.render(0, 0, 10, 1, buffer, DEFAULT_INHERITED_STYLE);
+          node.render(
+            0,
+            0,
+            10,
+            1,
+            buffer,
+            DEFAULT_INHERITED_STYLE,
+            DEFAULT_CLIP,
+          );
           assert.strictEqual(buffer.getSymbol(0, 0), "⠏"); // Last frame (index 9)
         }
 
@@ -262,7 +306,15 @@ describe("Spinner", () => {
         tick();
         if (node.render) {
           const buffer = new RenderBuffer(10, 1);
-          node.render(0, 0, 10, 1, buffer, DEFAULT_INHERITED_STYLE);
+          node.render(
+            0,
+            0,
+            10,
+            1,
+            buffer,
+            DEFAULT_INHERITED_STYLE,
+            DEFAULT_CLIP,
+          );
           assert.strictEqual(buffer.getSymbol(0, 0), "⠋"); // Back to first frame
         }
 

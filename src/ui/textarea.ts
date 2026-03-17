@@ -1,7 +1,11 @@
 // Textarea component - multi-line text input with cursor navigation and editing
 
 import type { Buffer, Color } from "../core/buffer.ts";
-import { graphemeDisplayWidth, graphemes } from "../core/buffer.ts";
+import {
+  graphemeCount,
+  graphemeDisplayWidth,
+  graphemes,
+} from "../core/buffer.ts";
 import { type KeyEvent, isPrintable } from "../core/input.ts";
 import { DEFAULT_FLEX_STYLE, type FlexStyle } from "../core/layout.ts";
 import type { InheritedStyle, Node, Ref } from "../core/runtime.ts";
@@ -55,17 +59,6 @@ export interface TextareaProps {
 interface CursorPosition {
   line: number;
   column: number;
-}
-
-/**
- * Count graphemes in a string.
- */
-function graphemeCount(str: string): number {
-  let count = 0;
-  for (const _ of graphemes(str)) {
-    count++;
-  }
-  return count;
 }
 
 /**

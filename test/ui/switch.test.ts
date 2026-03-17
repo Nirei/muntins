@@ -5,6 +5,7 @@ import { DEFAULT_FLEX_STYLE, computeLayout } from "../../src/core/layout.ts";
 import type { LayoutNode } from "../../src/core/layout.ts";
 import {
   Box,
+  DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
   createRef,
   mount,
@@ -94,7 +95,15 @@ describe("Switch", () => {
       assert.ok(textNode?.render);
 
       const buffer = new RenderBuffer(2, 1);
-      textNode.render(0, 0, 2, 1, buffer, DEFAULT_INHERITED_STYLE);
+      textNode.render(
+        0,
+        0,
+        2,
+        1,
+        buffer,
+        DEFAULT_INHERITED_STYLE,
+        DEFAULT_CLIP,
+      );
 
       assert.strictEqual(buffer.getSymbol(0, 0), "■");
       assert.strictEqual(buffer.getSymbol(1, 0), " ");
@@ -107,7 +116,15 @@ describe("Switch", () => {
       assert.ok(textNode?.render);
 
       const buffer = new RenderBuffer(2, 1);
-      textNode.render(0, 0, 2, 1, buffer, DEFAULT_INHERITED_STYLE);
+      textNode.render(
+        0,
+        0,
+        2,
+        1,
+        buffer,
+        DEFAULT_INHERITED_STYLE,
+        DEFAULT_CLIP,
+      );
 
       assert.strictEqual(buffer.getSymbol(0, 0), " ");
       assert.strictEqual(buffer.getSymbol(1, 0), "■");
@@ -123,14 +140,30 @@ describe("Switch", () => {
       const buffer = new RenderBuffer(2, 1);
 
       // Initial: off
-      textNode.render(0, 0, 2, 1, buffer, DEFAULT_INHERITED_STYLE);
+      textNode.render(
+        0,
+        0,
+        2,
+        1,
+        buffer,
+        DEFAULT_INHERITED_STYLE,
+        DEFAULT_CLIP,
+      );
       assert.strictEqual(buffer.getSymbol(0, 0), "■");
       assert.strictEqual(buffer.getSymbol(1, 0), " ");
 
       // Update to on
       setChecked(true);
       buffer.flush();
-      textNode.render(0, 0, 2, 1, buffer, DEFAULT_INHERITED_STYLE);
+      textNode.render(
+        0,
+        0,
+        2,
+        1,
+        buffer,
+        DEFAULT_INHERITED_STYLE,
+        DEFAULT_CLIP,
+      );
       assert.strictEqual(buffer.getSymbol(0, 0), " ");
       assert.strictEqual(buffer.getSymbol(1, 0), "■");
     });

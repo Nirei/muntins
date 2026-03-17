@@ -59,6 +59,9 @@ export interface FlexStyle {
   borderEnd: boolean;
   borderBottom: boolean;
   borderStart: boolean;
+
+  // Overflow behavior for child content
+  overflow: "visible" | "hidden";
 }
 
 /**
@@ -134,6 +137,7 @@ export const DEFAULT_FLEX_STYLE: FlexStyle = {
   borderEnd: false,
   borderBottom: false,
   borderStart: false,
+  overflow: "visible",
 };
 
 /**

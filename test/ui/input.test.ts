@@ -2,13 +2,72 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { Buffer as RenderBuffer } from "../../src/core/buffer.ts";
 import {
+  type LayoutNode,
+  type LayoutResult,
+  computeLayout,
+} from "../../src/core/layout.ts";
+import {
   Box,
+  type ClipRect,
+  DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
+  type InheritedStyle,
+  type Node,
   createRef,
   mount,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { Input } from "../../src/ui/input.ts";
+
+// Helper to convert Node tree to LayoutNode tree for computeLayout
+function toLayoutNode(node: Node): LayoutNode {
+  const style = typeof node.style === "function" ? node.style() : node.style;
+  const children =
+    typeof node.children === "function"
+      ? (node.children as () => Node[])()
+      : node.children;
+  return {
+    style,
+    measure: node.measure,
+    children: children?.map(toLayoutNode),
+  };
+}
+
+// Helper to paint a node tree recursively (simplified version of runtime's paintNode)
+function paintTree(
+  node: Node,
+  layout: LayoutResult,
+  buffer: RenderBuffer,
+  inherited: InheritedStyle,
+  clip: ClipRect,
+): void {
+  const { screenX, screenY, width, height } = layout;
+
+  // Paint this node if it has a render function
+  if (node.render) {
+    node.render(screenX, screenY, width, height, buffer, inherited, clip);
+  }
+
+  // Paint children
+  const children =
+    typeof node.children === "function"
+      ? (node.children as () => Node[])()
+      : (node.children ?? []);
+  const childLayouts = layout.children ?? [];
+
+  for (let i = 0; i < children.length && i < childLayouts.length; i++) {
+    paintTree(children[i], childLayouts[i], buffer, inherited, clip);
+  }
+}
+
+// Helper to render an Input node to a buffer
+function renderInput(node: Node, width: number, height: number): RenderBuffer {
+  const buffer = new RenderBuffer(width, height);
+  const layoutNode = toLayoutNode(node);
+  const layout = computeLayout(layoutNode, width, height);
+  paintTree(node, layout, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+  return buffer;
+}
 
 // Helper to create mock stdin for mount tests
 function createMockStdin() {
@@ -102,12 +161,8 @@ function keyEvent(
 describe("Input", () => {
   describe("rendering", () => {
     it("renders value when provided", () => {
-      const node = Input({ value: "Hello" });
-
-      assert.ok(node.render);
-
-      const buffer = new RenderBuffer(10, 1);
-      node.render(0, 0, 10, 1, buffer, DEFAULT_INHERITED_STYLE);
+      const node = Input({ value: "Hello", width: 10 });
+      const buffer = renderInput(node, 10, 1);
 
       assert.strictEqual(buffer.getSymbol(0, 0), "H");
       assert.strictEqual(buffer.getSymbol(1, 0), "e");
@@ -117,12 +172,8 @@ describe("Input", () => {
     });
 
     it("renders placeholder when empty", () => {
-      const node = Input({ value: "", placeholder: "Enter text" });
-
-      assert.ok(node.render);
-
-      const buffer = new RenderBuffer(15, 1);
-      node.render(0, 0, 15, 1, buffer, DEFAULT_INHERITED_STYLE);
+      const node = Input({ value: "", placeholder: "Enter text", width: 15 });
+      const buffer = renderInput(node, 15, 1);
 
       // Placeholder should be rendered (with dim)
       assert.strictEqual(buffer.getSymbol(0, 0), "E");
@@ -132,20 +183,15 @@ describe("Input", () => {
 
     it("renders reactive value", () => {
       const [value, setValue] = createSignal("Hello");
-      const node = Input({ value });
-
-      assert.ok(node.render);
-
-      const buffer = new RenderBuffer(10, 1);
+      const node = Input({ value, width: 10 });
 
       // Initial render
-      node.render(0, 0, 10, 1, buffer, DEFAULT_INHERITED_STYLE);
+      let buffer = renderInput(node, 10, 1);
       assert.strictEqual(buffer.getSymbol(0, 0), "H");
 
-      // Update value
+      // Update value and re-render
       setValue("World");
-      buffer.flush();
-      node.render(0, 0, 10, 1, buffer, DEFAULT_INHERITED_STYLE);
+      buffer = renderInput(node, 10, 1);
       assert.strictEqual(buffer.getSymbol(0, 0), "W");
     });
   });
@@ -626,13 +672,14 @@ describe("Input", () => {
   });
 
   describe("measurement", () => {
-    it("measures correctly", () => {
+    it("computes layout correctly", () => {
       const node = Input({ value: "Hello", width: 15 });
 
-      assert.ok(node.measure);
-      const size = node.measure(100, 100);
-      assert.strictEqual(size.width, 15);
-      assert.strictEqual(size.height, 1);
+      // Layout should respect the explicit width and height: 1
+      const layoutNode = toLayoutNode(node);
+      const layout = computeLayout(layoutNode, 100, 100);
+      assert.strictEqual(layout.width, 15);
+      assert.strictEqual(layout.height, 1);
     });
   });
 

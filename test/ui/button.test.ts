@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { DIM, Buffer as RenderBuffer } from "../../src/core/buffer.ts";
 import {
   Box,
+  DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
   Text,
   createRef,
@@ -92,7 +93,15 @@ describe("Button", () => {
       assert.ok(textNode?.render);
 
       const buffer = new RenderBuffer(8, 1);
-      textNode.render(0, 0, 8, 1, buffer, DEFAULT_INHERITED_STYLE);
+      textNode.render(
+        0,
+        0,
+        8,
+        1,
+        buffer,
+        DEFAULT_INHERITED_STYLE,
+        DEFAULT_CLIP,
+      );
 
       assert.strictEqual(buffer.getSymbol(0, 0), "C");
       assert.strictEqual(buffer.getSymbol(1, 0), "l");
@@ -114,7 +123,15 @@ describe("Button", () => {
       const buffer = new RenderBuffer(5, 1);
 
       // Initial render
-      textNode.render(0, 0, 5, 1, buffer, DEFAULT_INHERITED_STYLE);
+      textNode.render(
+        0,
+        0,
+        5,
+        1,
+        buffer,
+        DEFAULT_INHERITED_STYLE,
+        DEFAULT_CLIP,
+      );
       assert.strictEqual(buffer.getSymbol(0, 0), "H");
       assert.strictEqual(buffer.getSymbol(1, 0), "e");
       assert.strictEqual(buffer.getSymbol(2, 0), "l");
@@ -124,7 +141,15 @@ describe("Button", () => {
       // Update label
       setLabel("World");
       buffer.flush();
-      textNode.render(0, 0, 5, 1, buffer, DEFAULT_INHERITED_STYLE);
+      textNode.render(
+        0,
+        0,
+        5,
+        1,
+        buffer,
+        DEFAULT_INHERITED_STYLE,
+        DEFAULT_CLIP,
+      );
       assert.strictEqual(buffer.getSymbol(0, 0), "W");
       assert.strictEqual(buffer.getSymbol(1, 0), "o");
       assert.strictEqual(buffer.getSymbol(2, 0), "r");

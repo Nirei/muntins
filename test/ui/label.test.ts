@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { Buffer as RenderBuffer } from "../../src/core/buffer.ts";
 import {
   Box,
+  DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
   type FocusController,
   Text,
@@ -92,7 +93,7 @@ describe("Label", () => {
       assert.ok(node.render);
 
       const buffer = new RenderBuffer(20, 1);
-      node.render(0, 0, 20, 1, buffer, DEFAULT_INHERITED_STYLE);
+      node.render(0, 0, 20, 1, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
 
       // Check that text is rendered
       assert.strictEqual(buffer.getSymbol(0, 0), "U");
@@ -258,7 +259,7 @@ describe("Label", () => {
       assert.ok(node.render);
 
       const buffer = new RenderBuffer(20, 1);
-      node.render(0, 0, 20, 1, buffer, DEFAULT_INHERITED_STYLE);
+      node.render(0, 0, 20, 1, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
 
       assert.strictEqual(buffer.getSymbol(0, 0), "S");
     });
