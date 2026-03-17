@@ -1,0 +1,138 @@
+// Drawer component - panel that slides in from the edge of the screen
+
+import type { KeyEvent } from "../core/input.ts";
+import type { FlexStyle } from "../core/layout.ts";
+import type { Node } from "../core/runtime.ts";
+import { Box, Portal, Show, TabFocus } from "../core/runtime.ts";
+
+/** Which edge the drawer appears from */
+export type DrawerSide = "left" | "right" | "top" | "bottom";
+
+/**
+ * Props for the Drawer component.
+ */
+export interface DrawerProps {
+  /** Whether the drawer is open */
+  open: boolean | (() => boolean);
+
+  /** Called when drawer should close (Escape key) */
+  onClose?: () => void;
+
+  /** Which edge the drawer appears from. Default: "right" */
+  side?: DrawerSide | (() => DrawerSide);
+
+  /** Drawer content */
+  children: Node | Node[];
+
+  /** Size of the drawer (width for left/right, height for top/bottom) */
+  size?: number | (() => number);
+
+  /** Style overrides for the drawer container */
+  style?: Partial<FlexStyle>;
+}
+
+/**
+ * Resolve a value that may be static or a getter function.
+ */
+function resolve<T>(value: T | (() => T) | undefined): T | undefined {
+  return typeof value === "function" ? (value as () => T)() : value;
+}
+
+/**
+ * Normalize children to an array.
+ */
+function normalizeChildren(children: Node | Node[]): Node[] {
+  return Array.isArray(children) ? children : [children];
+}
+
+/**
+ * A drawer panel that slides in from the edge of the screen via Portal.
+ *
+ * When open, the drawer traps focus within its content using TabFocus.
+ * Pressing Escape calls onClose to dismiss the drawer.
+ *
+ * The drawer is intentionally unstyled - it renders its children with no default
+ * border, padding, or colors. Use composition or style overrides to add visual styling.
+ *
+ * @example
+ * ```typescript
+ * // Basic usage
+ * const [isOpen, setIsOpen] = createSignal(false);
+ *
+ * Drawer({
+ *   open: isOpen,
+ *   onClose: () => setIsOpen(false),
+ *   side: "left",
+ *   children: [
+ *     Text({ content: "Navigation" }),
+ *     Button({ children: "Home", onClick: goHome }),
+ *     Button({ children: "Settings", onClick: goSettings }),
+ *   ],
+ * });
+ *
+ * // With styling
+ * Drawer({
+ *   open: isOpen,
+ *   onClose: () => setIsOpen(false),
+ *   side: "right",
+ *   size: 40,
+ *   children: drawerContent,
+ *   style: {
+ *     borderStart: true,
+ *     padding: 1,
+ *   },
+ * });
+ * ```
+ */
+export function Drawer(props: DrawerProps): Node {
+  const isOpen = () => resolve(props.open) ?? false;
+  const getSide = () => resolve(props.side) ?? "right";
+  const getSize = () => resolve(props.size) ?? 30;
+
+  const handleKeyPress = (key: KeyEvent): boolean | undefined => {
+    if (key.name === "escape") {
+      props.onClose?.();
+      return true;
+    }
+    return false;
+  };
+
+  const positionStyle = (): Partial<FlexStyle> => {
+    const side = getSide();
+    const size = getSize();
+
+    switch (side) {
+      case "left":
+        return { start: 0, top: 0, bottom: 0, width: size };
+      case "right":
+        return { end: 0, top: 0, bottom: 0, width: size };
+      case "top":
+        return { top: 0, start: 0, end: 0, height: size };
+      case "bottom":
+        return { bottom: 0, start: 0, end: 0, height: size };
+    }
+  };
+
+  return Show({
+    when: isOpen,
+    children: () =>
+      Portal({
+        children: [
+          TabFocus({
+            trap: true,
+            children: [
+              Box({
+                position: "absolute",
+                flexDirection: "column",
+                focusable: true,
+                onKeyPress: handleKeyPress,
+                ...positionStyle(),
+                ...props.style,
+                children: normalizeChildren(props.children),
+              }),
+            ],
+          }),
+        ],
+      }),
+  });
+}
