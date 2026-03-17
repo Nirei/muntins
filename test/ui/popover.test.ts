@@ -509,6 +509,46 @@ describe("Popover", () => {
     });
   });
 
+  describe("positioning", () => {
+    it("content renders without explicit height on parent", () => {
+      // Regression test: Popover should position based on anchor's intrinsic
+      // height, not its layout height (which may stretch to fill container)
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout();
+
+      const app = mount(
+        () =>
+          Box({
+            // No height specified - anchor will stretch to fill viewport
+            children: [
+              Popover({
+                open: true,
+                placement: "bottom-start",
+                content: () => Text({ content: "PopoverContent" }),
+                children: (props) =>
+                  Box({
+                    ref: props.ref,
+                    // Trigger has no explicit height - intrinsic height is 1 row
+                    children: [Text({ content: "Trigger" })],
+                  }),
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+        },
+      );
+
+      // Content should be visible just below trigger (row 1, not row 24)
+      assert.ok(
+        mockStdout.written.includes("PopoverContent"),
+        "Popover content should render without explicit parent height",
+      );
+      app.unmount();
+    });
+  });
+
   describe("style overrides", () => {
     it("style prop applies to popover container", () => {
       const mockStdin = createMockStdin();

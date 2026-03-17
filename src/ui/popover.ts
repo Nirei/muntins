@@ -180,7 +180,86 @@ function countLayoutNodes(nodes: Node[]): number {
 }
 
 /**
+ * Compute the intrinsic (content-based) size of a node.
+ * For leaf nodes with measure(), returns the measured size.
+ * For containers, recursively computes based on children.
+ */
+function computeIntrinsicSize(
+  node: Node,
+  layout: import("../core/layout.ts").LayoutResult,
+): { width: number; height: number } {
+  // If the node has a measure function, use it (leaf node like Text)
+  if (node.measure) {
+    return node.measure(layout.width, layout.height);
+  }
+
+  // For containers, compute from children
+  const children =
+    typeof node.children === "function"
+      ? (node.children as () => Node[])()
+      : (node.children ?? []);
+  const childLayouts = layout.children ?? [];
+
+  if (children.length === 0) {
+    // Empty container - use layout size (padding/border only)
+    return { width: layout.width, height: layout.height };
+  }
+
+  // Get the node's style to determine flex direction
+  const style = typeof node.style === "function" ? node.style() : node.style;
+  const isRow = style.flexDirection === "row";
+
+  // Compute intrinsic size from children
+  let width = 0;
+  let height = 0;
+  let layoutIndex = 0;
+
+  for (const child of children) {
+    if (child._isPortal) continue;
+
+    const childStyle =
+      typeof child.style === "function" ? child.style() : child.style;
+
+    // Skip display: none and absolute positioned children
+    if (childStyle.display === "none") continue;
+    if (childStyle.position === "absolute") continue;
+
+    const childLayout = childLayouts[layoutIndex];
+    if (!childLayout) {
+      layoutIndex++;
+      continue;
+    }
+
+    const childSize = computeIntrinsicSize(child, childLayout);
+
+    if (isRow) {
+      // Row: sum widths, max height
+      width += childSize.width;
+      height = Math.max(height, childSize.height);
+    } else {
+      // Column: max width, sum heights
+      width = Math.max(width, childSize.width);
+      height += childSize.height;
+    }
+
+    layoutIndex++;
+  }
+
+  // Add padding and border
+  const paddingH = (style.paddingStart ?? 0) + (style.paddingEnd ?? 0);
+  const paddingV = (style.paddingTop ?? 0) + (style.paddingBottom ?? 0);
+  const borderH = (style.borderStart ? 1 : 0) + (style.borderEnd ? 1 : 0);
+  const borderV = (style.borderTop ? 1 : 0) + (style.borderBottom ? 1 : 0);
+
+  return {
+    width: width + paddingH + borderH,
+    height: height + paddingV + borderV,
+  };
+}
+
+/**
  * Get the screen position and size of a node from the current layout.
+ * Returns the node's screen position and intrinsic (content-based) size.
  * Returns undefined if the node is not found or layout hasn't been computed.
  */
 function getNodePosition(
@@ -195,11 +274,14 @@ function getNodePosition(
   const layout = findNodeLayout(node, state.root, state.layoutResult);
   if (!layout) return undefined;
 
+  // Use intrinsic size for positioning, not stretched layout size
+  const intrinsicSize = computeIntrinsicSize(node, layout);
+
   return {
     screenX: layout.screenX,
     screenY: layout.screenY,
-    width: layout.width,
-    height: layout.height,
+    width: intrinsicSize.width,
+    height: intrinsicSize.height,
   };
 }
 
