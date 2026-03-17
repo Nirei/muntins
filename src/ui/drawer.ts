@@ -4,6 +4,7 @@ import type { KeyEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node } from "../core/runtime.ts";
 import { Box, Portal, Show, TabFocus } from "../core/runtime.ts";
+import { resolve } from "../core/signals.ts";
 
 /** Which edge the drawer appears from */
 export type DrawerSide = "left" | "right" | "top" | "bottom";
@@ -29,13 +30,6 @@ export interface DrawerProps {
 
   /** Style overrides for the drawer container */
   style?: Partial<FlexStyle>;
-}
-
-/**
- * Resolve a value that may be static or a getter function.
- */
-function resolve<T>(value: T | (() => T) | undefined): T | undefined {
-  return typeof value === "function" ? (value as () => T)() : value;
 }
 
 /**

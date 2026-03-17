@@ -3,7 +3,7 @@
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node } from "../core/runtime.ts";
 import { Box, Portal, Text } from "../core/runtime.ts";
-import { onCleanup } from "../core/signals.ts";
+import { onCleanup, resolve } from "../core/signals.ts";
 
 /**
  * Position options for Toast placement on screen.
@@ -34,13 +34,6 @@ export interface ToastProps {
 
   /** Style overrides */
   style?: Partial<FlexStyle>;
-}
-
-/**
- * Resolve a value that may be static or a getter function.
- */
-function resolve<T>(value: T | (() => T) | undefined): T | undefined {
-  return typeof value === "function" ? (value as () => T)() : value;
 }
 
 /**

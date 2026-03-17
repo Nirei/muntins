@@ -4,6 +4,7 @@ import type { KeyEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node } from "../core/runtime.ts";
 import { Box, Portal, Show, TabFocus } from "../core/runtime.ts";
+import { resolve } from "../core/signals.ts";
 
 /**
  * Props for the Dialog component.
@@ -20,13 +21,6 @@ export interface DialogProps {
 
   /** Style overrides for the dialog container */
   style?: Partial<FlexStyle>;
-}
-
-/**
- * Resolve a value that may be static or a getter function.
- */
-function resolve<T>(value: T | (() => T) | undefined): T | undefined {
-  return typeof value === "function" ? (value as () => T)() : value;
 }
 
 /**

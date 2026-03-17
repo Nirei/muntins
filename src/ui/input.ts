@@ -6,7 +6,12 @@ import { type KeyEvent, isPrintable } from "../core/input.ts";
 import { DEFAULT_FLEX_STYLE, type FlexStyle } from "../core/layout.ts";
 import type { InheritedStyle, Node, Ref } from "../core/runtime.ts";
 import { getActiveContext } from "../core/runtime.ts";
-import { type Accessor, createEffect, createSignal } from "../core/signals.ts";
+import {
+  type Accessor,
+  createEffect,
+  createSignal,
+  resolve,
+} from "../core/signals.ts";
 
 /**
  * Props for the Input component.
@@ -37,13 +42,6 @@ export interface InputProps {
 
   /** Style overrides */
   style?: Partial<FlexStyle>;
-}
-
-/**
- * Resolve a value that may be static or a getter function.
- */
-function resolve<T>(value: T | (() => T) | undefined): T | undefined {
-  return typeof value === "function" ? (value as () => T)() : value;
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   createRef,
   getActiveContext,
 } from "../core/runtime.ts";
+import { resolve } from "../core/signals.ts";
 
 /**
  * Placement options for the popover relative to its trigger.
@@ -49,13 +50,6 @@ export interface PopoverProps {
 
   /** Style overrides for popover container */
   style?: Partial<FlexStyle>;
-}
-
-/**
- * Resolve a value that may be static or a getter function.
- */
-function resolve<T>(value: T | (() => T) | undefined): T | undefined {
-  return typeof value === "function" ? (value as () => T)() : value;
 }
 
 /**

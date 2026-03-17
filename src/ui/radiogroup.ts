@@ -4,7 +4,7 @@ import type { KeyEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
-import { createEffect, createSignal } from "../core/signals.ts";
+import { createEffect, createSignal, resolve } from "../core/signals.ts";
 
 /**
  * An option in a RadioGroup.
@@ -53,13 +53,6 @@ export interface RadioGroupProps<T> {
 
   /** Style overrides */
   style?: Partial<FlexStyle>;
-}
-
-/**
- * Resolve a value that may be static or a getter function.
- */
-function resolve<T>(value: T | (() => T) | undefined): T | undefined {
-  return typeof value === "function" ? (value as () => T)() : value;
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   type Accessor,
   createEffect,
   createSignal,
+  resolve,
   untrack,
 } from "../core/signals.ts";
 import { ScrollArea } from "./scroll-area.ts";
@@ -54,13 +55,6 @@ export interface TextareaProps {
 interface CursorPosition {
   line: number;
   column: number;
-}
-
-/**
- * Resolve a value that may be static or a getter function.
- */
-function resolve<T>(value: T | (() => T) | undefined): T | undefined {
-  return typeof value === "function" ? (value as () => T)() : value;
 }
 
 /**

@@ -677,6 +677,18 @@ export function onMount(fn: () => void): void {
   }
 }
 
+/**
+ * Resolves a value that may be static or a reactive accessor.
+ *
+ * This is the inverse of Accessor - it unwraps a potentially reactive
+ * value to get the current concrete value.
+ */
+export function resolve<T>(value: T | Accessor<T>): T;
+export function resolve<T>(value: T | Accessor<T> | undefined): T | undefined;
+export function resolve<T>(value: T | Accessor<T> | undefined): T | undefined {
+  return typeof value === "function" ? (value as Accessor<T>)() : value;
+}
+
 // Export state constants and Computation for tests (internal use)
 export { Clean, Check, Dirty };
 export type { Computation };

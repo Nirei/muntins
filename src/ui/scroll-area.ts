@@ -4,7 +4,7 @@ import type { KeyEvent, ScrollEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
-import { createSignal } from "../core/signals.ts";
+import { createSignal, resolve } from "../core/signals.ts";
 
 // Unicode box drawing characters for scrollbar
 const TRACK_CHAR = "\u2502"; // Light vertical (|)
@@ -36,13 +36,6 @@ export interface ScrollAreaProps {
 
   /** Style overrides */
   style?: Partial<FlexStyle>;
-}
-
-/**
- * Resolve a value that may be static or a getter function.
- */
-function resolve<T>(value: T | (() => T) | undefined): T | undefined {
-  return typeof value === "function" ? (value as () => T)() : value;
 }
 
 /**

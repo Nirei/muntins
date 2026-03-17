@@ -4,6 +4,7 @@ import type { KeyEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
+import { resolve } from "../core/signals.ts";
 
 /**
  * Props for the Switch component.
@@ -25,13 +26,6 @@ export interface SwitchProps {
 
   /** Style overrides for layout */
   style?: Partial<FlexStyle>;
-}
-
-/**
- * Resolve a value that may be static or a getter function.
- */
-function resolve<T>(value: T | (() => T) | undefined): T | undefined {
-  return typeof value === "function" ? (value as () => T)() : value;
 }
 
 /**
