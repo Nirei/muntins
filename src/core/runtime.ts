@@ -41,6 +41,52 @@ import {
 } from "./signals.ts";
 
 /**
+ * Layout signals for reactive layout coordinates.
+ * Created during node binding and updated on resize/relayout.
+ */
+export interface LayoutSignals {
+  x: Accessor<number>;
+  y: Accessor<number>;
+  width: Accessor<number>;
+  height: Accessor<number>;
+  screenX: Accessor<number>;
+  screenY: Accessor<number>;
+  setLayout: (result: LayoutResult) => void;
+}
+
+/**
+ * Creates layout signals for a node.
+ * These signals are updated when layout changes and can be tracked by effects.
+ */
+function createLayoutSignals(): LayoutSignals {
+  const [x, setX] = createSignal(0);
+  const [y, setY] = createSignal(0);
+  const [width, setWidth] = createSignal(0);
+  const [height, setHeight] = createSignal(0);
+  const [screenX, setScreenX] = createSignal(0);
+  const [screenY, setScreenY] = createSignal(0);
+
+  return {
+    x,
+    y,
+    width,
+    height,
+    screenX,
+    screenY,
+    setLayout(result: LayoutResult) {
+      batch(() => {
+        setX(result.x);
+        setY(result.y);
+        setWidth(result.width);
+        setHeight(result.height);
+        setScreenX(result.screenX);
+        setScreenY(result.screenY);
+      });
+    },
+  };
+}
+
+/**
  * The central data structure representing a UI element.
  *
  * Nodes either have children (container) or measure/render (leaf like Text).
@@ -93,16 +139,18 @@ export interface Node {
   onScroll?: (event: ScrollEvent) => void;
   onHover?: (hovering: boolean) => void;
 
-  // Layout callback
-  /** Called when layout dimensions change. Fires after layout, before paint. */
-  onLayout?: (layout: LayoutInfo) => void;
-
   // Portal marker (for root-level rendering)
   _isPortal?: boolean;
+
+  // Layout signals (set during binding phase)
+  _layout?: LayoutSignals;
+
+  // Dispose function for the render effect (called on unmount or Show/For change)
+  _disposeRenderEffect?: () => void;
 }
 
 /**
- * Layout information passed to onLayout callback.
+ * Layout information for reactive layout access via refs.
  * All values are integers representing terminal cells.
  */
 export interface LayoutInfo {
@@ -169,13 +217,19 @@ export interface App {
   unmount(): void;
 }
 
-/**
- * Cache of previous layout values for onLayout change detection.
- * Uses WeakMap so entries are automatically cleaned up when nodes are GC'd.
- */
-const layoutCache = new WeakMap<Node, LayoutInfo>();
-
 // Internal interfaces (not exported, scaffolded for mount/render cycle implementation)
+
+/**
+ * State for throttled buffer flushing.
+ */
+export interface FlushState {
+  scheduled: boolean;
+  lastFlushTime: number;
+  timeout: ReturnType<typeof setTimeout> | null;
+  buffer: Buffer;
+  stdout: NodeJS.WriteStream;
+  fpsLimit: number;
+}
 
 /**
  * Internal state for a mounted application.
@@ -186,15 +240,17 @@ export interface RuntimeState {
   root: Node;
   rootDispose: () => void;
 
-  // Rendering
-  buffer: Buffer;
+  // Layout
   layoutResult: import("./layout.ts").LayoutResult | null;
-  renderScheduled: boolean;
-  options: Required<MountOptions>;
 
-  // Throttling
-  lastRenderTime: number;
-  throttleTimeout: ReturnType<typeof setTimeout> | null;
+  // Flush scheduling (replaces renderScheduled, lastRenderTime, throttleTimeout)
+  flushState: FlushState;
+
+  // Relayout scheduling
+  relayoutScheduled: boolean;
+
+  // Mount options
+  options: Required<MountOptions>;
 
   // Input
   stdin: NodeJS.ReadStream;
@@ -241,6 +297,8 @@ export interface FocusController {
 export interface RuntimeContext {
   state: RuntimeState;
   currentScope: FocusScope;
+  /** Schedule a relayout for when Show/For create new children */
+  scheduleRelayout: () => void;
 }
 
 interface HoverState {
@@ -810,7 +868,6 @@ export interface BoxProps extends Partial<ReactiveFlexStyle> {
   onMouseMove?: (event: MouseEvent) => void;
   onScroll?: (event: ScrollEvent) => void;
   onHover?: (hovering: boolean) => void;
-  onLayout?: (layout: LayoutInfo) => void;
 }
 
 /** Border style names. */
@@ -886,7 +943,6 @@ export interface TextProps {
   onMouseMove?: (event: MouseEvent) => void;
   onScroll?: (event: ScrollEvent) => void;
   onHover?: (hovering: boolean) => void;
-  onLayout?: (layout: LayoutInfo) => void;
 }
 
 /**
@@ -1283,7 +1339,6 @@ export function Box(props: BoxProps): Node {
     onMouseMove,
     onScroll,
     onHover,
-    onLayout,
     ...styleProps
   } = props;
 
@@ -1331,7 +1386,6 @@ export function Box(props: BoxProps): Node {
     onMouseMove,
     onScroll,
     onHover,
-    onLayout,
 
     // Store inheritable props for style resolution during paint
     _inheritableProps: {
@@ -1456,7 +1510,6 @@ export function Text(props: TextProps): Node {
     onMouseMove,
     onScroll,
     onHover,
-    onLayout,
     wrap,
   } = props;
 
@@ -1474,7 +1527,6 @@ export function Text(props: TextProps): Node {
     onMouseMove,
     onScroll,
     onHover,
-    onLayout,
 
     // Store inheritable props for style resolution during paint
     _inheritableProps: {
@@ -1617,6 +1669,10 @@ export function Show<T>(props: ShowProps<T>): Node {
       if (ctx && currentChild) {
         cleanupSubtreeState(ctx.state, currentChild);
       }
+      // Dispose render effects for the removed subtree
+      if (currentChild) {
+        disposeSubtreeRenderEffects(currentChild);
+      }
       currentDispose();
       currentDispose = null;
       currentChild = null;
@@ -1658,10 +1714,14 @@ export function Show<T>(props: ShowProps<T>): Node {
       currentDispose = createRoot((dispose) =>
         createChildNode(() => childrenBranch(value), dispose),
       );
+      // Schedule relayout to bind new nodes
+      ctx?.scheduleRelayout();
     } else if (fallback) {
       currentDispose = createRoot((dispose) =>
         createChildNode(fallback, dispose),
       );
+      // Schedule relayout to bind new nodes
+      ctx?.scheduleRelayout();
     }
   });
 
@@ -1729,6 +1789,8 @@ export function For<T>(props: ForProps<T>): Node {
     if (ctx) {
       cleanupSubtreeState(ctx.state, entry.node);
     }
+    // Dispose render effects for the removed subtree
+    disposeSubtreeRenderEffects(entry.node);
     entry.node._parent = undefined;
     entry.dispose();
   };
@@ -1828,6 +1890,9 @@ export function For<T>(props: ForProps<T>): Node {
         }
       }
     }
+
+    // Schedule relayout to bind new nodes
+    ctx?.scheduleRelayout();
   });
 
   // Ensure we clean up all item roots when For itself is disposed
@@ -1867,7 +1932,11 @@ export function FocusScopeComponent(props: FocusScopeProps): Node {
   };
 
   // Build children within new scope context
-  const childCtx: RuntimeContext = { state: ctx.state, currentScope: scope };
+  const childCtx: RuntimeContext = {
+    state: ctx.state,
+    currentScope: scope,
+    scheduleRelayout: ctx.scheduleRelayout,
+  };
 
   const node = withContext(childCtx, () => Box({ children: props.children }));
 
@@ -1907,7 +1976,11 @@ export function TabFocus(props: TabFocusProps): Node {
   };
 
   // Build children within new scope context
-  const childCtx: RuntimeContext = { state: ctx.state, currentScope: scope };
+  const childCtx: RuntimeContext = {
+    state: ctx.state,
+    currentScope: scope,
+    scheduleRelayout: ctx.scheduleRelayout,
+  };
 
   const node = withContext(childCtx, () => {
     const focus = createFocusController(ctx.state, scope);
@@ -1991,24 +2064,6 @@ function paintNode(
     screenY + height <= clip.y
   ) {
     return;
-  }
-
-  // Call onLayout if dimensions changed
-  if (node.onLayout) {
-    const prev = layoutCache.get(node);
-    if (
-      !prev ||
-      prev.x !== x ||
-      prev.y !== y ||
-      prev.width !== width ||
-      prev.height !== height ||
-      prev.screenX !== screenX ||
-      prev.screenY !== screenY
-    ) {
-      const current: LayoutInfo = { x, y, width, height, screenX, screenY };
-      layoutCache.set(node, current);
-      node.onLayout(current);
-    }
   }
 
   // Compute this node's inherited style (resolves any "inherit" values)
@@ -2208,53 +2263,6 @@ function paintPortals(
 
     // Paint it (on top of everything)
     paintNode(node, layout, buffer, inherited, portalClip);
-  }
-}
-
-/**
- * The three-phase render pipeline.
- */
-function renderFrame(state: RuntimeState): void {
-  const { root, options, buffer } = state;
-  const { stdout } = options;
-
-  // Phase 1: Build, already done reactively
-  // (component tree exists, signals drive updates)
-
-  // Phase 2: Layout
-  const layoutNode = nodeToLayoutNode(root);
-  state.layoutResult = computeLayout(layoutNode, stdout.columns, stdout.rows);
-
-  // Phase 3: Paint
-  buffer.clear();
-
-  // Root clip covers full viewport
-  const rootClip: ClipRect = {
-    x: 0,
-    y: 0,
-    width: stdout.columns,
-    height: stdout.rows,
-  };
-
-  // Paint main tree (portals are transparent due to display: "contents")
-  paintNode(
-    root,
-    state.layoutResult,
-    buffer,
-    DEFAULT_INHERITED_STYLE,
-    rootClip,
-  );
-
-  // Collect and paint portal children at root level (on top)
-  const portals = collectPortals(root, DEFAULT_INHERITED_STYLE);
-  if (portals.length > 0) {
-    paintPortals(portals, stdout.columns, stdout.rows, buffer);
-  }
-
-  // Diff, serialize, and sync (all internal to Buffer)
-  const output = buffer.flush();
-  if (output.length > 0) {
-    flushFrame(stdout, output);
   }
 }
 
@@ -2632,59 +2640,765 @@ function findScopeForNode(target: Node, defaultScope: FocusScope): FocusScope {
 }
 
 /**
- * Execute render and update lastRenderTime.
+ * Performs the actual buffer flush to terminal.
  */
-function doRender(state: RuntimeState): void {
-  state.renderScheduled = false;
-  state.lastRenderTime = performance.now();
-  renderFrame(state);
+function doFlush(state: RuntimeState): void {
+  const fs = state.flushState;
+  fs.scheduled = false;
+  fs.lastFlushTime = performance.now();
+
+  if (fs.timeout) {
+    clearTimeout(fs.timeout);
+    fs.timeout = null;
+  }
+
+  const output = fs.buffer.flush();
+  if (output.length > 0) {
+    flushFrame(fs.stdout, output);
+  }
 }
 
 /**
- * Schedule a render with optional FPS throttling.
- * Coalesces multiple signal updates into a single render.
- *
- * When fpsLimit is 0 or negative, renders immediately via microtask.
- * Otherwise, throttles to the specified frame interval.
+ * Creates a closure for throttled flush scheduling.
  */
-function scheduleRender(state: RuntimeState): void {
-  if (state.renderScheduled) return;
-  state.renderScheduled = true;
+function createScheduleFlush(state: RuntimeState): () => void {
+  return () => {
+    const fs = state.flushState;
+    if (fs.scheduled) return;
+    fs.scheduled = true;
 
-  const { fpsLimit } = state.options;
+    const now = performance.now();
+    const elapsed = now - fs.lastFlushTime;
+    const frameInterval = fs.fpsLimit > 0 ? 1000 / fs.fpsLimit : 0;
 
-  // Unlimited mode: render immediately via microtask
-  if (fpsLimit <= 0) {
-    queueMicrotask(() => doRender(state));
+    if (frameInterval === 0 || elapsed >= frameInterval) {
+      queueMicrotask(() => doFlush(state));
+    } else {
+      const remaining = frameInterval - elapsed;
+      fs.timeout = setTimeout(() => doFlush(state), remaining);
+    }
+  };
+}
+
+/**
+ * Performs relayout and binds any new nodes.
+ */
+function doRelayout(state: RuntimeState, scheduleFlush: () => void): void {
+  state.relayoutScheduled = false;
+
+  const { root, flushState } = state;
+  const { buffer, stdout } = flushState;
+
+  // Clear buffer to remove stale content from removed nodes
+  buffer.clear();
+
+  // Recompute layout for full tree
+  const layoutNode = nodeToLayoutNode(root);
+  const layoutResult = computeLayout(layoutNode, stdout.columns, stdout.rows);
+  state.layoutResult = layoutResult;
+
+  // Update existing nodes' layout signals
+  updateLayoutSignals(root, layoutResult);
+
+  // Bind any new nodes (created by Show/For since last bind)
+  const rootClipAccessor: Accessor<ClipRect> = () => ({
+    x: 0,
+    y: 0,
+    width: stdout.columns,
+    height: stdout.rows,
+  });
+  const rootInheritedAccessor: InheritedStyleAccessor = () =>
+    DEFAULT_INHERITED_STYLE;
+
+  bindNewNodes(
+    root,
+    layoutResult,
+    buffer,
+    rootInheritedAccessor,
+    rootClipAccessor,
+    scheduleFlush,
+  );
+
+  // Bind new portals
+  bindPortals(root, buffer, scheduleFlush, stdout);
+}
+
+/**
+ * Creates a closure for relayout scheduling.
+ */
+function createScheduleRelayout(
+  state: RuntimeState,
+  scheduleFlush: () => void,
+): () => void {
+  return () => {
+    if (state.relayoutScheduled) return;
+    state.relayoutScheduled = true;
+
+    queueMicrotask(() => {
+      doRelayout(state, scheduleFlush);
+    });
+  };
+}
+
+/** Accessor for inherited style values */
+type InheritedStyleAccessor = Accessor<InheritedStyle>;
+
+/**
+ * Binds a node by creating layout signals and render effects.
+ */
+function bindNode(
+  node: Node,
+  layoutResult: LayoutResult,
+  buffer: Buffer,
+  parentInheritedAccessor: InheritedStyleAccessor,
+  parentClipAccessor: Accessor<ClipRect>,
+  scheduleFlush: () => void,
+): void {
+  // Create layout signals if not already present
+  if (!node._layout) {
+    node._layout = createLayoutSignals();
+  }
+  node._layout.setLayout(layoutResult);
+
+  // Create accessor for this node's inherited style (reactive)
+  const nodeInheritedAccessor: InheritedStyleAccessor = () => {
+    return computeInheritedStyle(node, parentInheritedAccessor());
+  };
+
+  // Create accessor for this node's clip rect (reactive)
+  const nodeClipAccessor: Accessor<ClipRect> = () => {
+    const parentClip = parentClipAccessor();
+    const style = typeof node.style === "function" ? node.style() : node.style;
+    const layout = node._layout;
+    if (style.overflow === "hidden" && layout) {
+      const x = layout.screenX();
+      const y = layout.screenY();
+      const w = layout.width();
+      const h = layout.height();
+      return intersectClipRect(parentClip, { x, y, width: w, height: h });
+    }
+    return parentClip;
+  };
+
+  // Create render effect if node has a render function
+  if (node.render && !node._disposeRenderEffect) {
+    createRoot(
+      (dispose) => {
+        node._disposeRenderEffect = dispose;
+
+        createEffect(() => {
+          const layout = node._layout;
+          if (!layout || !node.render) return;
+
+          const x = layout.screenX();
+          const y = layout.screenY();
+          const w = layout.width();
+          const h = layout.height();
+          const inherited = nodeInheritedAccessor();
+          const clip = nodeClipAccessor();
+
+          node.render(x, y, w, h, buffer, inherited, clip);
+          scheduleFlush();
+        });
+      },
+      { detached: true },
+    );
+  }
+
+  // Recursively bind children (handling display: "contents")
+  bindChildren(
+    node,
+    layoutResult,
+    buffer,
+    nodeInheritedAccessor,
+    nodeClipAccessor,
+    scheduleFlush,
+  );
+}
+
+/**
+ * Binds children nodes with their corresponding layout results.
+ * Handles display: "contents" nodes by recursively binding their children.
+ */
+function bindChildren(
+  node: Node,
+  layoutResult: LayoutResult,
+  buffer: Buffer,
+  inheritedAccessor: InheritedStyleAccessor,
+  clipAccessor: Accessor<ClipRect>,
+  scheduleFlush: () => void,
+): void {
+  const children =
+    typeof node.children === "function"
+      ? (node.children as () => Node[])()
+      : (node.children ?? []);
+  const childLayouts = layoutResult.children ?? [];
+
+  let layoutIndex = 0;
+
+  for (const child of children) {
+    // Skip portals (bound separately at root level)
+    if (child._isPortal) continue;
+
+    const style =
+      typeof child.style === "function" ? child.style() : child.style;
+
+    if (style.display === "contents") {
+      // display: "contents" nodes don't get layout boxes.
+      // Their children consume layout results directly.
+      const wrapperInheritedAccessor: InheritedStyleAccessor = () => {
+        return computeInheritedStyle(child, inheritedAccessor());
+      };
+
+      // Recursively bind grandchildren, consuming layout results
+      layoutIndex += bindContentsChildren(
+        child,
+        childLayouts,
+        layoutIndex,
+        buffer,
+        wrapperInheritedAccessor,
+        clipAccessor,
+        scheduleFlush,
+      );
+    } else if (childLayouts[layoutIndex]) {
+      bindNode(
+        child,
+        childLayouts[layoutIndex],
+        buffer,
+        inheritedAccessor,
+        clipAccessor,
+        scheduleFlush,
+      );
+      layoutIndex++;
+    }
+  }
+}
+
+/**
+ * Binds children of a display: "contents" node.
+ * Returns the number of layout results consumed.
+ */
+function bindContentsChildren(
+  contentsNode: Node,
+  layouts: LayoutResult[],
+  startIndex: number,
+  buffer: Buffer,
+  inheritedAccessor: InheritedStyleAccessor,
+  clipAccessor: Accessor<ClipRect>,
+  scheduleFlush: () => void,
+): number {
+  const children =
+    typeof contentsNode.children === "function"
+      ? (contentsNode.children as () => Node[])()
+      : (contentsNode.children ?? []);
+
+  let consumed = 0;
+
+  for (const child of children) {
+    if (child._isPortal) continue;
+
+    const style =
+      typeof child.style === "function" ? child.style() : child.style;
+
+    if (style.display === "contents") {
+      // Nested display: "contents" - recurse
+      const nestedInheritedAccessor: InheritedStyleAccessor = () => {
+        return computeInheritedStyle(child, inheritedAccessor());
+      };
+      consumed += bindContentsChildren(
+        child,
+        layouts,
+        startIndex + consumed,
+        buffer,
+        nestedInheritedAccessor,
+        clipAccessor,
+        scheduleFlush,
+      );
+    } else if (layouts[startIndex + consumed]) {
+      bindNode(
+        child,
+        layouts[startIndex + consumed],
+        buffer,
+        inheritedAccessor,
+        clipAccessor,
+        scheduleFlush,
+      );
+      consumed++;
+    }
+  }
+
+  return consumed;
+}
+
+/**
+ * Updates layout signals for existing nodes on resize/relayout.
+ */
+function updateLayoutSignals(node: Node, layoutResult: LayoutResult): void {
+  const style = typeof node.style === "function" ? node.style() : node.style;
+
+  if (style.display === "contents") {
+    // Recurse into children, consuming layout results for hoisted children
+    updateContentsChildren(node, layoutResult.children ?? [], 0);
     return;
   }
 
-  const frameInterval = 1000 / fpsLimit;
-  const now = performance.now();
-  const elapsed = now - state.lastRenderTime;
-
-  if (elapsed >= frameInterval) {
-    // Enough time has passed, render immediately via microtask
-    queueMicrotask(() => doRender(state));
-  } else {
-    // Too soon, schedule for remaining time
-    const remaining = frameInterval - elapsed;
-    state.throttleTimeout = setTimeout(() => {
-      state.throttleTimeout = null;
-      doRender(state);
-    }, remaining);
+  if (node._layout) {
+    node._layout.setLayout(layoutResult);
   }
+
+  const children =
+    typeof node.children === "function"
+      ? (node.children as () => Node[])()
+      : (node.children ?? []);
+  const childLayouts = layoutResult.children ?? [];
+
+  let layoutIndex = 0;
+  for (const child of children) {
+    if (child._isPortal) continue;
+
+    const childStyle =
+      typeof child.style === "function" ? child.style() : child.style;
+    if (childStyle.display === "contents") {
+      layoutIndex += updateContentsChildren(child, childLayouts, layoutIndex);
+    } else if (childLayouts[layoutIndex]) {
+      updateLayoutSignals(child, childLayouts[layoutIndex]);
+      layoutIndex++;
+    }
+  }
+}
+
+/**
+ * Updates layout signals for children of a display: "contents" node.
+ * Returns the number of layout results consumed.
+ */
+function updateContentsChildren(
+  contentsNode: Node,
+  layouts: LayoutResult[],
+  startIndex: number,
+): number {
+  const children =
+    typeof contentsNode.children === "function"
+      ? (contentsNode.children as () => Node[])()
+      : (contentsNode.children ?? []);
+
+  let consumed = 0;
+  for (const child of children) {
+    if (child._isPortal) continue;
+
+    const style =
+      typeof child.style === "function" ? child.style() : child.style;
+    if (style.display === "contents") {
+      consumed += updateContentsChildren(child, layouts, startIndex + consumed);
+    } else if (layouts[startIndex + consumed]) {
+      updateLayoutSignals(child, layouts[startIndex + consumed]);
+      consumed++;
+    }
+  }
+  return consumed;
+}
+
+/**
+ * Binds nodes that don't yet have layout signals (new nodes from Show/For).
+ */
+function bindNewNodes(
+  node: Node,
+  layoutResult: LayoutResult,
+  buffer: Buffer,
+  inheritedAccessor: InheritedStyleAccessor,
+  clipAccessor: Accessor<ClipRect>,
+  scheduleFlush: () => void,
+): void {
+  const style = typeof node.style === "function" ? node.style() : node.style;
+
+  if (style.display === "contents") {
+    // display: "contents" nodes don't have layout, but their children do
+    const wrapperInheritedAccessor: InheritedStyleAccessor = () => {
+      return computeInheritedStyle(node, inheritedAccessor());
+    };
+
+    const children =
+      typeof node.children === "function"
+        ? (node.children as () => Node[])()
+        : (node.children ?? []);
+    const childLayouts = layoutResult.children ?? [];
+
+    let layoutIndex = 0;
+    for (const child of children) {
+      if (child._isPortal) continue;
+
+      const childStyle =
+        typeof child.style === "function" ? child.style() : child.style;
+      if (childStyle.display === "contents") {
+        layoutIndex += bindNewContentsChildren(
+          child,
+          childLayouts,
+          layoutIndex,
+          buffer,
+          wrapperInheritedAccessor,
+          clipAccessor,
+          scheduleFlush,
+        );
+      } else if (childLayouts[layoutIndex]) {
+        bindNewNodes(
+          child,
+          childLayouts[layoutIndex],
+          buffer,
+          wrapperInheritedAccessor,
+          clipAccessor,
+          scheduleFlush,
+        );
+        layoutIndex++;
+      }
+    }
+    return;
+  }
+
+  // Non-contents node: bind if not already bound
+  if (!node._layout) {
+    node._layout = createLayoutSignals();
+  }
+  node._layout.setLayout(layoutResult);
+
+  // Create render effect if needed (not already bound)
+  // Create render effect if needed (not already bound)
+  if (node.render && !node._disposeRenderEffect) {
+    const renderNodeInheritedAccessor: InheritedStyleAccessor = () => {
+      return computeInheritedStyle(node, inheritedAccessor());
+    };
+    const renderNodeClipAccessor: Accessor<ClipRect> = () => {
+      const parentClip = clipAccessor();
+      const s = typeof node.style === "function" ? node.style() : node.style;
+      const layout = node._layout;
+      if (s.overflow === "hidden" && layout) {
+        const x = layout.screenX();
+        const y = layout.screenY();
+        const w = layout.width();
+        const h = layout.height();
+        return intersectClipRect(parentClip, { x, y, width: w, height: h });
+      }
+      return parentClip;
+    };
+
+    createRoot(
+      (dispose) => {
+        node._disposeRenderEffect = dispose;
+
+        createEffect(() => {
+          const layout = node._layout;
+          if (!layout || !node.render) return;
+
+          const x = layout.screenX();
+          const y = layout.screenY();
+          const w = layout.width();
+          const h = layout.height();
+          const inherited = renderNodeInheritedAccessor();
+          const clip = renderNodeClipAccessor();
+
+          node.render(x, y, w, h, buffer, inherited, clip);
+          scheduleFlush();
+        });
+      },
+      { detached: true },
+    );
+  }
+
+  // Recurse to children
+  const nodeInheritedAccessor: InheritedStyleAccessor = () => {
+    return computeInheritedStyle(node, inheritedAccessor());
+  };
+  const nodeClipAccessor: Accessor<ClipRect> = () => {
+    const parentClip = clipAccessor();
+    const s = typeof node.style === "function" ? node.style() : node.style;
+    const layout = node._layout;
+    if (s.overflow === "hidden" && layout) {
+      const x = layout.screenX();
+      const y = layout.screenY();
+      const w = layout.width();
+      const h = layout.height();
+      return intersectClipRect(parentClip, { x, y, width: w, height: h });
+    }
+    return parentClip;
+  };
+
+  const children =
+    typeof node.children === "function"
+      ? (node.children as () => Node[])()
+      : (node.children ?? []);
+  const childLayouts = layoutResult.children ?? [];
+
+  let layoutIndex = 0;
+  for (const child of children) {
+    if (child._isPortal) continue;
+
+    const childStyle =
+      typeof child.style === "function" ? child.style() : child.style;
+    if (childStyle.display === "contents") {
+      layoutIndex += bindNewContentsChildren(
+        child,
+        childLayouts,
+        layoutIndex,
+        buffer,
+        nodeInheritedAccessor,
+        nodeClipAccessor,
+        scheduleFlush,
+      );
+    } else if (childLayouts[layoutIndex]) {
+      bindNewNodes(
+        child,
+        childLayouts[layoutIndex],
+        buffer,
+        nodeInheritedAccessor,
+        nodeClipAccessor,
+        scheduleFlush,
+      );
+      layoutIndex++;
+    }
+  }
+}
+
+/**
+ * Binds new children of a display: "contents" node.
+ * Returns the number of layout results consumed.
+ */
+function bindNewContentsChildren(
+  contentsNode: Node,
+  layouts: LayoutResult[],
+  startIndex: number,
+  buffer: Buffer,
+  inheritedAccessor: InheritedStyleAccessor,
+  clipAccessor: Accessor<ClipRect>,
+  scheduleFlush: () => void,
+): number {
+  const wrapperInheritedAccessor: InheritedStyleAccessor = () => {
+    return computeInheritedStyle(contentsNode, inheritedAccessor());
+  };
+
+  const children =
+    typeof contentsNode.children === "function"
+      ? (contentsNode.children as () => Node[])()
+      : (contentsNode.children ?? []);
+
+  let consumed = 0;
+  for (const child of children) {
+    if (child._isPortal) continue;
+
+    const style =
+      typeof child.style === "function" ? child.style() : child.style;
+    if (style.display === "contents") {
+      consumed += bindNewContentsChildren(
+        child,
+        layouts,
+        startIndex + consumed,
+        buffer,
+        wrapperInheritedAccessor,
+        clipAccessor,
+        scheduleFlush,
+      );
+    } else if (layouts[startIndex + consumed]) {
+      bindNewNodes(
+        child,
+        layouts[startIndex + consumed],
+        buffer,
+        wrapperInheritedAccessor,
+        clipAccessor,
+        scheduleFlush,
+      );
+      consumed++;
+    }
+  }
+  return consumed;
+}
+
+/**
+ * Disposes render effects for a subtree being removed.
+ */
+function disposeSubtreeRenderEffects(node: Node): void {
+  // Dispose this node's render effect
+  if (node._disposeRenderEffect) {
+    node._disposeRenderEffect();
+    node._disposeRenderEffect = undefined;
+  }
+
+  // Clear stale layout
+  node._layout = undefined;
+
+  // Recurse to children
+  const children =
+    typeof node.children === "function"
+      ? (node.children as () => Node[])()
+      : (node.children ?? []);
+
+  for (const child of children) {
+    disposeSubtreeRenderEffects(child);
+  }
+}
+
+/**
+ * Collects portals and binds them at root level (used during relayout).
+ */
+function bindPortals(
+  root: Node,
+  buffer: Buffer,
+  scheduleFlush: () => void,
+  stdout: NodeJS.WriteStream,
+): void {
+  const portals = collectPortalsForBinding(
+    root,
+    () => DEFAULT_INHERITED_STYLE,
+    stdout,
+  );
+
+  for (const { node, inheritedAccessor, stdout: portalStdout } of portals) {
+    // Skip if already bound
+    if (node._layout) continue;
+
+    // Layout this portal child as if it were a root
+    const layoutNode = nodeToLayoutNode(node);
+    const layout = computeLayout(
+      layoutNode,
+      portalStdout.columns,
+      portalStdout.rows,
+    );
+
+    // Portal uses full viewport clip
+    const portalClipAccessor: Accessor<ClipRect> = () => ({
+      x: 0,
+      y: 0,
+      width: portalStdout.columns,
+      height: portalStdout.rows,
+    });
+
+    bindNode(
+      node,
+      layout,
+      buffer,
+      inheritedAccessor,
+      portalClipAccessor,
+      scheduleFlush,
+    );
+  }
+}
+
+/**
+ * Collects portals and binds them at root level with stdout reference.
+ */
+function bindPortalsWithStdout(
+  root: Node,
+  buffer: Buffer,
+  scheduleFlush: () => void,
+  stdout: NodeJS.WriteStream,
+): void {
+  const portals = collectPortalsForBinding(
+    root,
+    () => DEFAULT_INHERITED_STYLE,
+    stdout,
+  );
+
+  for (const { node, inheritedAccessor, stdout: portalStdout } of portals) {
+    // Skip if already bound
+    if (node._layout) continue;
+
+    // Layout this portal child as if it were a root
+    const layoutNode = nodeToLayoutNode(node);
+    const layout = computeLayout(
+      layoutNode,
+      portalStdout.columns,
+      portalStdout.rows,
+    );
+
+    // Portal uses full viewport clip
+    const portalClipAccessor: Accessor<ClipRect> = () => ({
+      x: 0,
+      y: 0,
+      width: portalStdout.columns,
+      height: portalStdout.rows,
+    });
+
+    bindNode(
+      node,
+      layout,
+      buffer,
+      inheritedAccessor,
+      portalClipAccessor,
+      scheduleFlush,
+    );
+  }
+}
+
+/**
+ * Collects portal children with their inherited style accessors.
+ */
+function collectPortalsForBinding(
+  node: Node,
+  inheritedAccessor: InheritedStyleAccessor,
+  stdout: NodeJS.WriteStream,
+): Array<{
+  node: Node;
+  inheritedAccessor: InheritedStyleAccessor;
+  stdout: NodeJS.WriteStream;
+}> {
+  const portals: Array<{
+    node: Node;
+    inheritedAccessor: InheritedStyleAccessor;
+    stdout: NodeJS.WriteStream;
+  }> = [];
+
+  // Compute this node's inherited style accessor
+  const nodeInheritedAccessor: InheritedStyleAccessor = () => {
+    return computeInheritedStyle(node, inheritedAccessor());
+  };
+
+  // If this is a portal, collect its children
+  if (node._isPortal) {
+    const children =
+      typeof node.children === "function"
+        ? (node.children as () => Node[])()
+        : (node.children ?? []);
+    for (const child of children) {
+      portals.push({
+        node: child,
+        inheritedAccessor: nodeInheritedAccessor,
+        stdout,
+      });
+    }
+  }
+
+  // Recursively search children
+  const children =
+    typeof node.children === "function"
+      ? (node.children as () => Node[])()
+      : (node.children ?? []);
+
+  for (const child of children) {
+    portals.push(
+      ...collectPortalsForBinding(child, nodeInheritedAccessor, stdout),
+    );
+  }
+
+  return portals;
 }
 
 /**
  * Handle incoming input events.
- * Resize events trigger immediate render; others route events and schedule render.
+ * Resize events trigger relayout; others route events (effects handle rendering).
  */
-function handleEvent(state: RuntimeState, event: InputEvent): void {
-  // Handle resize immediately (buffer must be resized before next render)
+function handleEvent(
+  state: RuntimeState,
+  event: InputEvent,
+  scheduleFlush: () => void,
+): void {
+  // Handle resize: update buffer size and trigger relayout
   if (event.type === "resize") {
-    state.buffer.resize(event.width, event.height);
-    scheduleRender(state);
+    state.flushState.buffer.resize(event.width, event.height);
+    state.flushState.buffer.clear();
+
+    // Re-run layout
+    const layoutNode = nodeToLayoutNode(state.root);
+    const layoutResult = computeLayout(layoutNode, event.width, event.height);
+    state.layoutResult = layoutResult;
+
+    // Update layout signals (effects will re-run automatically)
+    updateLayoutSignals(state.root, layoutResult);
     return;
   }
 
@@ -2694,8 +3408,7 @@ function handleEvent(state: RuntimeState, event: InputEvent): void {
     routeEvent(state, event);
   });
 
-  // Schedule render after event processing
-  scheduleRender(state);
+  // Effects triggered by signal updates will schedule flush automatically
 }
 
 /**
@@ -2710,14 +3423,17 @@ function unmountState(state: RuntimeState, cleanupHandlers?: () => void): void {
     cleanupHandlers();
   }
 
-  // Clear pending throttle timeout
-  if (state.throttleTimeout) {
-    clearTimeout(state.throttleTimeout);
-    state.throttleTimeout = null;
+  // Clear any pending flush timeout
+  if (state.flushState.timeout) {
+    clearTimeout(state.flushState.timeout);
+    state.flushState.timeout = null;
   }
 
-  // Dispose component tree
+  // Dispose root (disposes component effects)
   state.rootDispose();
+
+  // Dispose all render effects by walking the tree
+  disposeSubtreeRenderEffects(state.root);
 
   // Destroy input parser (restores terminal input state)
   state.inputParser.destroy();
@@ -2743,15 +3459,22 @@ export function mount(component: () => Node, options?: MountOptions): App {
   // Create reactive signal for focus tracking
   const [focusedNode, setFocusedNode] = createSignal<Node | null>(null);
 
-  // Initialize state
+  const buffer = new Buffer(stdout.columns, stdout.rows);
+
+  // Initialize state with flushState
   const state: RuntimeState = {
     root: undefined as unknown as Node,
     rootDispose: undefined as unknown as () => void,
-    buffer: new Buffer(stdout.columns, stdout.rows),
     layoutResult: null,
-    renderScheduled: false,
-    lastRenderTime: 0,
-    throttleTimeout: null,
+    flushState: {
+      scheduled: false,
+      lastFlushTime: 0,
+      timeout: null,
+      buffer,
+      stdout,
+      fpsLimit: opts.fpsLimit,
+    },
+    relayoutScheduled: false,
     inputParser: undefined as unknown as { destroy: () => void },
     options: opts,
     focusedNode,
@@ -2767,31 +3490,69 @@ export function mount(component: () => Node, options?: MountOptions): App {
     stdin,
   };
 
+  // Create schedule closures that capture state
+  const scheduleFlush = createScheduleFlush(state);
+  const scheduleRelayout = createScheduleRelayout(state, scheduleFlush);
+
   // Enter TUI mode (display)
   enterTuiMode(stdout, { alternateScreen: opts.alternateScreen });
 
-  // Setup input parsing (Phase 4)
+  // Setup input parsing
   state.inputParser = createInputParser(
     stdin,
     stdout,
-    (event) => handleEvent(state, event),
+    (event) => handleEvent(state, event, scheduleFlush),
     { mouse: opts.mouse },
   );
 
   // Create runtime context for component construction
-  const ctx: RuntimeContext = { state, currentScope: state.rootScope };
+  const ctx: RuntimeContext = {
+    state,
+    currentScope: state.rootScope,
+    scheduleRelayout,
+  };
 
-  // Build component tree within context
+  // Build component tree AND bind effects inside the same root
   state.rootDispose = createRoot((dispose) => {
     state.root = withContext(ctx, () => component());
+
+    // Initialize focus
+    initializeFocus(state);
+
+    // Initial layout
+    buffer.clear();
+    const layoutNode = nodeToLayoutNode(state.root);
+    const layoutResult = computeLayout(layoutNode, stdout.columns, stdout.rows);
+    state.layoutResult = layoutResult;
+
+    // Root clip accessor reads viewport dimensions dynamically (for resize)
+    const rootClipAccessor: Accessor<ClipRect> = () => ({
+      x: 0,
+      y: 0,
+      width: stdout.columns,
+      height: stdout.rows,
+    });
+    const rootInheritedAccessor: InheritedStyleAccessor = () =>
+      DEFAULT_INHERITED_STYLE;
+
+    // Bind phase: create render effects
+    bindNode(
+      state.root,
+      layoutResult,
+      buffer,
+      rootInheritedAccessor,
+      rootClipAccessor,
+      scheduleFlush,
+    );
+
+    // Bind portals separately
+    bindPortalsWithStdout(state.root, buffer, scheduleFlush, stdout);
+
     return dispose;
   });
 
-  // Initialize focus after tree is built
-  initializeFocus(state);
-
-  // Initial render
-  renderFrame(state);
+  // Initial flush
+  doFlush(state);
 
   // Track if already unmounted to prevent double cleanup
   let unmounted = false;

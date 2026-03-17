@@ -3,8 +3,8 @@
 import type { KeyEvent, ScrollEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
-import { Box, Text } from "../core/runtime.ts";
-import { createSignal, resolve } from "../core/signals.ts";
+import { Box, Text, createRef, getActiveContext } from "../core/runtime.ts";
+import { createEffect, createSignal, resolve } from "../core/signals.ts";
 
 // Unicode box drawing characters for scrollbar
 const TRACK_CHAR = "\u2502"; // Light vertical (|)
@@ -132,6 +132,9 @@ function Scrollbar(props: {
 export function ScrollArea(props: ScrollAreaProps): Node {
   const [internalOffset, setInternalOffset] = createSignal(0);
 
+  // Capture context for scheduling relayout on scroll changes
+  const ctx = getActiveContext();
+
   // Use controlled scrollTop if provided, otherwise use internal state
   const getScrollTop = () => resolve(props.scrollTop) ?? internalOffset();
   const getHeight = () => resolve(props.height) ?? 10;
@@ -139,6 +142,12 @@ export function ScrollArea(props: ScrollAreaProps): Node {
 
   // Track content height - we'll compute this from children count
   const [contentHeight, setContentHeight] = createSignal(0);
+
+  // Schedule relayout when scroll position changes (marginTop affects layout)
+  createEffect(() => {
+    getScrollTop(); // Track scroll position
+    ctx?.scheduleRelayout();
+  });
 
   const handleScroll = (delta: number) => {
     const currentOffset = getScrollTop();
@@ -229,18 +238,27 @@ export function ScrollArea(props: ScrollAreaProps): Node {
     return height;
   };
 
-  // Set initial estimate (will be updated by onLayout)
+  // Set initial estimate (will be updated by layout signal)
   setContentHeight(estimateContentHeight());
 
+  // Create ref to track content box layout
+  const contentRef = createRef();
+
   // Content box with negative margin to simulate scrolling
-  // Uses onLayout to track actual rendered height (more accurate than estimate)
   const contentBox = Box({
     flexDirection: "column",
     marginTop: () => -getScrollTop(),
-    onLayout: (layout) => {
-      setContentHeight(layout.height);
-    },
+    ref: contentRef,
     children,
+  });
+
+  // Track content height via layout signals
+  createEffect(() => {
+    const node = contentRef.current;
+    if (node?._layout) {
+      const height = node._layout.height();
+      setContentHeight(height);
+    }
   });
 
   return Box({

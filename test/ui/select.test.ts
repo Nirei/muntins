@@ -110,9 +110,9 @@ const testOptions: SelectOption<string>[] = [
   { value: "ca", label: "Canada" },
 ];
 
-/** Helper to wait for next render cycle */
+/** Helper to wait for next render cycle (needs 2 microtasks: relayout + flush) */
 const nextRender = () =>
-  new Promise<void>((resolve) => queueMicrotask(resolve));
+  new Promise<void>((resolve) => queueMicrotask(() => queueMicrotask(resolve)));
 
 describe("Select", () => {
   describe("trigger rendering", () => {
@@ -133,6 +133,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -160,6 +161,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -185,6 +187,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -217,6 +220,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -246,6 +250,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -280,6 +285,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -311,6 +317,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -351,6 +358,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -391,6 +399,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -436,6 +445,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -481,6 +491,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -523,6 +534,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -577,6 +589,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -618,6 +631,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -653,6 +667,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -696,6 +711,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -727,6 +743,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -767,6 +784,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -803,6 +821,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -831,6 +850,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -861,6 +881,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -894,6 +915,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -935,6 +957,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -975,6 +998,7 @@ describe("Select", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 

@@ -645,6 +645,7 @@ describe("Textarea", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -854,6 +855,7 @@ describe("Textarea", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
@@ -883,6 +885,7 @@ describe("Textarea", () => {
         {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
         },
       );
 
