@@ -65,6 +65,14 @@ export interface FlexStyle {
 }
 
 /**
+ * FlexStyle with reactive (getter function) support for all properties.
+ * Box resolves these at render time, enabling dynamic layout updates via signals.
+ */
+export type ReactiveFlexStyle = {
+  [K in keyof FlexStyle]: FlexStyle[K] | (() => FlexStyle[K]);
+};
+
+/**
  * Input to the layout algorithm.
  * Nodes either have children (container) or measure (leaf like Text).
  *

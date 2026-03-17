@@ -15,7 +15,12 @@ export {
 } from "./signals.ts";
 
 // Layout
-export { computeLayout, DEFAULT_FLEX_STYLE, type FlexStyle } from "./layout.ts";
+export {
+  computeLayout,
+  DEFAULT_FLEX_STYLE,
+  type FlexStyle,
+  type ReactiveFlexStyle,
+} from "./layout.ts";
 
 // Buffer (rendering)
 export {

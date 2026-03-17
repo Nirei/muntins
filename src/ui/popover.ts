@@ -418,9 +418,8 @@ export function Popover(props: PopoverProps): Node {
                   Box({
                     position: "absolute",
                     // Position is computed reactively to use anchor's layout position
-                    top: (() => getPositionStyle().top) as unknown as number,
-                    start: (() =>
-                      getPositionStyle().start) as unknown as number,
+                    top: () => getPositionStyle().top,
+                    start: () => getPositionStyle().start,
                     onKeyPress: handleKeyPress,
                     focusable: true,
                     ...props.style,

@@ -233,38 +233,29 @@ export function ScrollArea(props: ScrollAreaProps): Node {
   setContentHeight(estimateContentHeight());
 
   // Content box with negative margin to simulate scrolling
-  // Box resolves functions at runtime, so we cast to the expected type
   const contentBox = Box({
     flexDirection: "column",
-    marginTop: (() => -getScrollTop()) as unknown as number,
+    marginTop: () => -getScrollTop(),
     children,
   });
 
-  // Build style props - Box resolves functions at runtime
-  const styleProps: Record<string, unknown> = {
+  return Box({
     flexDirection: "row",
     height: props.height,
     maxHeight: props.height,
+    width: props.width,
     focusable: props.focusable ?? true,
     autoFocus: props.autoFocus,
     ref: props.ref,
     onKeyPress: handleKeyPress,
     onScroll: handleScrollEvent,
     ...props.style,
-  };
-
-  if (props.width !== undefined) {
-    styleProps.width = props.width;
-  }
-
-  return Box({
-    ...styleProps,
     children: [
       // Content container with overflow: hidden for clipping
       Box({
         flexGrow: 1,
-        overflow: "hidden" as const,
-        maxHeight: props.height as unknown as number,
+        overflow: "hidden",
+        maxHeight: props.height,
         children: [contentBox],
       }),
       // Scrollbar
@@ -274,5 +265,5 @@ export function ScrollArea(props: ScrollAreaProps): Node {
         scrollTop: getScrollTop,
       }),
     ],
-  } as Parameters<typeof Box>[0]);
+  });
 }

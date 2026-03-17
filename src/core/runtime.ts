@@ -27,6 +27,7 @@ import {
   type FlexStyle,
   type LayoutNode,
   type LayoutResult,
+  type ReactiveFlexStyle,
   computeLayout,
 } from "./layout.ts";
 import { batch } from "./signals.ts";
@@ -766,7 +767,7 @@ function computeInheritedStyle(
 }
 
 /** Props for Box component. */
-export interface BoxProps extends Partial<FlexStyle> {
+export interface BoxProps extends Partial<ReactiveFlexStyle> {
   children?: Node | Node[];
   backgroundColor?: InheritableColor | (() => InheritableColor);
   border?: BorderProp | (() => BorderProp);
