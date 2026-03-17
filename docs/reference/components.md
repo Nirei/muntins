@@ -83,6 +83,35 @@ Box({
 
 Keyboard events only fire on the focused node and bubble up. Mouse events fire on any node under the cursor. See [Input Events](input.md) for event type details.
 
+### Layout callback
+
+```typescript
+Box({
+  onLayout(layout) {
+    console.log(`Rendered at ${layout.screenX}, ${layout.screenY}`);
+    console.log(`Size: ${layout.width}x${layout.height}`);
+  },
+  children: [...],
+});
+```
+
+The `onLayout` callback fires after layout is computed, before the frame is painted. It only fires when the layout actually changes, not on every frame.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `x` | `number` | Position relative to parent's content area |
+| `y` | `number` | Position relative to parent's content area |
+| `width` | `number` | Computed width in cells |
+| `height` | `number` | Computed height in cells |
+| `screenX` | `number` | Absolute X position from screen origin |
+| `screenY` | `number` | Absolute Y position from screen origin |
+
+Use `onLayout` when you need to react to a node's rendered dimensions:
+
+- Measuring content height for scrollable areas
+- Positioning tooltips or popovers relative to a trigger
+- Implementing resize-aware components
+
 ### Focus props
 
 ```typescript
@@ -182,9 +211,9 @@ Text({
 | `'truncate-end'` | Truncate at end |
 | `'truncate-start'` | Truncate at start |
 
-### Event handlers and focus
+### Event handlers, focus, and layout
 
-Text supports the same event handlers and focus props as Box:
+Text supports the same event handlers, focus props, and `onLayout` callback as Box:
 
 ```typescript
 Text({

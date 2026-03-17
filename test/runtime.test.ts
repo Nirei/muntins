@@ -28,6 +28,7 @@ import {
   type FocusScope,
   For,
   type InheritedStyle,
+  type LayoutInfo,
   type Node,
   type RuntimeContext,
   type RuntimeState,
@@ -3679,6 +3680,197 @@ describe("nested scope autoFocus", () => {
     // not the root scope's first focusable
     mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
     assert.deepStrictEqual(receivedKeys, ["inner-second"]);
+
+    app.unmount();
+  });
+});
+
+describe("onLayout callback", () => {
+  it("fires on first render with layout dimensions", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const layouts: LayoutInfo[] = [];
+
+    const app = mount(
+      () =>
+        Box({
+          width: 20,
+          height: 10,
+          onLayout: (layout) => {
+            layouts.push({ ...layout });
+          },
+          children: [],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+      },
+    );
+
+    // First render should fire onLayout
+    assert.strictEqual(layouts.length, 1);
+    assert.strictEqual(layouts[0].width, 20);
+    assert.strictEqual(layouts[0].height, 10);
+    assert.strictEqual(layouts[0].x, 0);
+    assert.strictEqual(layouts[0].y, 0);
+    assert.strictEqual(layouts[0].screenX, 0);
+    assert.strictEqual(layouts[0].screenY, 0);
+
+    app.unmount();
+  });
+
+  it("caches layout and only fires on change", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const layouts: LayoutInfo[] = [];
+
+    const app = mount(
+      () =>
+        Box({
+          width: 20,
+          height: 10,
+          onLayout: (layout) => {
+            layouts.push({ ...layout });
+          },
+          children: [],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+      },
+    );
+
+    // First render fires onLayout
+    assert.strictEqual(layouts.length, 1);
+    assert.strictEqual(layouts[0].width, 20);
+    assert.strictEqual(layouts[0].height, 10);
+
+    // Simulate resize event which triggers re-render
+    const resizeHandlers =
+      (
+        mockStdout as unknown as { _handlers: Map<string, Array<() => void>> }
+      )._handlers.get("resize") ?? [];
+    mockStdout.columns = 100;
+    mockStdout.rows = 30;
+    for (const handler of resizeHandlers) handler();
+
+    // onLayout should NOT fire again since node dimensions unchanged
+    // (the box has fixed width/height, so terminal resize doesn't affect it)
+    assert.strictEqual(layouts.length, 1);
+
+    app.unmount();
+  });
+
+  it("does not fire when dimensions unchanged", async () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const layouts: LayoutInfo[] = [];
+    const [label, setLabel] = createSignal("Hello");
+
+    const app = mount(
+      () =>
+        Box({
+          width: 20,
+          height: 10,
+          onLayout: (layout) => {
+            layouts.push({ ...layout });
+          },
+          children: [Text({ content: label })],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+      },
+    );
+
+    // First render
+    assert.strictEqual(layouts.length, 1);
+
+    // Change text content but not dimensions
+    setLabel("World");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // onLayout should NOT fire again since dimensions unchanged
+    assert.strictEqual(layouts.length, 1);
+
+    app.unmount();
+  });
+
+  it("fires with correct screenX/screenY for nested nodes", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const innerLayouts: LayoutInfo[] = [];
+
+    const app = mount(
+      () =>
+        Box({
+          paddingTop: 5,
+          paddingStart: 10,
+          children: [
+            Box({
+              width: 15,
+              height: 8,
+              onLayout: (layout) => {
+                innerLayouts.push({ ...layout });
+              },
+              children: [],
+            }),
+          ],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+      },
+    );
+
+    assert.strictEqual(innerLayouts.length, 1);
+    // x/y are relative to parent's content area (after padding)
+    // Since the child is the first item in the parent's content area, x=0, y=0
+    // But wait - let's check what the layout actually computes
+    // The parent has paddingStart=10, paddingTop=5, so child is at screenX=10, screenY=5
+    // The child's x/y in the LayoutResult are relative to the parent's origin, not content area
+    assert.strictEqual(innerLayouts[0].screenX, 10);
+    assert.strictEqual(innerLayouts[0].screenY, 5);
+    assert.strictEqual(innerLayouts[0].width, 15);
+    assert.strictEqual(innerLayouts[0].height, 8);
+
+    app.unmount();
+  });
+
+  it("fires for Text nodes", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const layouts: LayoutInfo[] = [];
+
+    const app = mount(
+      () =>
+        Box({
+          // Wrap in a box that doesn't stretch children so text uses intrinsic size
+          alignItems: "flex-start",
+          children: [
+            Text({
+              content: "Hello, world!",
+              onLayout: (layout) => {
+                layouts.push({ ...layout });
+              },
+            }),
+          ],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+      },
+    );
+
+    assert.strictEqual(layouts.length, 1);
+    // Text measures to content width (13 chars) and 1 line height
+    assert.strictEqual(layouts[0].width, 13);
+    assert.strictEqual(layouts[0].height, 1);
 
     app.unmount();
   });

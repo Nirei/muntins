@@ -197,13 +197,13 @@ export function ScrollArea(props: ScrollAreaProps): Node {
     handleScroll(delta);
   };
 
-  // Normalize children to an array for iteration and passing to Box
+  // Normalize children to an array for passing to Box
   const children = Array.isArray(props.children)
     ? props.children
     : [props.children];
 
-  // Estimate content height based on children count
-  // This is a simplification - real implementation would need layout feedback
+  // Estimate content height for initial state (before first paint)
+  // This is used until onLayout fires with the actual rendered height
   const estimateContentHeight = (): number => {
     let height = 0;
     const countHeight = (node: Node): number => {
@@ -229,13 +229,17 @@ export function ScrollArea(props: ScrollAreaProps): Node {
     return height;
   };
 
-  // Update content height estimate
+  // Set initial estimate (will be updated by onLayout)
   setContentHeight(estimateContentHeight());
 
   // Content box with negative margin to simulate scrolling
+  // Uses onLayout to track actual rendered height (more accurate than estimate)
   const contentBox = Box({
     flexDirection: "column",
     marginTop: () => -getScrollTop(),
+    onLayout: (layout) => {
+      setContentHeight(layout.height);
+    },
     children,
   });
 

@@ -93,8 +93,30 @@ export interface Node {
   onScroll?: (event: ScrollEvent) => void;
   onHover?: (hovering: boolean) => void;
 
+  // Layout callback
+  /** Called when layout dimensions change. Fires after layout, before paint. */
+  onLayout?: (layout: LayoutInfo) => void;
+
   // Portal marker (for root-level rendering)
   _isPortal?: boolean;
+}
+
+/**
+ * Layout information passed to onLayout callback.
+ * All values are integers representing terminal cells.
+ */
+export interface LayoutInfo {
+  /** Position relative to parent */
+  x: number;
+  y: number;
+  /** Computed width in cells */
+  width: number;
+  /** Computed height in cells */
+  height: number;
+  /** Absolute X position from screen origin */
+  screenX: number;
+  /** Absolute Y position from screen origin */
+  screenY: number;
 }
 
 /**
@@ -146,6 +168,12 @@ export const DEFAULT_MOUNT_OPTIONS: Required<MountOptions> = {
 export interface App {
   unmount(): void;
 }
+
+/**
+ * Cache of previous layout values for onLayout change detection.
+ * Uses WeakMap so entries are automatically cleaned up when nodes are GC'd.
+ */
+const layoutCache = new WeakMap<Node, LayoutInfo>();
 
 // Internal interfaces (not exported, scaffolded for mount/render cycle implementation)
 
@@ -782,6 +810,7 @@ export interface BoxProps extends Partial<ReactiveFlexStyle> {
   onMouseMove?: (event: MouseEvent) => void;
   onScroll?: (event: ScrollEvent) => void;
   onHover?: (hovering: boolean) => void;
+  onLayout?: (layout: LayoutInfo) => void;
 }
 
 /** Border style names. */
@@ -857,6 +886,7 @@ export interface TextProps {
   onMouseMove?: (event: MouseEvent) => void;
   onScroll?: (event: ScrollEvent) => void;
   onHover?: (hovering: boolean) => void;
+  onLayout?: (layout: LayoutInfo) => void;
 }
 
 /**
@@ -1253,6 +1283,7 @@ export function Box(props: BoxProps): Node {
     onMouseMove,
     onScroll,
     onHover,
+    onLayout,
     ...styleProps
   } = props;
 
@@ -1300,6 +1331,7 @@ export function Box(props: BoxProps): Node {
     onMouseMove,
     onScroll,
     onHover,
+    onLayout,
 
     // Store inheritable props for style resolution during paint
     _inheritableProps: {
@@ -1424,6 +1456,7 @@ export function Text(props: TextProps): Node {
     onMouseMove,
     onScroll,
     onHover,
+    onLayout,
     wrap,
   } = props;
 
@@ -1441,6 +1474,7 @@ export function Text(props: TextProps): Node {
     onMouseMove,
     onScroll,
     onHover,
+    onLayout,
 
     // Store inheritable props for style resolution during paint
     _inheritableProps: {
@@ -1947,7 +1981,7 @@ function paintNode(
   inherited: InheritedStyle,
   clip: ClipRect,
 ): void {
-  const { screenX, screenY, width, height } = layout;
+  const { x, y, screenX, screenY, width, height } = layout;
 
   // Early out if entirely outside clip rect
   if (
@@ -1957,6 +1991,24 @@ function paintNode(
     screenY + height <= clip.y
   ) {
     return;
+  }
+
+  // Call onLayout if dimensions changed
+  if (node.onLayout) {
+    const prev = layoutCache.get(node);
+    if (
+      !prev ||
+      prev.x !== x ||
+      prev.y !== y ||
+      prev.width !== width ||
+      prev.height !== height ||
+      prev.screenX !== screenX ||
+      prev.screenY !== screenY
+    ) {
+      const current: LayoutInfo = { x, y, width, height, screenX, screenY };
+      layoutCache.set(node, current);
+      node.onLayout(current);
+    }
   }
 
   // Compute this node's inherited style (resolves any "inherit" values)
