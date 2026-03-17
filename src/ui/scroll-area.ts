@@ -39,13 +39,6 @@ export interface ScrollAreaProps {
 }
 
 /**
- * Normalize children to an array of nodes.
- */
-function normalizeChildren(children: Node | Node[]): Node[] {
-  return Array.isArray(children) ? children : [children];
-}
-
-/**
  * Internal scrollbar component.
  */
 function Scrollbar(props: {
@@ -204,8 +197,10 @@ export function ScrollArea(props: ScrollAreaProps): Node {
     handleScroll(delta);
   };
 
-  // Create a wrapper for children that measures content height
-  const children = normalizeChildren(props.children);
+  // Normalize children to an array for iteration and passing to Box
+  const children = Array.isArray(props.children)
+    ? props.children
+    : [props.children];
 
   // Estimate content height based on children count
   // This is a simplification - real implementation would need layout feedback

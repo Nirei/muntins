@@ -24,13 +24,6 @@ export interface DialogProps {
 }
 
 /**
- * Normalize children to an array.
- */
-function normalizeChildren(children: Node | Node[]): Node[] {
-  return Array.isArray(children) ? children : [children];
-}
-
-/**
  * A modal dialog that renders centered in the viewport via Portal.
  *
  * When open, the dialog traps focus within its content using TabFocus.
@@ -110,7 +103,7 @@ export function Dialog(props: DialogProps): Node {
                     focusable: true,
                     onKeyPress: handleKeyPress,
                     ...props.style,
-                    children: normalizeChildren(props.children),
+                    children: props.children,
                   }),
                 ],
               }),

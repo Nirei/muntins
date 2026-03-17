@@ -53,13 +53,6 @@ export interface PopoverProps {
 }
 
 /**
- * Normalize content to an array of nodes.
- */
-function normalizeContent(content: Node | Node[]): Node[] {
-  return Array.isArray(content) ? content : [content];
-}
-
-/**
  * Find the layout result for a specific node by traversing both trees in parallel.
  * Returns undefined if the node is not found or if layout hasn't been computed yet.
  */
@@ -431,7 +424,7 @@ export function Popover(props: PopoverProps): Node {
                     onKeyPress: handleKeyPress,
                     focusable: true,
                     ...props.style,
-                    children: normalizeContent(props.content()),
+                    children: props.content(),
                   }),
                 ],
               }),

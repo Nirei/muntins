@@ -33,13 +33,6 @@ export interface DrawerProps {
 }
 
 /**
- * Normalize children to an array.
- */
-function normalizeChildren(children: Node | Node[]): Node[] {
-  return Array.isArray(children) ? children : [children];
-}
-
-/**
  * A drawer panel that slides in from the edge of the screen via Portal.
  *
  * When open, the drawer traps focus within its content using TabFocus.
@@ -122,7 +115,7 @@ export function Drawer(props: DrawerProps): Node {
                 onKeyPress: handleKeyPress,
                 ...positionStyle(),
                 ...props.style,
-                children: normalizeChildren(props.children),
+                children: props.children,
               }),
             ],
           }),

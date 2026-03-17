@@ -715,7 +715,7 @@ function computeInheritedStyle(
 
 /** Props for Box component. */
 export interface BoxProps extends Partial<FlexStyle> {
-  children?: Node[];
+  children?: Node | Node[];
   backgroundColor?: InheritableColor | (() => InheritableColor);
   border?: BorderProp | (() => BorderProp);
   borderColor?: InheritableColor | (() => InheritableColor);
@@ -1153,7 +1153,7 @@ function renderBorder(
  */
 export function Box(props: BoxProps): Node {
   const {
-    children = [],
+    children: childrenProp,
     backgroundColor,
     border,
     borderColor,
@@ -1169,6 +1169,13 @@ export function Box(props: BoxProps): Node {
     onHover,
     ...styleProps
   } = props;
+
+  // Normalize children to always be an array
+  const children: Node[] = childrenProp
+    ? Array.isArray(childrenProp)
+      ? childrenProp
+      : [childrenProp]
+    : [];
 
   // Reactive border getter - evaluates border prop (which may be a signal)
   const getBorderFlags = () => {
