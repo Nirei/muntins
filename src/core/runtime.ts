@@ -150,6 +150,24 @@ export interface Node {
 }
 
 /**
+ * Resolves a node's style, handling reactive style getters.
+ * Used internally to simplify the common pattern of checking if style is a function.
+ */
+function resolveNodeStyle(node: Node): FlexStyle {
+  return typeof node.style === "function" ? node.style() : node.style;
+}
+
+/**
+ * Resolves a node's children array, handling reactive children getters (from Show/For).
+ * Returns an empty array if children is undefined.
+ */
+function resolveNodeChildren(node: Node): Node[] {
+  return typeof node.children === "function"
+    ? (node.children as () => Node[])()
+    : (node.children ?? []);
+}
+
+/**
  * Layout information for reactive layout access via refs.
  * All values are integers representing terminal cells.
  */
@@ -373,13 +391,7 @@ export function collectFocusableInScope(node: Node, scope: FocusScope): void {
     scope.focusableNodes.push(node);
   }
 
-  // Get children (may be a getter for Show/For)
-  const children =
-    typeof node.children === "function"
-      ? (node.children as () => Node[])()
-      : (node.children ?? []);
-
-  for (const child of children) {
+  for (const child of resolveNodeChildren(node)) {
     collectFocusableInScope(child, scope);
   }
 }
@@ -2033,20 +2045,15 @@ export function TabFocus(props: TabFocusProps): Node {
  * Skips portal nodes (their children are laid out separately at root level).
  */
 function nodeToLayoutNode(node: Node): LayoutNode {
-  const style = typeof node.style === "function" ? node.style() : node.style;
-
-  // Handle children as either array or getter function (for Show/For)
-  const children =
-    typeof node.children === "function"
-      ? (node.children as () => Node[])()
-      : node.children;
+  const style = resolveNodeStyle(node);
+  const children = resolveNodeChildren(node);
 
   // Filter out portal children - they're laid out separately at root level
-  const filteredChildren = children?.filter((child) => !child._isPortal);
+  const filteredChildren = children.filter((child) => !child._isPortal);
 
   return {
     style,
-    children: filteredChildren?.map(nodeToLayoutNode),
+    children: filteredChildren.map(nodeToLayoutNode),
     measure: node.measure,
   };
 }
@@ -2173,11 +2180,7 @@ export function hitTest(
     return null;
   }
 
-  // Get children (may be a getter for Show/For)
-  const children =
-    typeof node.children === "function"
-      ? (node.children as () => Node[])()
-      : (node.children ?? []);
+  const children = resolveNodeChildren(node);
   const childLayouts = layout.children ?? [];
 
   // Check children in reverse order for proper z-ordering
@@ -2366,12 +2369,7 @@ function collectAllFocusables(node: Node): Node[] {
     result.push(node);
   }
 
-  const children =
-    typeof node.children === "function"
-      ? (node.children as () => Node[])()
-      : (node.children ?? []);
-
-  for (const child of children) {
+  for (const child of resolveNodeChildren(node)) {
     result.push(...collectAllFocusables(child));
   }
 
@@ -2653,7 +2651,7 @@ function bindNode(
   // Create accessor for this node's clip rect (reactive)
   const nodeClipAccessor: Accessor<ClipRect> = () => {
     const parentClip = parentClipAccessor();
-    const style = typeof node.style === "function" ? node.style() : node.style;
+    const style = resolveNodeStyle(node);
     const layout = node._layout;
     if (style.overflow === "hidden" && layout) {
       const x = layout.screenX();
@@ -2703,10 +2701,7 @@ function bindChildren(
   scheduleFlush: () => void,
   scheduleRelayout: () => void,
 ): void {
-  const children =
-    typeof node.children === "function"
-      ? (node.children as () => Node[])()
-      : (node.children ?? []);
+  const children = resolveNodeChildren(node);
   const childLayouts = layoutResult.children ?? [];
 
   let layoutIndex = 0;
@@ -2715,8 +2710,7 @@ function bindChildren(
     // Skip portals (bound separately at root level)
     if (child._isPortal) continue;
 
-    const style =
-      typeof child.style === "function" ? child.style() : child.style;
+    const style = resolveNodeStyle(child);
 
     if (style.display === "contents") {
       // display: "contents" nodes don't get layout boxes.
@@ -2765,18 +2759,12 @@ function bindContentsChildren(
   scheduleFlush: () => void,
   scheduleRelayout: () => void,
 ): number {
-  const children =
-    typeof contentsNode.children === "function"
-      ? (contentsNode.children as () => Node[])()
-      : (contentsNode.children ?? []);
-
   let consumed = 0;
 
-  for (const child of children) {
+  for (const child of resolveNodeChildren(contentsNode)) {
     if (child._isPortal) continue;
 
-    const style =
-      typeof child.style === "function" ? child.style() : child.style;
+    const style = resolveNodeStyle(child);
 
     if (style.display === "contents") {
       // Nested display: "contents" - recurse
@@ -2814,7 +2802,7 @@ function bindContentsChildren(
  * Updates layout signals for existing nodes on resize/relayout.
  */
 function updateLayoutSignals(node: Node, layoutResult: LayoutResult): void {
-  const style = typeof node.style === "function" ? node.style() : node.style;
+  const style = resolveNodeStyle(node);
 
   if (style.display === "contents") {
     // Recurse into children, consuming layout results for hoisted children
@@ -2826,18 +2814,13 @@ function updateLayoutSignals(node: Node, layoutResult: LayoutResult): void {
     node._layout.setLayout(layoutResult);
   }
 
-  const children =
-    typeof node.children === "function"
-      ? (node.children as () => Node[])()
-      : (node.children ?? []);
   const childLayouts = layoutResult.children ?? [];
 
   let layoutIndex = 0;
-  for (const child of children) {
+  for (const child of resolveNodeChildren(node)) {
     if (child._isPortal) continue;
 
-    const childStyle =
-      typeof child.style === "function" ? child.style() : child.style;
+    const childStyle = resolveNodeStyle(child);
     if (childStyle.display === "contents") {
       layoutIndex += updateContentsChildren(child, childLayouts, layoutIndex);
     } else if (childLayouts[layoutIndex]) {
@@ -2856,17 +2839,11 @@ function updateContentsChildren(
   layouts: LayoutResult[],
   startIndex: number,
 ): number {
-  const children =
-    typeof contentsNode.children === "function"
-      ? (contentsNode.children as () => Node[])()
-      : (contentsNode.children ?? []);
-
   let consumed = 0;
-  for (const child of children) {
+  for (const child of resolveNodeChildren(contentsNode)) {
     if (child._isPortal) continue;
 
-    const style =
-      typeof child.style === "function" ? child.style() : child.style;
+    const style = resolveNodeStyle(child);
     if (style.display === "contents") {
       consumed += updateContentsChildren(child, layouts, startIndex + consumed);
     } else if (layouts[startIndex + consumed]) {
@@ -2889,7 +2866,7 @@ function bindNewNodes(
   scheduleFlush: () => void,
   scheduleRelayout: () => void,
 ): void {
-  const style = typeof node.style === "function" ? node.style() : node.style;
+  const style = resolveNodeStyle(node);
 
   if (style.display === "contents") {
     // display: "contents" nodes don't have layout, but their children do
@@ -2897,18 +2874,13 @@ function bindNewNodes(
       return computeInheritedStyle(node, inheritedAccessor());
     };
 
-    const children =
-      typeof node.children === "function"
-        ? (node.children as () => Node[])()
-        : (node.children ?? []);
     const childLayouts = layoutResult.children ?? [];
 
     let layoutIndex = 0;
-    for (const child of children) {
+    for (const child of resolveNodeChildren(node)) {
       if (child._isPortal) continue;
 
-      const childStyle =
-        typeof child.style === "function" ? child.style() : child.style;
+      const childStyle = resolveNodeStyle(child);
       if (childStyle.display === "contents") {
         layoutIndex += bindNewContentsChildren(
           child,
@@ -2948,7 +2920,7 @@ function bindNewNodes(
   };
   const nodeClipAccessor: Accessor<ClipRect> = () => {
     const parentClip = clipAccessor();
-    const s = typeof node.style === "function" ? node.style() : node.style;
+    const s = resolveNodeStyle(node);
     const layout = node._layout;
     if (s.overflow === "hidden" && layout) {
       const x = layout.screenX();
@@ -2973,18 +2945,13 @@ function bindNewNodes(
     );
   }
 
-  const children =
-    typeof node.children === "function"
-      ? (node.children as () => Node[])()
-      : (node.children ?? []);
   const childLayouts = layoutResult.children ?? [];
 
   let layoutIndex = 0;
-  for (const child of children) {
+  for (const child of resolveNodeChildren(node)) {
     if (child._isPortal) continue;
 
-    const childStyle =
-      typeof child.style === "function" ? child.style() : child.style;
+    const childStyle = resolveNodeStyle(child);
     if (childStyle.display === "contents") {
       layoutIndex += bindNewContentsChildren(
         child,
@@ -3029,17 +2996,11 @@ function bindNewContentsChildren(
     return computeInheritedStyle(contentsNode, inheritedAccessor());
   };
 
-  const children =
-    typeof contentsNode.children === "function"
-      ? (contentsNode.children as () => Node[])()
-      : (contentsNode.children ?? []);
-
   let consumed = 0;
-  for (const child of children) {
+  for (const child of resolveNodeChildren(contentsNode)) {
     if (child._isPortal) continue;
 
-    const style =
-      typeof child.style === "function" ? child.style() : child.style;
+    const style = resolveNodeStyle(child);
     if (style.display === "contents") {
       consumed += bindNewContentsChildren(
         child,
@@ -3081,12 +3042,7 @@ function disposeSubtreeRenderEffects(node: Node): void {
   node._layout = undefined;
 
   // Recurse to children
-  const children =
-    typeof node.children === "function"
-      ? (node.children as () => Node[])()
-      : (node.children ?? []);
-
-  for (const child of children) {
+  for (const child of resolveNodeChildren(node)) {
     disposeSubtreeRenderEffects(child);
   }
 }
@@ -3164,11 +3120,7 @@ function collectPortalsForBinding(
 
   // If this is a portal, collect its children
   if (node._isPortal) {
-    const children =
-      typeof node.children === "function"
-        ? (node.children as () => Node[])()
-        : (node.children ?? []);
-    for (const child of children) {
+    for (const child of resolveNodeChildren(node)) {
       portals.push({
         node: child,
         inheritedAccessor: nodeInheritedAccessor,
@@ -3177,11 +3129,7 @@ function collectPortalsForBinding(
     }
   }
 
-  // Recursively search children
-  const children =
-    typeof node.children === "function"
-      ? (node.children as () => Node[])()
-      : (node.children ?? []);
+  const children = resolveNodeChildren(node);
 
   for (const child of children) {
     portals.push(
