@@ -2536,6 +2536,98 @@ function createScheduleRelayout(
 type InheritedStyleAccessor = Accessor<InheritedStyle>;
 
 /**
+ * Creates a render effect for a node that has a render function.
+ * The effect re-runs when layout signals change, rendering the node to the buffer.
+ * Also handles intrinsic size changes by triggering relayout.
+ */
+function createRenderEffect(
+  node: Node,
+  layoutResult: LayoutResult,
+  buffer: Buffer,
+  inheritedAccessor: InheritedStyleAccessor,
+  clipAccessor: Accessor<ClipRect>,
+  scheduleFlush: () => void,
+  scheduleRelayout: () => void,
+): void {
+  // Track previous intrinsic size for nodes with measure
+  // Initialize from current intrinsic size to avoid false positives on first run
+  const initialIntrinsic = node.measure
+    ? node.measure(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY)
+    : { width: layoutResult.width, height: layoutResult.height };
+  let prevIntrinsicW = initialIntrinsic.width;
+  let prevIntrinsicH = initialIntrinsic.height;
+
+  // Track previous render position to mark old area dirty when moving
+  let prevX = layoutResult.screenX;
+  let prevY = layoutResult.screenY;
+  let prevW = layoutResult.width;
+  let prevH = layoutResult.height;
+
+  createRoot(
+    (dispose) => {
+      node._disposeRenderEffect = dispose;
+
+      createEffect(() => {
+        const layout = node._layout;
+        if (!layout || !node.render) return;
+
+        const w = layout.width();
+        const h = layout.height();
+
+        // Check if intrinsic size changed (for nodes with measure like Text)
+        // Trigger relayout if intrinsic size differs from layout (grow or shrink)
+        if (node.measure) {
+          const intrinsic = node.measure(
+            Number.POSITIVE_INFINITY,
+            Number.POSITIVE_INFINITY,
+          );
+          const intrinsicChanged =
+            intrinsic.width !== prevIntrinsicW ||
+            intrinsic.height !== prevIntrinsicH;
+          prevIntrinsicW = intrinsic.width;
+          prevIntrinsicH = intrinsic.height;
+
+          if (
+            intrinsicChanged &&
+            (intrinsic.width !== w || intrinsic.height !== h)
+          ) {
+            scheduleRelayout();
+            return;
+          }
+        }
+
+        const x = layout.screenX();
+        const y = layout.screenY();
+        const inherited = inheritedAccessor();
+        const clip = clipAccessor();
+
+        // Fill old position with inherited background if layout changed
+        if (x !== prevX || y !== prevY || w !== prevW || h !== prevH) {
+          buffer.fillRect(
+            prevX,
+            prevY,
+            prevW,
+            prevH,
+            " ",
+            DEFAULT_COLOR,
+            inherited.backgroundColor,
+            0,
+          );
+        }
+        prevX = x;
+        prevY = y;
+        prevW = w;
+        prevH = h;
+
+        node.render(x, y, w, h, buffer, inherited, clip);
+        scheduleFlush();
+      });
+    },
+    { detached: true },
+  );
+}
+
+/**
  * Binds a node by creating layout signals and render effects.
  */
 function bindNode(
@@ -2575,81 +2667,14 @@ function bindNode(
 
   // Create render effect if node has a render function
   if (node.render && !node._disposeRenderEffect) {
-    // Track previous intrinsic size for nodes with measure
-    // Initialize from current intrinsic size to avoid false positives on first run
-    const initialIntrinsic = node.measure
-      ? node.measure(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY)
-      : { width: layoutResult.width, height: layoutResult.height };
-    let prevIntrinsicW = initialIntrinsic.width;
-    let prevIntrinsicH = initialIntrinsic.height;
-
-    // Track previous render position to mark old area dirty when moving
-    let prevX = layoutResult.screenX;
-    let prevY = layoutResult.screenY;
-    let prevW = layoutResult.width;
-    let prevH = layoutResult.height;
-
-    createRoot(
-      (dispose) => {
-        node._disposeRenderEffect = dispose;
-
-        createEffect(() => {
-          const layout = node._layout;
-          if (!layout || !node.render) return;
-
-          const w = layout.width();
-          const h = layout.height();
-
-          // Check if intrinsic size changed (for nodes with measure like Text)
-          // Trigger relayout if intrinsic size differs from layout (grow or shrink)
-          if (node.measure) {
-            const intrinsic = node.measure(
-              Number.POSITIVE_INFINITY,
-              Number.POSITIVE_INFINITY,
-            );
-            const intrinsicChanged =
-              intrinsic.width !== prevIntrinsicW ||
-              intrinsic.height !== prevIntrinsicH;
-            prevIntrinsicW = intrinsic.width;
-            prevIntrinsicH = intrinsic.height;
-
-            if (
-              intrinsicChanged &&
-              (intrinsic.width !== w || intrinsic.height !== h)
-            ) {
-              scheduleRelayout();
-              return;
-            }
-          }
-
-          const x = layout.screenX();
-          const y = layout.screenY();
-          const inherited = nodeInheritedAccessor();
-          const clip = nodeClipAccessor();
-
-          // Fill old position with inherited background if layout changed
-          if (x !== prevX || y !== prevY || w !== prevW || h !== prevH) {
-            buffer.fillRect(
-              prevX,
-              prevY,
-              prevW,
-              prevH,
-              " ",
-              DEFAULT_COLOR,
-              inherited.backgroundColor,
-              0,
-            );
-          }
-          prevX = x;
-          prevY = y;
-          prevW = w;
-          prevH = h;
-
-          node.render(x, y, w, h, buffer, inherited, clip);
-          scheduleFlush();
-        });
-      },
-      { detached: true },
+    createRenderEffect(
+      node,
+      layoutResult,
+      buffer,
+      nodeInheritedAccessor,
+      nodeClipAccessor,
+      scheduleFlush,
+      scheduleRelayout,
     );
   }
 
@@ -2917,104 +2942,7 @@ function bindNewNodes(
   }
   node._layout.setLayout(layoutResult);
 
-  // Create render effect if needed (not already bound)
-  if (node.render && !node._disposeRenderEffect) {
-    const renderNodeInheritedAccessor: InheritedStyleAccessor = () => {
-      return computeInheritedStyle(node, inheritedAccessor());
-    };
-    const renderNodeClipAccessor: Accessor<ClipRect> = () => {
-      const parentClip = clipAccessor();
-      const s = typeof node.style === "function" ? node.style() : node.style;
-      const layout = node._layout;
-      if (s.overflow === "hidden" && layout) {
-        const x = layout.screenX();
-        const y = layout.screenY();
-        const w = layout.width();
-        const h = layout.height();
-        return intersectClipRect(parentClip, { x, y, width: w, height: h });
-      }
-      return parentClip;
-    };
-
-    // Track previous intrinsic size for nodes with measure
-    // Initialize from current intrinsic size to avoid false positives on first run
-    const initialIntrinsic = node.measure
-      ? node.measure(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY)
-      : { width: layoutResult.width, height: layoutResult.height };
-    let prevIntrinsicW = initialIntrinsic.width;
-    let prevIntrinsicH = initialIntrinsic.height;
-
-    // Track previous render position to mark old area dirty when moving
-    let prevX = layoutResult.screenX;
-    let prevY = layoutResult.screenY;
-    let prevW = layoutResult.width;
-    let prevH = layoutResult.height;
-
-    createRoot(
-      (dispose) => {
-        node._disposeRenderEffect = dispose;
-
-        createEffect(() => {
-          const layout = node._layout;
-          if (!layout || !node.render) return;
-
-          const w = layout.width();
-          const h = layout.height();
-
-          // Check if intrinsic size changed (for nodes with measure like Text)
-          // Trigger relayout if intrinsic size differs from layout (grow or shrink)
-          if (node.measure) {
-            const intrinsic = node.measure(
-              Number.POSITIVE_INFINITY,
-              Number.POSITIVE_INFINITY,
-            );
-            const intrinsicChanged =
-              intrinsic.width !== prevIntrinsicW ||
-              intrinsic.height !== prevIntrinsicH;
-            prevIntrinsicW = intrinsic.width;
-            prevIntrinsicH = intrinsic.height;
-
-            if (
-              intrinsicChanged &&
-              (intrinsic.width !== w || intrinsic.height !== h)
-            ) {
-              scheduleRelayout();
-              return;
-            }
-          }
-
-          const x = layout.screenX();
-          const y = layout.screenY();
-          const inherited = renderNodeInheritedAccessor();
-          const clip = renderNodeClipAccessor();
-
-          // Fill old position with inherited background if layout changed
-          if (x !== prevX || y !== prevY || w !== prevW || h !== prevH) {
-            buffer.fillRect(
-              prevX,
-              prevY,
-              prevW,
-              prevH,
-              " ",
-              DEFAULT_COLOR,
-              inherited.backgroundColor,
-              0,
-            );
-          }
-          prevX = x;
-          prevY = y;
-          prevW = w;
-          prevH = h;
-
-          node.render(x, y, w, h, buffer, inherited, clip);
-          scheduleFlush();
-        });
-      },
-      { detached: true },
-    );
-  }
-
-  // Recurse to children
+  // Create accessors for this node's inherited style and clip rect
   const nodeInheritedAccessor: InheritedStyleAccessor = () => {
     return computeInheritedStyle(node, inheritedAccessor());
   };
@@ -3031,6 +2959,19 @@ function bindNewNodes(
     }
     return parentClip;
   };
+
+  // Create render effect if needed (not already bound)
+  if (node.render && !node._disposeRenderEffect) {
+    createRenderEffect(
+      node,
+      layoutResult,
+      buffer,
+      nodeInheritedAccessor,
+      nodeClipAccessor,
+      scheduleFlush,
+      scheduleRelayout,
+    );
+  }
 
   const children =
     typeof node.children === "function"
