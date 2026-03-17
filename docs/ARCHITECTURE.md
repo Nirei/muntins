@@ -8,15 +8,23 @@ What follows is a complete architectural blueprint, covering every subsystem's i
 
 ## The three-phase render pipeline
 
-The entire system flows through three phases on every update cycle: **build → layout → paint**. Signals make this pipeline incremental rather than wholesale.
+The entire system flows through three phases: **build → layout → bind**. Signals make updates incremental rather than wholesale.
 
-**Phase 1, Build virtual tree.** Application code declares a tree of UI nodes using reactive primitives. Each node carries a `FlexStyle` (flexbox properties) and either child nodes or a text-measurement function. Signals wrap dynamic values, when a signal changes, only the nodes reading that signal are marked dirty. The tree is *not* rebuilt from scratch on every update; instead, structural changes (conditional rendering, list items) use `createRoot` scopes that can be individually disposed and recreated.
+**Phase 1, Build virtual tree.** Application code declares a tree of UI nodes using reactive primitives. Each node carries a `FlexStyle` (flexbox properties) and either child nodes or a text-measurement function. Signals wrap dynamic values. The tree is *not* rebuilt on every update; instead, structural changes (conditional rendering, list items) use `createRoot` scopes that can be individually disposed and recreated.
 
-**Phase 2, Layout.** The flexbox algorithm walks the tree top-down, resolving flex-basis/grow/shrink per line, then positions children along main and cross axes. In a fully naive system (like Ratatui), layout runs over the *entire* tree every frame. With signals, you can skip subtrees whose inputs haven't changed, a node's layout only needs recomputation if its own style, its parent's allocated size, or its children's intrinsic sizes changed. Cache each node's last `(inputWidth, inputHeight) → LayoutResult` and invalidate via signals.
+**Phase 2, Layout.** The flexbox algorithm walks the tree top-down, resolving flex-basis/grow/shrink per line, then positions children along main and cross axes. Layout runs when content changes might affect sizing (via `scheduleRelayout`) or on terminal resize. Each node's layout result is stored in reactive signals (`x`, `y`, `width`, `height`, `screenX`, `screenY`).
 
-**Phase 3, Paint.** Each leaf node writes its content (characters + styles) into a 2D cell buffer at the coordinates computed by layout. A separate `createEffect` per visible node handles painting, when a node's content signal or layout position changes, only that node's cells are rewritten in the buffer. After all effects flush, the buffer is diffed against the previous frame and minimal ANSI sequences are emitted.
+**Phase 3, Bind.** After layout, each node that renders content gets its own `createEffect` that tracks layout signals, content, and inherited styles. When any tracked value changes, the effect re-runs and writes to the buffer. There is no central paint loop—each node is independently reactive.
 
-The critical architectural difference from Ink is that **there is no virtual DOM reconciler**. Components are plain functions that run once (like SolidJS), creating signals and effects that persist. There is no diffing of component trees, signals handle targeted updates directly. The critical difference from Ratatui is that **you don't repaint the entire buffer every frame**, effects only repaint the specific regions that changed.
+```
+Signal update (timer, event, async)
+  → Render effect runs synchronously, writes to buffer
+  → scheduleFlush() queues microtask
+  → [More effects may run from same signal change]
+  → Flush microtask: buffer.flush() → diff → ANSI output
+```
+
+The critical architectural difference from Ink is that **there is no virtual DOM reconciler**. Components are plain functions that run once (like SolidJS), creating signals and effects that persist. The critical difference from Ratatui is that **there is no central render loop**—effects only repaint the specific nodes whose tracked signals changed.
 
 ---
 
@@ -165,11 +173,11 @@ type InputEvent =
 
 ---
 
-## How signals connect to the render pipeline
+## Reactive render binding: how signals connect to painting
 
-This is where the architecture diverges most sharply from existing TUI libraries. Rather than Ink's React reconciler or Ratatui's full-redraw approach, signals create a **direct binding between state and cell buffer writes**.
+This is where the architecture diverges most sharply from existing TUI libraries. Rather than Ink's React reconciler or Ratatui's full-redraw approach, **each node creates its own render effect that writes directly to the buffer when its signals change**. There is no central render loop traversing the tree.
 
-**Components are functions that run once.** Like SolidJS, a component function executes a single time to set up its reactive bindings. It creates signals for local state, memos for derived values, and effects that paint to the buffer. It returns a node descriptor (style + children or measure function) for the layout tree.
+**Components are functions that run once.** Like SolidJS, a component function executes a single time to set up its reactive bindings. It creates signals for local state, memos for derived values, and returns a node descriptor (style + children or measure function) for the layout tree.
 
 ```typescript
 function Counter() {
@@ -180,20 +188,67 @@ function Counter() {
     flexDirection: 'column',
     padding: [1, 1, 1, 1],
     children: [
-      Text({ content: () => `Count: ${count()}` }),   // effect auto-created for text content
+      Text({ content: () => `Count: ${count()}` }),   // render effect auto-created
       Text({ content: () => `Double: ${count() * 2}` }),
     ],
   });
 }
 ```
 
-**Layout invalidation uses a dirty flag propagated via signals.** Each layout node stores a `needsLayout` signal. When a node's style or content size changes, `needsLayout` is set to `true`. A top-level layout effect watches this flag; when it fires, it re-runs the flexbox algorithm starting from the highest dirty node (not necessarily the root). Subtrees with clean inputs skip entirely.
+**Layout coordinates are signals.** After layout computes positions, each node stores its coordinates as reactive signals (`x`, `y`, `width`, `height`, `screenX`, `screenY`). This enables surgical updates: when layout changes, only the affected nodes' render effects re-run.
 
-**Painting is per-node effects.** Each visible leaf node has a `createEffect` that reads its layout position (x, y, width, height, stored as signals by the layout phase) and its content, then writes cells into the buffer. When only a text content signal changes (not position or size), only that node's cells are rewritten. When a layout change shifts a node's position, the effect clears the old cells and writes to the new position.
+```typescript
+interface Node {
+  _layout?: {
+    x: Accessor<number>;
+    y: Accessor<number>;
+    width: Accessor<number>;
+    height: Accessor<number>;
+    screenX: Accessor<number>;
+    screenY: Accessor<number>;
+    setLayout: (result: LayoutResult) => void;
+  };
+  _disposeRenderEffect?: () => void;
+}
+```
 
-**The render cycle is batched.** Input events are processed inside a `batch()` call, so all state mutations from a single keypress or mouse event produce one coordinated update. After the batch flushes, layout effects run (if needed), then paint effects run (if needed), then the buffer is diffed and flushed to stdout. This guarantees **at most one terminal write per input event**, with only the minimum necessary cells updated.
+**Each node has its own render effect.** After initial layout, the runtime "binds" each node by creating an effect that tracks layout signals, content, and inherited styles:
 
-**Conditional and list rendering use ownership scopes.** A `Show(condition, () => child)` primitive creates a `createRoot` scope for the child. When the condition becomes false, the root is disposed, cleaning up all child effects, removing the subtree from the layout tree, and clearing its cells from the buffer. `For(items, (item) => child)` maps each item to its own root, enabling efficient add/remove/reorder without rebuilding the entire list.
+```typescript
+createEffect(() => {
+  const x = node._layout.screenX();     // Tracks layout signal
+  const y = node._layout.screenY();     // Tracks layout signal
+  const width = node._layout.width();   // Tracks layout signal
+  const height = node._layout.height(); // Tracks layout signal
+  const inherited = computeInheritedStyle(node, parentInheritedAccessor());
+  
+  renderTextToBuffer(buffer, x, y, width, height, text, inherited, clip);
+  scheduleFlush();
+});
+```
+
+When any tracked signal changes—from a timer, async callback, or event handler—the effect re-runs and updates the buffer. No explicit `scheduleRender()` call needed.
+
+**Flush is throttled and batched.** When render effects write to the buffer, they call `scheduleFlush()` which queues a microtask. Multiple signal changes in the same tick coalesce into one flush. FPS limiting ensures the terminal isn't overwhelmed by rapid updates.
+
+```
+Signal update (e.g., from timer)
+  → Effect runs synchronously, writes to buffer, calls scheduleFlush
+  → [More signals may update, more effects run]
+  → Microtask queue drains
+  → Flush: buffer.flush() → diff → ANSI output to terminal
+```
+
+**Relayout is triggered by content changes.** When a Text node's content changes and might affect layout (e.g., different string length), a content-tracking effect schedules relayout via microtask. Relayout clears the buffer, recomputes layout, updates layout signals, and binds any new nodes. Render effects then re-run with new coordinates.
+
+**Conditional and list rendering use ownership scopes.** `Show` and `For` primitives create `createRoot` scopes for dynamic children. When conditions change:
+1. Old subtree's render effects are explicitly disposed via `disposeSubtreeRenderEffects()`
+2. New subtree is created in a fresh root
+3. `scheduleRelayout()` is called to bind the new nodes
+
+Render effects are created in detached roots so they survive the component's `createRoot` disposal and can be explicitly controlled.
+
+**Resize updates layout signals.** On terminal resize, the runtime clears the buffer, recomputes layout, and updates each node's layout signals via `setLayout()`. Render effects automatically re-run with new coordinates—no disposal or rebinding needed.
 
 ---
 
@@ -219,10 +274,12 @@ The library decomposes into five independent modules with clean interfaces betwe
 - **`core/layout.ts`**, `computeLayout(node, availableWidth, availableHeight) → LayoutResult`. Pure function, no side effects, no dependency on signals. Takes a tree of `{style, children, measure?}` nodes, returns a tree of `{x, y, width, height}` results.
 - **`core/buffer.ts`**, `Buffer` class with internal double-buffering. Provides `set()`, `writeText()`, `clear()`, `fillRect()` for painting, and `flush()` which diffs, serializes ANSI, and syncs buffers in one call. Handles double-width characters, style state tracking across frames, cursor optimization, and dirty region tracking. Colors are stored internally as packed integers for zero-allocation comparison.
 - **`core/input.ts`**, State-machine parser, terminal mode setup/teardown, event type definitions. Converts raw stdin bytes into typed `InputEvent` objects.
-- **`core/runtime.ts`**, The glue layer. Manages the render cycle: processes input events in a batch, runs layout if dirty, paints into the buffer, calls `buffer.flush()`. Provides the component primitives (`Box`, `Text`, `Show`, `For`) that wire signals to layout nodes and buffer writes. Box is primarily a layout container but can paint background colors and borders. Text is a leaf node that measures and renders text content.
+- **`core/runtime.ts`**, The glue layer. Manages the reactive render pipeline: binds render effects to nodes after layout, schedules throttled flush to terminal, handles relayout when content changes. Provides the component primitives (`Box`, `Text`, `Show`, `For`, `Portal`) that wire signals to layout nodes and buffer writes. Box is primarily a layout container but can paint background colors and borders. Text is a leaf node that measures and renders text content. Portal renders children at viewport level for overlays.
 
 ## Conclusion
 
-The architecture rests on one non-obvious insight: **signals eliminate the need for both a virtual DOM reconciler and full-frame redraws.** In Ink's model, React diffs the component tree to find what changed, then Yoga re-layouts, then the full output is regenerated. In Ratatui's model, the entire UI is redrawn into a fresh buffer every frame, then diffed against the previous frame. Signals cut through both approaches, state changes propagate directly to the exact layout nodes and buffer cells affected, skipping everything else.
+The architecture rests on one non-obvious insight: **signals eliminate the need for both a virtual DOM reconciler and full-frame redraws.** In Ink's model, React diffs the component tree to find what changed, then Yoga re-layouts, then the full output is regenerated. In Ratatui's model, the entire UI is redrawn into a fresh buffer every frame, then diffed against the previous frame.
+
+Muntins cuts through both approaches with **reactive render binding**: each node has its own render effect that tracks layout signals, content, and inherited styles. When any tracked value changes—from event handlers, timers, or async callbacks—only that node's effect re-runs and updates the buffer. There is no central render loop traversing the tree. Layout coordinates are signals, so resize naturally triggers re-render without special handling.
 
 The priority ordering of **Simplicity > Performance > Features** maps to concrete decisions: use integer arithmetic everywhere (simpler than float), implement only the flexbox subset that TUIs actually need (row, column, grow, shrink, wrap, alignment, skip `order`, reverse, baseline), start with push-based signals and upgrade to push-pull only if diamond glitches prove problematic in practice, and implement mouse support as opt-in (most TUI apps are keyboard-first). Build the five modules independently with clear interfaces, write each one test-first against known-good reference outputs, and resist the temptation to add features until the core pipeline is rock-solid.
