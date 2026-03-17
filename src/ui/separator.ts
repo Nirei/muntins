@@ -3,6 +3,7 @@
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node } from "../core/runtime.ts";
 import { Box } from "../core/runtime.ts";
+import { type MaybeAccessor, resolve } from "../core/signals.ts";
 
 /** Orientation of the separator. */
 export type SeparatorOrientation = "horizontal" | "vertical";
@@ -12,18 +13,10 @@ export type SeparatorOrientation = "horizontal" | "vertical";
  */
 export interface SeparatorProps {
   /** Orientation of the separator. Default: "horizontal" */
-  orientation?: SeparatorOrientation | (() => SeparatorOrientation);
+  orientation?: MaybeAccessor<SeparatorOrientation>;
 
   /** Style overrides */
   style?: Partial<FlexStyle>;
-}
-
-/**
- * Resolves a value that may be static or a getter function.
- */
-function resolveValue<T>(value: T | (() => T) | undefined, defaultValue: T): T {
-  if (value === undefined) return defaultValue;
-  return typeof value === "function" ? (value as () => T)() : value;
 }
 
 /**
@@ -40,7 +33,7 @@ export function Separator(props: SeparatorProps): Node {
   const { orientation, style } = props;
 
   const getOrientation = (): SeparatorOrientation =>
-    resolveValue(orientation, "horizontal");
+    resolve(orientation) ?? "horizontal";
 
   const isHorizontal = () => getOrientation() === "horizontal";
 

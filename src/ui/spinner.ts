@@ -3,7 +3,13 @@
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
-import { createSignal, onCleanup } from "../core/signals.ts";
+import {
+  type MaybeAccessor,
+  createEffect,
+  createSignal,
+  onCleanup,
+  resolve,
+} from "../core/signals.ts";
 
 /** Spinner animation variant. */
 export type SpinnerVariant = "dots" | "line" | "arc";
@@ -20,13 +26,13 @@ const FRAMES: Record<SpinnerVariant, string[]> = {
  */
 export interface SpinnerProps {
   /** Spinner style/frames. Default: "dots" */
-  variant?: SpinnerVariant | (() => SpinnerVariant);
+  variant?: MaybeAccessor<SpinnerVariant>;
 
   /** Animation interval in ms. Default: 80 */
-  interval?: number;
+  interval?: MaybeAccessor<number>;
 
   /** Label shown next to spinner */
-  label?: string | (() => string);
+  label?: MaybeAccessor<string>;
 
   /** Style overrides */
   style?: Partial<FlexStyle>;
@@ -51,24 +57,27 @@ export interface SpinnerProps {
  * ```
  */
 export function Spinner(props: SpinnerProps): Node {
-  const { variant, interval = 80, label, style } = props;
+  const { variant, interval, label, style } = props;
 
-  // Get the variant (static or reactive)
-  const getVariant = (): SpinnerVariant =>
-    typeof variant === "function" ? variant() : (variant ?? "dots");
+  // Get reactive values
+  const getVariant = (): SpinnerVariant => resolve(variant) ?? "dots";
+  const getInterval = (): number => resolve(interval) ?? 80;
 
   // Frame index signal for animation
   const [frameIndex, setFrameIndex] = createSignal(0);
 
-  // Start animation interval
-  const intervalId = setInterval(() => {
-    const frames = FRAMES[getVariant()];
-    setFrameIndex((prev) => (prev + 1) % frames.length);
-  }, interval);
+  // Reactive interval that restarts when interval prop changes
+  createEffect(() => {
+    const ms = getInterval();
+    const intervalId = setInterval(() => {
+      const frames = FRAMES[getVariant()];
+      setFrameIndex((prev) => (prev + 1) % frames.length);
+    }, ms);
 
-  // Clean up interval on dispose
-  onCleanup(() => {
-    clearInterval(intervalId);
+    // Clean up interval when effect re-runs or component disposes
+    onCleanup(() => {
+      clearInterval(intervalId);
+    });
   });
 
   // Create spinner text node

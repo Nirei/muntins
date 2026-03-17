@@ -19,7 +19,7 @@ import {
   resolve,
   untrack,
 } from "../core/signals.ts";
-import { textLength } from "../core/text.ts";
+import { displayWidthToPosition, textLength } from "../core/text.ts";
 import { ScrollArea } from "./scroll-area.ts";
 
 /**
@@ -62,20 +62,6 @@ export interface TextareaProps {
 interface CursorPosition {
   line: number;
   column: number;
-}
-
-/**
- * Calculate display width of graphemes from start to position.
- */
-function displayWidthToPosition(str: string, pos: number): number {
-  let width = 0;
-  let i = 0;
-  for (const grapheme of graphemes(str)) {
-    if (i >= pos) break;
-    width += graphemeDisplayWidth(grapheme);
-    i++;
-  }
-  return width;
 }
 
 /**

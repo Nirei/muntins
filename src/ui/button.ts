@@ -2,16 +2,16 @@
 
 import type { KeyEvent, MouseEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
-import type { Node, Ref } from "../core/runtime.ts";
-import { Box, Text } from "../core/runtime.ts";
+import type { BoxChild, Node, Ref } from "../core/runtime.ts";
+import { Box } from "../core/runtime.ts";
 import { type MaybeAccessor, resolve } from "../core/signals.ts";
 
 /**
  * Props for the Button component.
  */
 export interface ButtonProps {
-  /** Button content - text or child nodes */
-  children: string | (() => string) | Node | Node[];
+  /** Button content - text, reactive string, or child nodes */
+  children: BoxChild | BoxChild[];
 
   /** Called when button is activated (Enter/Space or click) */
   onClick?: () => void;
@@ -29,33 +29,10 @@ export interface ButtonProps {
 }
 
 /**
- * Resolve children to an array of nodes.
- * String and function children are wrapped in Text nodes with dim support.
- */
-function resolveChildren(
-  children: string | (() => string) | Node | Node[],
-  dim: () => boolean,
-): Node[] {
-  if (typeof children === "string") {
-    return [Text({ content: children, dim })];
-  }
-  if (typeof children === "function") {
-    return [Text({ content: children as () => string, dim })];
-  }
-  if (Array.isArray(children)) {
-    return children;
-  }
-  return [children];
-}
-
-/**
  * A focusable, activatable button that responds to Enter/Space key presses and mouse clicks.
  *
  * The button is intentionally unstyled - it renders its children with no default
  * border, padding, or colors. Use composition or style overrides to add visual styling.
- *
- * When disabled, string/function children are rendered with dim styling.
- * Node children are rendered as-is (user is responsible for disabled styling).
  *
  * @example
  * ```typescript
@@ -106,8 +83,6 @@ export function Button(props: ButtonProps): Node {
     props.onClick?.();
   };
 
-  const children = resolveChildren(props.children, isDisabled);
-
   return Box({
     focusable: props.focusable ?? true,
     autoFocus: props.autoFocus,
@@ -115,6 +90,6 @@ export function Button(props: ButtonProps): Node {
     onKeyPress: handleKeyPress,
     onMousePress: handleMousePress,
     ...props.style,
-    children,
+    children: props.children,
   });
 }

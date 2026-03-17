@@ -852,9 +852,12 @@ function computeInheritedStyle(
   };
 }
 
+/** Child element that Box can accept - Node, string, or reactive string. */
+export type BoxChild = Node | string | (() => string);
+
 /** Props for Box component. */
 export interface BoxProps extends Partial<ReactiveFlexStyle> {
-  children?: Node | Node[];
+  children?: BoxChild | BoxChild[];
   backgroundColor?: InheritableColor | (() => InheritableColor);
   border?: BorderProp | (() => BorderProp);
   borderColor?: InheritableColor | (() => InheritableColor);
@@ -1342,11 +1345,22 @@ export function Box(props: BoxProps): Node {
     ...styleProps
   } = props;
 
-  // Normalize children to always be an array
+  // Normalize children to always be an array of Nodes
+  // Strings and string accessors are wrapped in Text nodes
+  const normalizeChild = (child: BoxChild): Node => {
+    if (typeof child === "string") {
+      return Text({ content: child });
+    }
+    if (typeof child === "function") {
+      return Text({ content: child });
+    }
+    return child;
+  };
+
   const children: Node[] = childrenProp
     ? Array.isArray(childrenProp)
-      ? childrenProp
-      : [childrenProp]
+      ? childrenProp.map(normalizeChild)
+      : [normalizeChild(childrenProp)]
     : [];
 
   // Reactive border getter - evaluates border prop (which may be a signal)

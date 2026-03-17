@@ -3,7 +3,7 @@
 import type { MouseEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
-import { Box, Text, useFocus } from "../core/runtime.ts";
+import { Box, Text, getActiveContext, useFocus } from "../core/runtime.ts";
 
 /**
  * Props for the Label component.
@@ -43,13 +43,9 @@ export function Label(props: LabelProps): Node {
   const { children, for: forRef, style } = props;
 
   // Get focus controller to handle for association
-  // This will throw if called outside mount context, which is expected
-  let focus: ReturnType<typeof useFocus> | undefined;
-  try {
-    focus = useFocus();
-  } catch {
-    // Outside mount context - for won't work but label still renders
-  }
+  // Only available within mount context - outside context, for won't work but label still renders
+  const ctx = getActiveContext();
+  const focus = ctx ? useFocus() : undefined;
 
   const handleMousePress = forRef
     ? (_event: MouseEvent) => {
@@ -58,18 +54,17 @@ export function Label(props: LabelProps): Node {
     : undefined;
 
   // Wrap in Box if style overrides provided, otherwise just Text
-  const textNode = Text({
-    content: children,
-    onMousePress: handleMousePress,
-  });
-
+  // Handler goes on the outermost element only to avoid double-firing
   if (style) {
     return Box({
       ...style,
-      children: [textNode],
+      children: [Text({ content: children })],
       onMousePress: handleMousePress,
     });
   }
 
-  return textNode;
+  return Text({
+    content: children,
+    onMousePress: handleMousePress,
+  });
 }

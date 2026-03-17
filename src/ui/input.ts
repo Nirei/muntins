@@ -1,6 +1,5 @@
 // Input component - single-line text input with cursor and editing support
 
-import { graphemeDisplayWidth, graphemes } from "../core/buffer.ts";
 import { type KeyEvent, isPrintable } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
@@ -12,7 +11,13 @@ import {
   createSignal,
   resolve,
 } from "../core/signals.ts";
-import { textDelete, textInsert, textLength, textSlice } from "../core/text.ts";
+import {
+  displayWidthToPosition,
+  textDelete,
+  textInsert,
+  textLength,
+  textSlice,
+} from "../core/text.ts";
 
 /**
  * Props for the Input component.
@@ -43,20 +48,6 @@ export interface InputProps {
 
   /** Style overrides */
   style?: Partial<FlexStyle>;
-}
-
-/**
- * Calculate display width of graphemes from start to position.
- */
-function displayWidthToPosition(str: string, pos: number): number {
-  let width = 0;
-  let i = 0;
-  for (const grapheme of graphemes(str)) {
-    if (i >= pos) break;
-    width += graphemeDisplayWidth(grapheme);
-    i++;
-  }
-  return width;
 }
 
 /**

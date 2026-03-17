@@ -20,13 +20,14 @@ export interface RadioOption<T> {
 }
 
 /**
- * Props for the default option renderer.
+ * Props for the option renderer.
+ * Boolean values are accessors to support reactivity.
  */
 export interface RadioOptionRenderProps<T> {
   option: RadioOption<T>;
-  selected: boolean;
-  focused: boolean;
-  disabled: boolean;
+  selected: () => boolean;
+  focused: () => boolean;
+  disabled: () => boolean;
 }
 
 /**
@@ -70,7 +71,7 @@ function defaultRenderOption<T>(props: RadioOptionRenderProps<T>): Node {
     gap: 1,
     children: [
       Text({
-        content: props.selected ? "●" : "○",
+        content: () => (props.selected() ? "●" : "○"),
         dim: props.disabled,
       }),
       Text({
@@ -114,7 +115,6 @@ export function RadioGroup<T>(props: RadioGroupProps<T>): Node {
 
   const getValue = () => resolve(props.value);
   const isDisabled = () => resolve(props.disabled) ?? false;
-  const getDirection = () => resolve(props.direction) ?? "column";
 
   const renderOption = props.renderOption ?? defaultRenderOption;
 
@@ -162,42 +162,20 @@ export function RadioGroup<T>(props: RadioGroupProps<T>): Node {
     return false;
   };
 
-  // Build children reactively by mapping over options
-  const buildChildren = (): Node[] => {
-    const currentValue = getValue();
-    const disabled = isDisabled();
-    const currentFocusedIndex = focusedIndex();
-
-    return props.options.map((opt, index) =>
-      renderOption({
-        option: opt,
-        selected: currentValue === opt.value,
-        focused: currentFocusedIndex === index,
-        disabled,
-      }),
-    );
-  };
-
-  const node: Node = {
-    get style() {
-      return {
-        flexDirection: getDirection(),
-        ...props.style,
-      } as FlexStyle;
-    },
-    get children() {
-      return buildChildren();
-    },
+  return Box({
+    flexDirection: () => resolve(props.direction) ?? "column",
     focusable: props.focusable ?? true,
     autoFocus: props.autoFocus,
     ref: props.ref,
     onKeyPress: handleKeyPress,
-  };
-
-  // Bind ref
-  if (props.ref) {
-    props.ref.current = node;
-  }
-
-  return node;
+    ...props.style,
+    children: props.options.map((opt, index) =>
+      renderOption({
+        option: opt,
+        selected: () => getValue() === opt.value,
+        focused: () => focusedIndex() === index,
+        disabled: isDisabled,
+      }),
+    ),
+  });
 }

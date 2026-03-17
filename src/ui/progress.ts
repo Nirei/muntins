@@ -4,6 +4,10 @@ import type { InheritableColor } from "../core/buffer.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
+import { type MaybeAccessor, resolve } from "../core/signals.ts";
+
+/** Number of sub-cell divisions per cell for smooth progress visualization. */
+const EIGHTHS_PER_CELL = 8;
 
 /**
  * Block characters for sub-cell precision, indexed by eighths (0-8).
@@ -26,27 +30,19 @@ const BLOCKS = [
  */
 export interface ProgressProps {
   /** Progress value from 0 to 100. */
-  value: number | (() => number);
+  value: MaybeAccessor<number>;
 
   /** Total width of the progress bar in cells. Default: 20 */
-  width?: number | (() => number);
+  width?: MaybeAccessor<number>;
 
   /** Color of the filled portion (block characters). */
-  color?: InheritableColor | (() => InheritableColor);
+  color?: MaybeAccessor<InheritableColor>;
 
   /** Background color (visible in empty portion). */
-  backgroundColor?: InheritableColor | (() => InheritableColor);
+  backgroundColor?: MaybeAccessor<InheritableColor>;
 
   /** Style overrides */
   style?: Partial<FlexStyle>;
-}
-
-/**
- * Resolves a value that may be static or a getter function.
- */
-function resolveValue<T>(value: T | (() => T) | undefined, defaultValue: T): T {
-  if (value === undefined) return defaultValue;
-  return typeof value === "function" ? (value as () => T)() : value;
 }
 
 /**
@@ -82,18 +78,20 @@ function clampValue(value: number): number {
 export function Progress(props: ProgressProps): Node {
   const { value, width, color, backgroundColor, style } = props;
 
-  const getValue = (): number => clampValue(resolveValue(value, 0));
-  const getWidth = (): number => resolveValue(width, 20);
+  const getValue = (): number => clampValue(resolve(value) ?? 0);
+  const getWidth = (): number => resolve(width) ?? 20;
 
   // Generate progress bar string reactively
   const getContent = (): string => {
     const barWidth = getWidth();
     const currentValue = getValue();
 
-    // Calculate total eighths filled (8 eighths per cell)
-    const totalEighths = Math.round((currentValue / 100) * barWidth * 8);
-    const fullCells = Math.floor(totalEighths / 8);
-    const remainder = totalEighths % 8;
+    // Calculate total eighths filled
+    const totalEighths = Math.round(
+      (currentValue / 100) * barWidth * EIGHTHS_PER_CELL,
+    );
+    const fullCells = Math.floor(totalEighths / EIGHTHS_PER_CELL);
+    const remainder = totalEighths % EIGHTHS_PER_CELL;
 
     // Build the bar string
     const full = BLOCKS[8].repeat(fullCells);

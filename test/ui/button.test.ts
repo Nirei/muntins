@@ -352,18 +352,17 @@ describe("Button", () => {
       assert.strictEqual(clicked, false);
     });
 
-    it("disabled button renders string children with dim", () => {
+    it("disabled button does not prescribe styling on children", () => {
+      // Button is intentionally unstyled - user controls disabled appearance
       const node = Button({ children: "Disabled", disabled: true });
 
       const textNode = node.children?.[0];
-      assert.ok(textNode?._inheritableProps?.dim);
-
-      // The dim prop should be a getter that returns true
-      const dimValue =
-        typeof textNode._inheritableProps.dim === "function"
-          ? textNode._inheritableProps.dim()
-          : textNode._inheritableProps.dim;
-      assert.strictEqual(dimValue, true);
+      // Text nodes wrapped by Box don't have dim applied automatically
+      assert.ok(textNode);
+      // No dim styling should be applied - that's up to the user
+      const dim = textNode._inheritableProps?.dim;
+      const dimValue = typeof dim === "function" ? dim() : dim;
+      assert.strictEqual(dimValue, undefined);
     });
 
     it("reactive disabled prop updates behavior", () => {

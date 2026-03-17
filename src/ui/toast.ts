@@ -1,8 +1,8 @@
 // Toast component - temporary notification with auto-dismiss
 
 import type { FlexStyle } from "../core/layout.ts";
-import type { Node } from "../core/runtime.ts";
-import { Box, Portal, Text } from "../core/runtime.ts";
+import type { BoxChild, Node } from "../core/runtime.ts";
+import { Box, Portal } from "../core/runtime.ts";
 import { type MaybeAccessor, onCleanup, resolve } from "../core/signals.ts";
 
 /**
@@ -21,7 +21,7 @@ export type ToastPosition =
  */
 export interface ToastProps {
   /** Toast content */
-  children: string | (() => string) | Node | Node[];
+  children: BoxChild | BoxChild[];
 
   /** Duration in ms before auto-dismiss. Default: 3000. 0 = no auto-dismiss */
   duration?: number;
@@ -34,24 +34,6 @@ export interface ToastProps {
 
   /** Style overrides */
   style?: Partial<FlexStyle>;
-}
-
-/**
- * Normalize children to an array of Nodes.
- */
-function resolveChildren(
-  children: string | (() => string) | Node | Node[],
-): Node[] {
-  if (typeof children === "string") {
-    return [Text({ content: children })];
-  }
-  if (typeof children === "function") {
-    return [Text({ content: children })];
-  }
-  if (Array.isArray(children)) {
-    return children;
-  }
-  return [children];
 }
 
 /**
@@ -136,7 +118,7 @@ export function Toast(props: ToastProps): Node {
         position: "absolute",
         ...getPositionStyle(getPosition()),
         ...props.style,
-        children: resolveChildren(props.children),
+        children: props.children,
       }),
     ],
   });

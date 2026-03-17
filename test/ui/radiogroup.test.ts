@@ -387,7 +387,7 @@ describe("RadioGroup", () => {
         options,
         renderOption: (props) =>
           Text({
-            content: props.selected ? "X" : "O",
+            content: () => (props.selected() ? "X" : "O"),
           }),
       });
 

@@ -10,6 +10,9 @@ import { createEffect, createSignal, resolve } from "../core/signals.ts";
 const TRACK_CHAR = "\u2502"; // Light vertical (|)
 const THUMB_CHAR = "\u2503"; // Heavy vertical (|)
 
+/** Default height when height prop resolves to undefined. */
+const DEFAULT_HEIGHT = 10;
+
 /**
  * Props for the ScrollArea component.
  */
@@ -137,7 +140,7 @@ export function ScrollArea(props: ScrollAreaProps): Node {
 
   // Use controlled scrollTop if provided, otherwise use internal state
   const getScrollTop = () => resolve(props.scrollTop) ?? internalOffset();
-  const getHeight = () => resolve(props.height) ?? 10;
+  const getHeight = () => resolve(props.height) ?? DEFAULT_HEIGHT;
   const getWidth = () => resolve(props.width);
 
   // Track content height - we'll compute this from children count

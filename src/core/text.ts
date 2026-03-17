@@ -4,7 +4,12 @@
 // rather than code points or UTF-16 code units. This ensures correct handling
 // of emoji, combining marks, and other multi-code-point characters.
 
-import { graphemeCount, graphemeSlice } from "./buffer.ts";
+import {
+  graphemeCount,
+  graphemeDisplayWidth,
+  graphemeSlice,
+  graphemes,
+} from "./buffer.ts";
 
 /**
  * Get the length of a string in grapheme clusters.
@@ -75,4 +80,32 @@ export function textInsert(text: string, pos: number, insert: string): string {
  */
 export function textDelete(text: string, start: number, end: number): string {
   return graphemeSlice(text, 0, start) + graphemeSlice(text, end);
+}
+
+/**
+ * Calculate display width of graphemes from start of string to a position.
+ *
+ * This accounts for double-width characters (CJK, emoji) when calculating
+ * the visual column position in a terminal.
+ *
+ * @param text - The source string
+ * @param pos - Grapheme position (0-indexed)
+ * @returns Display width in terminal columns
+ *
+ * @example
+ * ```typescript
+ * displayWidthToPosition("hello", 3);  // 3 (ASCII chars are width 1)
+ * displayWidthToPosition("你好", 1);    // 2 (CJK chars are width 2)
+ * displayWidthToPosition("a中b", 2);   // 3 (1 + 2)
+ * ```
+ */
+export function displayWidthToPosition(text: string, pos: number): number {
+  let width = 0;
+  let i = 0;
+  for (const grapheme of graphemes(text)) {
+    if (i >= pos) break;
+    width += graphemeDisplayWidth(grapheme);
+    i++;
+  }
+  return width;
 }
