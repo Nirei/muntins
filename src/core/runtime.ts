@@ -2697,7 +2697,11 @@ function createScheduleFlush(state: RuntimeState): () => void {
 /**
  * Performs relayout and binds any new nodes.
  */
-function doRelayout(state: RuntimeState, scheduleFlush: () => void): void {
+function doRelayout(
+  state: RuntimeState,
+  scheduleFlush: () => void,
+  scheduleRelayout: () => void,
+): void {
   state.relayoutScheduled = false;
 
   const { root, flushState } = state;
@@ -2731,10 +2735,11 @@ function doRelayout(state: RuntimeState, scheduleFlush: () => void): void {
     rootInheritedAccessor,
     rootClipAccessor,
     scheduleFlush,
+    scheduleRelayout,
   );
 
   // Bind new portals
-  bindPortals(root, buffer, scheduleFlush, stdout);
+  bindPortals(root, buffer, scheduleFlush, scheduleRelayout, stdout);
 }
 
 /**
@@ -2744,14 +2749,16 @@ function createScheduleRelayout(
   state: RuntimeState,
   scheduleFlush: () => void,
 ): () => void {
-  return () => {
+  // Create scheduleRelayout closure that captures itself
+  const scheduleRelayout = (): void => {
     if (state.relayoutScheduled) return;
     state.relayoutScheduled = true;
 
     queueMicrotask(() => {
-      doRelayout(state, scheduleFlush);
+      doRelayout(state, scheduleFlush, scheduleRelayout);
     });
   };
+  return scheduleRelayout;
 }
 
 /** Accessor for inherited style values */
@@ -2767,6 +2774,7 @@ function bindNode(
   parentInheritedAccessor: InheritedStyleAccessor,
   parentClipAccessor: Accessor<ClipRect>,
   scheduleFlush: () => void,
+  scheduleRelayout: () => void,
 ): void {
   // Create layout signals if not already present
   if (!node._layout) {
@@ -2796,6 +2804,20 @@ function bindNode(
 
   // Create render effect if node has a render function
   if (node.render && !node._disposeRenderEffect) {
+    // Track previous intrinsic size for nodes with measure
+    // Initialize from current intrinsic size to avoid false positives on first run
+    const initialIntrinsic = node.measure
+      ? node.measure(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY)
+      : { width: layoutResult.width, height: layoutResult.height };
+    let prevIntrinsicW = initialIntrinsic.width;
+    let prevIntrinsicH = initialIntrinsic.height;
+
+    // Track previous render position to mark old area dirty when moving
+    let prevX = layoutResult.screenX;
+    let prevY = layoutResult.screenY;
+    let prevW = layoutResult.width;
+    let prevH = layoutResult.height;
+
     createRoot(
       (dispose) => {
         node._disposeRenderEffect = dispose;
@@ -2804,12 +2826,53 @@ function bindNode(
           const layout = node._layout;
           if (!layout || !node.render) return;
 
-          const x = layout.screenX();
-          const y = layout.screenY();
           const w = layout.width();
           const h = layout.height();
+
+          // Check if intrinsic size changed (for nodes with measure like Text)
+          // Trigger relayout if intrinsic size differs from layout (grow or shrink)
+          if (node.measure) {
+            const intrinsic = node.measure(
+              Number.POSITIVE_INFINITY,
+              Number.POSITIVE_INFINITY,
+            );
+            const intrinsicChanged =
+              intrinsic.width !== prevIntrinsicW ||
+              intrinsic.height !== prevIntrinsicH;
+            prevIntrinsicW = intrinsic.width;
+            prevIntrinsicH = intrinsic.height;
+
+            if (
+              intrinsicChanged &&
+              (intrinsic.width !== w || intrinsic.height !== h)
+            ) {
+              scheduleRelayout();
+              return;
+            }
+          }
+
+          const x = layout.screenX();
+          const y = layout.screenY();
           const inherited = nodeInheritedAccessor();
           const clip = nodeClipAccessor();
+
+          // Fill old position with inherited background if layout changed
+          if (x !== prevX || y !== prevY || w !== prevW || h !== prevH) {
+            buffer.fillRect(
+              prevX,
+              prevY,
+              prevW,
+              prevH,
+              " ",
+              DEFAULT_COLOR,
+              inherited.backgroundColor,
+              0,
+            );
+          }
+          prevX = x;
+          prevY = y;
+          prevW = w;
+          prevH = h;
 
           node.render(x, y, w, h, buffer, inherited, clip);
           scheduleFlush();
@@ -2827,6 +2890,7 @@ function bindNode(
     nodeInheritedAccessor,
     nodeClipAccessor,
     scheduleFlush,
+    scheduleRelayout,
   );
 }
 
@@ -2841,6 +2905,7 @@ function bindChildren(
   inheritedAccessor: InheritedStyleAccessor,
   clipAccessor: Accessor<ClipRect>,
   scheduleFlush: () => void,
+  scheduleRelayout: () => void,
 ): void {
   const children =
     typeof node.children === "function"
@@ -2873,6 +2938,7 @@ function bindChildren(
         wrapperInheritedAccessor,
         clipAccessor,
         scheduleFlush,
+        scheduleRelayout,
       );
     } else if (childLayouts[layoutIndex]) {
       bindNode(
@@ -2882,6 +2948,7 @@ function bindChildren(
         inheritedAccessor,
         clipAccessor,
         scheduleFlush,
+        scheduleRelayout,
       );
       layoutIndex++;
     }
@@ -2900,6 +2967,7 @@ function bindContentsChildren(
   inheritedAccessor: InheritedStyleAccessor,
   clipAccessor: Accessor<ClipRect>,
   scheduleFlush: () => void,
+  scheduleRelayout: () => void,
 ): number {
   const children =
     typeof contentsNode.children === "function"
@@ -2927,6 +2995,7 @@ function bindContentsChildren(
         nestedInheritedAccessor,
         clipAccessor,
         scheduleFlush,
+        scheduleRelayout,
       );
     } else if (layouts[startIndex + consumed]) {
       bindNode(
@@ -2936,6 +3005,7 @@ function bindContentsChildren(
         inheritedAccessor,
         clipAccessor,
         scheduleFlush,
+        scheduleRelayout,
       );
       consumed++;
     }
@@ -3021,6 +3091,7 @@ function bindNewNodes(
   inheritedAccessor: InheritedStyleAccessor,
   clipAccessor: Accessor<ClipRect>,
   scheduleFlush: () => void,
+  scheduleRelayout: () => void,
 ): void {
   const style = typeof node.style === "function" ? node.style() : node.style;
 
@@ -3051,6 +3122,7 @@ function bindNewNodes(
           wrapperInheritedAccessor,
           clipAccessor,
           scheduleFlush,
+          scheduleRelayout,
         );
       } else if (childLayouts[layoutIndex]) {
         bindNewNodes(
@@ -3060,6 +3132,7 @@ function bindNewNodes(
           wrapperInheritedAccessor,
           clipAccessor,
           scheduleFlush,
+          scheduleRelayout,
         );
         layoutIndex++;
       }
@@ -3073,7 +3146,6 @@ function bindNewNodes(
   }
   node._layout.setLayout(layoutResult);
 
-  // Create render effect if needed (not already bound)
   // Create render effect if needed (not already bound)
   if (node.render && !node._disposeRenderEffect) {
     const renderNodeInheritedAccessor: InheritedStyleAccessor = () => {
@@ -3093,6 +3165,20 @@ function bindNewNodes(
       return parentClip;
     };
 
+    // Track previous intrinsic size for nodes with measure
+    // Initialize from current intrinsic size to avoid false positives on first run
+    const initialIntrinsic = node.measure
+      ? node.measure(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY)
+      : { width: layoutResult.width, height: layoutResult.height };
+    let prevIntrinsicW = initialIntrinsic.width;
+    let prevIntrinsicH = initialIntrinsic.height;
+
+    // Track previous render position to mark old area dirty when moving
+    let prevX = layoutResult.screenX;
+    let prevY = layoutResult.screenY;
+    let prevW = layoutResult.width;
+    let prevH = layoutResult.height;
+
     createRoot(
       (dispose) => {
         node._disposeRenderEffect = dispose;
@@ -3101,12 +3187,53 @@ function bindNewNodes(
           const layout = node._layout;
           if (!layout || !node.render) return;
 
-          const x = layout.screenX();
-          const y = layout.screenY();
           const w = layout.width();
           const h = layout.height();
+
+          // Check if intrinsic size changed (for nodes with measure like Text)
+          // Trigger relayout if intrinsic size differs from layout (grow or shrink)
+          if (node.measure) {
+            const intrinsic = node.measure(
+              Number.POSITIVE_INFINITY,
+              Number.POSITIVE_INFINITY,
+            );
+            const intrinsicChanged =
+              intrinsic.width !== prevIntrinsicW ||
+              intrinsic.height !== prevIntrinsicH;
+            prevIntrinsicW = intrinsic.width;
+            prevIntrinsicH = intrinsic.height;
+
+            if (
+              intrinsicChanged &&
+              (intrinsic.width !== w || intrinsic.height !== h)
+            ) {
+              scheduleRelayout();
+              return;
+            }
+          }
+
+          const x = layout.screenX();
+          const y = layout.screenY();
           const inherited = renderNodeInheritedAccessor();
           const clip = renderNodeClipAccessor();
+
+          // Fill old position with inherited background if layout changed
+          if (x !== prevX || y !== prevY || w !== prevW || h !== prevH) {
+            buffer.fillRect(
+              prevX,
+              prevY,
+              prevW,
+              prevH,
+              " ",
+              DEFAULT_COLOR,
+              inherited.backgroundColor,
+              0,
+            );
+          }
+          prevX = x;
+          prevY = y;
+          prevW = w;
+          prevH = h;
 
           node.render(x, y, w, h, buffer, inherited, clip);
           scheduleFlush();
@@ -3155,6 +3282,7 @@ function bindNewNodes(
         nodeInheritedAccessor,
         nodeClipAccessor,
         scheduleFlush,
+        scheduleRelayout,
       );
     } else if (childLayouts[layoutIndex]) {
       bindNewNodes(
@@ -3164,6 +3292,7 @@ function bindNewNodes(
         nodeInheritedAccessor,
         nodeClipAccessor,
         scheduleFlush,
+        scheduleRelayout,
       );
       layoutIndex++;
     }
@@ -3182,6 +3311,7 @@ function bindNewContentsChildren(
   inheritedAccessor: InheritedStyleAccessor,
   clipAccessor: Accessor<ClipRect>,
   scheduleFlush: () => void,
+  scheduleRelayout: () => void,
 ): number {
   const wrapperInheritedAccessor: InheritedStyleAccessor = () => {
     return computeInheritedStyle(contentsNode, inheritedAccessor());
@@ -3207,6 +3337,7 @@ function bindNewContentsChildren(
         wrapperInheritedAccessor,
         clipAccessor,
         scheduleFlush,
+        scheduleRelayout,
       );
     } else if (layouts[startIndex + consumed]) {
       bindNewNodes(
@@ -3216,6 +3347,7 @@ function bindNewContentsChildren(
         wrapperInheritedAccessor,
         clipAccessor,
         scheduleFlush,
+        scheduleRelayout,
       );
       consumed++;
     }
@@ -3254,6 +3386,7 @@ function bindPortals(
   root: Node,
   buffer: Buffer,
   scheduleFlush: () => void,
+  scheduleRelayout: () => void,
   stdout: NodeJS.WriteStream,
 ): void {
   const portals = collectPortalsForBinding(
@@ -3289,6 +3422,7 @@ function bindPortals(
       inheritedAccessor,
       portalClipAccessor,
       scheduleFlush,
+      scheduleRelayout,
     );
   }
 }
@@ -3300,6 +3434,7 @@ function bindPortalsWithStdout(
   root: Node,
   buffer: Buffer,
   scheduleFlush: () => void,
+  scheduleRelayout: () => void,
   stdout: NodeJS.WriteStream,
 ): void {
   const portals = collectPortalsForBinding(
@@ -3335,6 +3470,7 @@ function bindPortalsWithStdout(
       inheritedAccessor,
       portalClipAccessor,
       scheduleFlush,
+      scheduleRelayout,
     );
   }
 }
@@ -3557,10 +3693,17 @@ export function mount(component: () => Node, options?: MountOptions): App {
       rootInheritedAccessor,
       rootClipAccessor,
       scheduleFlush,
+      scheduleRelayout,
     );
 
     // Bind portals separately
-    bindPortalsWithStdout(state.root, buffer, scheduleFlush, stdout);
+    bindPortalsWithStdout(
+      state.root,
+      buffer,
+      scheduleFlush,
+      scheduleRelayout,
+      stdout,
+    );
 
     return dispose;
   });

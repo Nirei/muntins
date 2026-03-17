@@ -3768,3 +3768,203 @@ describe("layout signals", () => {
     app.unmount();
   });
 });
+
+describe("reactive content relayout", () => {
+  it("relayouts when Text content grows beyond initial size", async () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const [count, setCount] = createSignal(0);
+    const textRef = createRef();
+
+    const app = mount(
+      () =>
+        Box({
+          width: 10,
+          justifyContent: "flex-end",
+          children: [
+            Text({
+              content: () => `${count()}`,
+              ref: textRef,
+            }),
+          ],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+        fpsLimit: 0, // Disable throttling for deterministic testing
+      },
+    );
+
+    // Wait for initial render
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+    // Initial layout: "0" has width 1, positioned at x=9 (flex-end in width 10)
+    assert.ok(textRef.current);
+    assert.ok(textRef.current._layout);
+    assert.strictEqual(textRef.current._layout.width(), 1);
+    assert.strictEqual(textRef.current._layout.screenX(), 9);
+
+    // Update to "10" which needs width 2
+    setCount(10);
+
+    // Wait for relayout and render
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+    // After relayout: "10" has width 2, positioned at x=8 (flex-end in width 10)
+    assert.strictEqual(textRef.current._layout.width(), 2);
+    assert.strictEqual(textRef.current._layout.screenX(), 8);
+
+    // Verify both characters are rendered by checking the output contains "10"
+    // The output should have "10" at the end of row 0
+    assert.ok(
+      mockStdout.written.includes("10"),
+      `Expected "10" in output but got: ${mockStdout.written.slice(-100)}`,
+    );
+
+    app.unmount();
+  });
+
+  it("relayouts when Text content shrinks", async () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const [count, setCount] = createSignal(111);
+    const textRef = createRef();
+
+    const app = mount(
+      () =>
+        Box({
+          width: 10,
+          justifyContent: "flex-end",
+          children: [
+            Text({
+              content: () => `${count()}`,
+              ref: textRef,
+            }),
+          ],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+        fpsLimit: 0,
+      },
+    );
+
+    // Wait for initial render
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+    // Initial layout: "111" has width 3, positioned at x=7 (flex-end in width 10)
+    assert.ok(textRef.current);
+    assert.ok(textRef.current._layout);
+    assert.strictEqual(textRef.current._layout.width(), 3);
+    assert.strictEqual(textRef.current._layout.screenX(), 7);
+
+    // Reset output to check what gets rendered after the change
+    mockStdout.written = "";
+
+    // Update to "0" which needs width 1
+    setCount(0);
+
+    // Wait for relayout and render
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+    // After relayout: "0" has width 1, positioned at x=9 (flex-end in width 10)
+    assert.strictEqual(
+      textRef.current._layout.width(),
+      1,
+      "Text width should shrink to 1",
+    );
+    assert.strictEqual(
+      textRef.current._layout.screenX(),
+      9,
+      "Text should move to x=9 (right-aligned)",
+    );
+
+    // Verify only "0" is rendered, not stale "11" characters
+    // The output should NOT contain "111" or "011" patterns
+    assert.ok(
+      !mockStdout.written.includes("11"),
+      `Should not have stale "11" in output: ${mockStdout.written.slice(-100)}`,
+    );
+
+    app.unmount();
+  });
+
+  it("clears stale content when Text shrinks and repositions", async () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const [count, setCount] = createSignal(-34);
+    const textRef = createRef();
+
+    const app = mount(
+      () =>
+        Box({
+          width: 10,
+          justifyContent: "flex-end",
+          backgroundColor: { type: "named", index: 7 }, // White background
+          children: [
+            Text({
+              content: () => `${count()}`,
+              ref: textRef,
+            }),
+          ],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+        fpsLimit: 0,
+      },
+    );
+
+    // Wait for initial render
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+    // Initial layout: "-34" has width 3, positioned at x=7 (flex-end in width 10)
+    assert.ok(textRef.current);
+    assert.ok(textRef.current._layout);
+    assert.strictEqual(textRef.current._layout.width(), 3);
+    assert.strictEqual(textRef.current._layout.screenX(), 7);
+
+    // Reset output to check what gets rendered after the change
+    mockStdout.written = "";
+
+    // Update to "0" which needs width 1
+    setCount(0);
+
+    // Wait for relayout and render
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+    // After relayout: "0" has width 1, positioned at x=9 (flex-end in width 10)
+    assert.strictEqual(textRef.current._layout.width(), 1);
+    assert.strictEqual(textRef.current._layout.screenX(), 9);
+
+    // The old position (x=7,8) should be cleared with the parent's background color
+    // The output must reposition to x=7 or x=8 to clear old content
+    // ANSI cursor position is 1-indexed, so x=7 is column 8, x=8 is column 9
+    const hasPositionAt8 = mockStdout.written.includes("[1;8H");
+    const hasPositionAt9 = mockStdout.written.includes("[1;9H");
+    assert.ok(
+      hasPositionAt8 || hasPositionAt9,
+      `Should emit cursor position to clear old area at x=7 or x=8, got: ${mockStdout.written}`,
+    );
+
+    // The cleared area should have the parent's background color (named index 7 = white = SGR 47)
+    // NOT the default background (49). The sequence should be: position, then 47, then spaces
+    // Bad: [1;8H[49m  (clears with default bg)
+    // Good: [1;8H[47m  (clears with parent's white bg)
+    assert.ok(
+      !mockStdout.written.includes("[1;8H\x1b[49m"),
+      `Should NOT use default background (49) to clear old area, got: ${mockStdout.written}`,
+    );
+
+    app.unmount();
+  });
+});

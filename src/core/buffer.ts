@@ -523,6 +523,24 @@ export class Buffer {
   }
 
   /**
+   * Mark a rectangular region as dirty without modifying cells.
+   * Used to ensure old positions are included in the diff when content moves.
+   */
+  markDirtyRect(x: number, y: number, width: number, height: number): void {
+    const x1 = Math.max(0, x);
+    const y1 = Math.max(0, y);
+    const x2 = Math.min(this._width, x + width);
+    const y2 = Math.min(this._height, y + height);
+
+    if (x1 >= x2 || y1 >= y2) return;
+
+    if (x1 < this._dirtyMinX) this._dirtyMinX = x1;
+    if (y1 < this._dirtyMinY) this._dirtyMinY = y1;
+    if (x2 - 1 > this._dirtyMaxX) this._dirtyMaxX = x2 - 1;
+    if (y2 - 1 > this._dirtyMaxY) this._dirtyMaxY = y2 - 1;
+  }
+
+  /**
    * Set a cell at (x, y) with primitive arguments.
    * Out-of-bounds is a silent no-op.
    */
