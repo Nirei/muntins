@@ -1,7 +1,12 @@
 // Textarea component - multi-line text input with cursor navigation and editing
 
 import type { Buffer, Color } from "../core/buffer.ts";
-import { graphemeDisplayWidth, graphemes } from "../core/buffer.ts";
+import {
+  DIM,
+  INVERSE,
+  graphemeDisplayWidth,
+  graphemes,
+} from "../core/buffer.ts";
 import { type KeyEvent, isPrintable } from "../core/input.ts";
 import { DEFAULT_FLEX_STYLE, type FlexStyle } from "../core/layout.ts";
 import type { InheritedStyle, Node, Ref } from "../core/runtime.ts";
@@ -123,10 +128,6 @@ function posToCharIndex(text: string, graphemePos: number): number {
 
   return charIndex;
 }
-
-// Modifier constants
-const DIM = 2;
-const INVERSE = 32;
 
 /**
  * A multi-line text input field with cursor navigation and editing support.
