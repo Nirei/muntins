@@ -4,6 +4,18 @@
 export type Accessor<T> = () => T;
 export type Setter<T> = (value: T | ((prev: T) => T)) => void;
 
+/**
+ * A value that may be static or wrapped in a reactive accessor.
+ *
+ * When T is a function type, it must be wrapped in an Accessor to distinguish
+ * it from a reactive getter. This prevents resolve() from accidentally calling
+ * a function value instead of returning it.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: required for function type detection
+export type MaybeAccessor<T> = T extends (...args: any[]) => any
+  ? Accessor<T>
+  : T | Accessor<T>;
+
 // State constants (must satisfy Clean < Check < Dirty for stale() comparison)
 const Clean = 0;
 const Check = 1;
@@ -682,9 +694,12 @@ export function onMount(fn: () => void): void {
  *
  * This is the inverse of Accessor - it unwraps a potentially reactive
  * value to get the current concrete value.
+ *
+ * Use with MaybeAccessor<T> in prop types to get compile-time safety
+ * when T could be a function type.
  */
-export function resolve<T>(value: T | Accessor<T>): T;
-export function resolve<T>(value: T | Accessor<T> | undefined): T | undefined;
+export function resolve<T>(value: MaybeAccessor<T>): T;
+export function resolve<T>(value: MaybeAccessor<T> | undefined): T | undefined;
 export function resolve<T>(value: T | Accessor<T> | undefined): T | undefined {
   return typeof value === "function" ? (value as Accessor<T>)() : value;
 }
