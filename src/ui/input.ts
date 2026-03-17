@@ -1,11 +1,6 @@
 // Input component - single-line text input with cursor and editing support
 
-import {
-  graphemeCount,
-  graphemeDisplayWidth,
-  graphemeSlice,
-  graphemes,
-} from "../core/buffer.ts";
+import { graphemeDisplayWidth, graphemes } from "../core/buffer.ts";
 import { type KeyEvent, isPrintable } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
@@ -16,6 +11,7 @@ import {
   createSignal,
   resolve,
 } from "../core/signals.ts";
+import { textDelete, textInsert, textLength, textSlice } from "../core/text.ts";
 
 /**
  * Props for the Input component.
@@ -112,7 +108,7 @@ export function Input(props: InputProps): Node {
   // Clamp cursor when value changes externally
   createEffect(() => {
     const val = getValue();
-    const len = graphemeCount(val);
+    const len = textLength(val);
     if (cursorPos() > len) {
       setCursorPos(len);
     }
@@ -141,7 +137,7 @@ export function Input(props: InputProps): Node {
 
     const val = getValue();
     const pos = cursorPos();
-    const len = graphemeCount(val);
+    const len = textLength(val);
 
     if (key.name === "left") {
       setCursorPos(Math.max(0, pos - 1));
@@ -160,23 +156,21 @@ export function Input(props: InputProps): Node {
       return true;
     }
     if (key.name === "backspace" && pos > 0) {
-      const newVal = graphemeSlice(val, 0, pos - 1) + graphemeSlice(val, pos);
-      props.onChange?.(newVal);
+      props.onChange?.(textDelete(val, pos - 1, pos));
       setCursorPos(pos - 1);
       return true;
     }
     if (key.name === "delete" && pos < len) {
-      const newVal = graphemeSlice(val, 0, pos) + graphemeSlice(val, pos + 1);
-      props.onChange?.(newVal);
+      props.onChange?.(textDelete(val, pos, pos + 1));
       return true;
     }
     if (key.ctrl && key.name === "k") {
-      const newVal = graphemeSlice(val, 0, pos);
+      const newVal = textSlice(val, 0, pos);
       props.onChange?.(newVal);
       return true;
     }
     if (key.ctrl && key.name === "u") {
-      const newVal = graphemeSlice(val, pos);
+      const newVal = textSlice(val, pos);
       props.onChange?.(newVal);
       setCursorPos(0);
       return true;
@@ -186,9 +180,7 @@ export function Input(props: InputProps): Node {
       return true;
     }
     if (isPrintable(key.char)) {
-      const newVal =
-        graphemeSlice(val, 0, pos) + key.char + graphemeSlice(val, pos);
-      props.onChange?.(newVal);
+      props.onChange?.(textInsert(val, pos, key.char));
       setCursorPos(pos + 1);
       return true;
     }
@@ -203,12 +195,12 @@ export function Input(props: InputProps): Node {
   };
 
   // Computed text segments
-  const beforeCursor = () => graphemeSlice(getValue(), 0, cursorPos());
+  const beforeCursor = () => textSlice(getValue(), 0, cursorPos());
   const cursorChar = () => {
-    const char = graphemeSlice(getValue(), cursorPos(), cursorPos() + 1);
+    const char = textSlice(getValue(), cursorPos(), cursorPos() + 1);
     return char || " "; // Space at end of text
   };
-  const afterCursor = () => graphemeSlice(getValue(), cursorPos() + 1);
+  const afterCursor = () => textSlice(getValue(), cursorPos() + 1);
 
   // Show cursor only when focused and not disabled
   const showCursor = () => !isDisabled() && isFocused();

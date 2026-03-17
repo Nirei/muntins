@@ -1,11 +1,7 @@
 // Textarea component - multi-line text input with cursor navigation and editing
 
 import type { Buffer, Color } from "../core/buffer.ts";
-import {
-  graphemeCount,
-  graphemeDisplayWidth,
-  graphemes,
-} from "../core/buffer.ts";
+import { graphemeDisplayWidth, graphemes } from "../core/buffer.ts";
 import { type KeyEvent, isPrintable } from "../core/input.ts";
 import { DEFAULT_FLEX_STYLE, type FlexStyle } from "../core/layout.ts";
 import type { InheritedStyle, Node, Ref } from "../core/runtime.ts";
@@ -17,6 +13,7 @@ import {
   resolve,
   untrack,
 } from "../core/signals.ts";
+import { textLength } from "../core/text.ts";
 import { ScrollArea } from "./scroll-area.ts";
 
 /**
@@ -83,7 +80,7 @@ function posToLineCol(text: string, pos: number): CursorPosition {
   let remaining = pos;
 
   for (let line = 0; line < lines.length; line++) {
-    const lineLen = graphemeCount(lines[line]);
+    const lineLen = textLength(lines[line]);
     if (remaining <= lineLen) {
       return { line, column: remaining };
     }
@@ -92,7 +89,7 @@ function posToLineCol(text: string, pos: number): CursorPosition {
 
   // Past end - return end of last line
   const lastLine = lines.length - 1;
-  return { line: lastLine, column: graphemeCount(lines[lastLine]) };
+  return { line: lastLine, column: textLength(lines[lastLine]) };
 }
 
 /**
@@ -103,22 +100,11 @@ function lineColToPos(text: string, cursor: CursorPosition): number {
   let pos = 0;
 
   for (let i = 0; i < cursor.line && i < lines.length; i++) {
-    pos += graphemeCount(lines[i]) + 1; // +1 for newline
+    pos += textLength(lines[i]) + 1; // +1 for newline
   }
 
   const currentLine = lines[cursor.line] ?? "";
-  return pos + Math.min(cursor.column, graphemeCount(currentLine));
-}
-
-/**
- * Get total grapheme count including newlines.
- */
-function textLength(text: string): number {
-  let count = 0;
-  for (const _ of graphemes(text)) {
-    count++;
-  }
-  return count;
+  return pos + Math.min(cursor.column, textLength(currentLine));
 }
 
 /**
@@ -274,7 +260,7 @@ export function Textarea(props: TextareaProps): Node {
     if (key.name === "up") {
       if (cursorLineCol.line > 0) {
         // Move to previous line, same column or end of line if shorter
-        const prevLineLen = graphemeCount(lines[cursorLineCol.line - 1]);
+        const prevLineLen = textLength(lines[cursorLineCol.line - 1]);
         const newCol = Math.min(cursorLineCol.column, prevLineLen);
         setCursorPos(
           lineColToPos(val, { line: cursorLineCol.line - 1, column: newCol }),
@@ -286,7 +272,7 @@ export function Textarea(props: TextareaProps): Node {
     if (key.name === "down") {
       if (cursorLineCol.line < lines.length - 1) {
         // Move to next line, same column or end of line if shorter
-        const nextLineLen = graphemeCount(lines[cursorLineCol.line + 1]);
+        const nextLineLen = textLength(lines[cursorLineCol.line + 1]);
         const newCol = Math.min(cursorLineCol.column, nextLineLen);
         setCursorPos(
           lineColToPos(val, { line: cursorLineCol.line + 1, column: newCol }),
@@ -303,7 +289,7 @@ export function Textarea(props: TextareaProps): Node {
 
     if (key.name === "end" || (key.ctrl && key.name === "e")) {
       // Move to end of current line
-      const currentLineLen = graphemeCount(lines[cursorLineCol.line]);
+      const currentLineLen = textLength(lines[cursorLineCol.line]);
       setCursorPos(
         lineColToPos(val, { line: cursorLineCol.line, column: currentLineLen }),
       );
@@ -331,7 +317,7 @@ export function Textarea(props: TextareaProps): Node {
       // Delete from cursor to end of current line
       const currentLineEnd = lineColToPos(val, {
         line: cursorLineCol.line,
-        column: graphemeCount(lines[cursorLineCol.line]),
+        column: textLength(lines[cursorLineCol.line]),
       });
 
       if (pos === currentLineEnd && cursorLineCol.line < lines.length - 1) {

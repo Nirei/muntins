@@ -36,6 +36,9 @@ export {
   displayWidth,
 } from "./buffer.ts";
 
+// Text editing utilities
+export { textLength, textSlice, textInsert, textDelete } from "./text.ts";
+
 // Input
 export {
   type KeyEvent,
