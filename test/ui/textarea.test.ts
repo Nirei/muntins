@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { Buffer as RenderBuffer } from "../../src/core/buffer.ts";
 import {
   Box,
+  DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
   createRef,
   mount,
@@ -107,7 +108,7 @@ describe("Textarea", () => {
       assert.ok(node.render);
 
       const buffer = new RenderBuffer(20, 5);
-      node.render(0, 0, 20, 5, buffer, DEFAULT_INHERITED_STYLE);
+      node.render(0, 0, 20, 5, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
 
       assert.strictEqual(buffer.getSymbol(0, 0), "L");
       assert.strictEqual(buffer.getSymbol(1, 0), "i");
@@ -127,7 +128,7 @@ describe("Textarea", () => {
       assert.ok(node.render);
 
       const buffer = new RenderBuffer(30, 5);
-      node.render(0, 0, 30, 5, buffer, DEFAULT_INHERITED_STYLE);
+      node.render(0, 0, 30, 5, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
 
       // Placeholder should be rendered (with dim)
       assert.strictEqual(buffer.getSymbol(0, 0), "E");
@@ -144,13 +145,13 @@ describe("Textarea", () => {
       const buffer = new RenderBuffer(20, 5);
 
       // Initial render
-      node.render(0, 0, 20, 5, buffer, DEFAULT_INHERITED_STYLE);
+      node.render(0, 0, 20, 5, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
       assert.strictEqual(buffer.getSymbol(0, 0), "H");
 
       // Update value
       setValue("World");
       buffer.flush();
-      node.render(0, 0, 20, 5, buffer, DEFAULT_INHERITED_STYLE);
+      node.render(0, 0, 20, 5, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
       assert.strictEqual(buffer.getSymbol(0, 0), "W");
     });
   });

@@ -7,6 +7,7 @@ import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Text, createRef, getActiveContext } from "../core/runtime.ts";
 import {
   type Accessor,
+  type MaybeAccessor,
   createEffect,
   createSignal,
   resolve,
@@ -30,7 +31,7 @@ export interface InputProps {
   width?: number | (() => number);
 
   /** Disable the input */
-  disabled?: boolean | (() => boolean);
+  disabled?: MaybeAccessor<boolean>;
 
   /** Called on Enter key */
   onSubmit?: (value: string) => void;

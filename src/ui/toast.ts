@@ -3,7 +3,7 @@
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node } from "../core/runtime.ts";
 import { Box, Portal, Text } from "../core/runtime.ts";
-import { onCleanup, resolve } from "../core/signals.ts";
+import { type MaybeAccessor, onCleanup, resolve } from "../core/signals.ts";
 
 /**
  * Position options for Toast placement on screen.
@@ -30,7 +30,7 @@ export interface ToastProps {
   onDismiss?: () => void;
 
   /** Position on screen. Default: "bottom-right" */
-  position?: ToastPosition | (() => ToastPosition);
+  position?: MaybeAccessor<ToastPosition>;
 
   /** Style overrides */
   style?: Partial<FlexStyle>;

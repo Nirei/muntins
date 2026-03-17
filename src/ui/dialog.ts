@@ -4,14 +4,14 @@ import type { KeyEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node } from "../core/runtime.ts";
 import { Box, Portal, Show, TabFocus } from "../core/runtime.ts";
-import { resolve } from "../core/signals.ts";
+import { type MaybeAccessor, resolve } from "../core/signals.ts";
 
 /**
  * Props for the Dialog component.
  */
 export interface DialogProps {
   /** Whether the dialog is open */
-  open: boolean | (() => boolean);
+  open: MaybeAccessor<boolean>;
 
   /** Called when dialog should close (Escape key) */
   onClose?: () => void;

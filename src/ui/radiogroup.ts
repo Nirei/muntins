@@ -4,7 +4,12 @@ import type { KeyEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
-import { createEffect, createSignal, resolve } from "../core/signals.ts";
+import {
+  type MaybeAccessor,
+  createEffect,
+  createSignal,
+  resolve,
+} from "../core/signals.ts";
 
 /**
  * An option in a RadioGroup.
@@ -29,7 +34,7 @@ export interface RadioOptionRenderProps<T> {
  */
 export interface RadioGroupProps<T> {
   /** Currently selected value */
-  value: T | (() => T);
+  value: MaybeAccessor<T>;
 
   /** Called when selection changes */
   onChange?: (value: T) => void;
@@ -38,13 +43,13 @@ export interface RadioGroupProps<T> {
   options: Array<RadioOption<T>>;
 
   /** Disable the entire group */
-  disabled?: boolean | (() => boolean);
+  disabled?: MaybeAccessor<boolean>;
 
   /** Render function for option - controls all styling */
   renderOption?: (props: RadioOptionRenderProps<T>) => Node;
 
   /** Layout direction. Default: "column" */
-  direction?: "row" | "column" | (() => "row" | "column");
+  direction?: MaybeAccessor<"row" | "column">;
 
   /** Focus control */
   focusable?: boolean;

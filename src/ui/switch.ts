@@ -4,20 +4,20 @@ import type { KeyEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
-import { resolve } from "../core/signals.ts";
+import { type MaybeAccessor, resolve } from "../core/signals.ts";
 
 /**
  * Props for the Switch component.
  */
 export interface SwitchProps {
   /** Whether the switch is on */
-  checked: boolean | (() => boolean);
+  checked: MaybeAccessor<boolean>;
 
   /** Called when switch state changes */
   onChange?: (checked: boolean) => void;
 
   /** Disable the switch */
-  disabled?: boolean | (() => boolean);
+  disabled?: MaybeAccessor<boolean>;
 
   /** Focus control */
   focusable?: boolean;

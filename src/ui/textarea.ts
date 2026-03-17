@@ -9,10 +9,11 @@ import {
 } from "../core/buffer.ts";
 import { type KeyEvent, isPrintable } from "../core/input.ts";
 import { DEFAULT_FLEX_STYLE, type FlexStyle } from "../core/layout.ts";
-import type { InheritedStyle, Node, Ref } from "../core/runtime.ts";
+import type { ClipRect, InheritedStyle, Node, Ref } from "../core/runtime.ts";
 import { Box, getActiveContext } from "../core/runtime.ts";
 import {
   type Accessor,
+  type MaybeAccessor,
   createEffect,
   createSignal,
   resolve,
@@ -44,7 +45,7 @@ export interface TextareaProps {
   maxHeight?: number | (() => number);
 
   /** Disable the textarea */
-  disabled?: boolean | (() => boolean);
+  disabled?: MaybeAccessor<boolean>;
 
   /** Focus control */
   focusable?: boolean;
@@ -404,6 +405,7 @@ export function Textarea(props: TextareaProps): Node {
       height: number,
       buffer: Buffer,
       inherited: InheritedStyle,
+      _clip: ClipRect,
     ) {
       const val = getValue();
       const placeholder = getPlaceholder();

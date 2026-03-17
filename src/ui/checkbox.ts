@@ -4,20 +4,20 @@ import type { KeyEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
-import { resolve } from "../core/signals.ts";
+import { type MaybeAccessor, resolve } from "../core/signals.ts";
 
 /**
  * Props for the Checkbox component.
  */
 export interface CheckboxProps {
   /** Whether the checkbox is checked */
-  checked: boolean | (() => boolean);
+  checked: MaybeAccessor<boolean>;
 
   /** Called when checked state changes */
   onChange?: (checked: boolean) => void;
 
   /** Disable the checkbox */
-  disabled?: boolean | (() => boolean);
+  disabled?: MaybeAccessor<boolean>;
 
   /** Focus control */
   focusable?: boolean;

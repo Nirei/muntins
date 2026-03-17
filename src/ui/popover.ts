@@ -10,7 +10,7 @@ import {
   createRef,
   getActiveContext,
 } from "../core/runtime.ts";
-import { resolve } from "../core/signals.ts";
+import { type MaybeAccessor, resolve } from "../core/signals.ts";
 
 /**
  * Placement options for the popover relative to its trigger.
@@ -34,7 +34,7 @@ export type PopoverPlacement =
  */
 export interface PopoverProps {
   /** Whether the popover is open */
-  open: boolean | (() => boolean);
+  open: MaybeAccessor<boolean>;
 
   /** Called when popover should close */
   onClose?: () => void;
@@ -46,7 +46,7 @@ export interface PopoverProps {
   children: (anchorProps: { ref: Ref }) => Node;
 
   /** Placement relative to trigger. Default: "bottom-start" */
-  placement?: PopoverPlacement | (() => PopoverPlacement);
+  placement?: MaybeAccessor<PopoverPlacement>;
 
   /** Style overrides for popover container */
   style?: Partial<FlexStyle>;

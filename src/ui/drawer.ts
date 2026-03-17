@@ -4,7 +4,7 @@ import type { KeyEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node } from "../core/runtime.ts";
 import { Box, Portal, Show, TabFocus } from "../core/runtime.ts";
-import { resolve } from "../core/signals.ts";
+import { type MaybeAccessor, resolve } from "../core/signals.ts";
 
 /** Which edge the drawer appears from */
 export type DrawerSide = "left" | "right" | "top" | "bottom";
@@ -14,19 +14,19 @@ export type DrawerSide = "left" | "right" | "top" | "bottom";
  */
 export interface DrawerProps {
   /** Whether the drawer is open */
-  open: boolean | (() => boolean);
+  open: MaybeAccessor<boolean>;
 
   /** Called when drawer should close (Escape key) */
   onClose?: () => void;
 
   /** Which edge the drawer appears from. Default: "right" */
-  side?: DrawerSide | (() => DrawerSide);
+  side?: MaybeAccessor<DrawerSide>;
 
   /** Drawer content */
   children: Node | Node[];
 
   /** Size of the drawer (width for left/right, height for top/bottom) */
-  size?: number | (() => number);
+  size?: MaybeAccessor<number>;
 
   /** Style overrides for the drawer container */
   style?: Partial<FlexStyle>;

@@ -10,9 +10,13 @@ export type Setter<T> = (value: T | ((prev: T) => T)) => void;
  * When T is a function type, it must be wrapped in an Accessor to distinguish
  * it from a reactive getter. This prevents resolve() from accidentally calling
  * a function value instead of returning it.
+ *
+ * The [T] wrapper prevents distributive conditional types - without it,
+ * MaybeAccessor<boolean> would become Accessor<true> | Accessor<false>
+ * instead of the intended boolean | Accessor<boolean>.
  */
 // biome-ignore lint/suspicious/noExplicitAny: required for function type detection
-export type MaybeAccessor<T> = T extends (...args: any[]) => any
+export type MaybeAccessor<T> = [T] extends [(...args: any[]) => any]
   ? Accessor<T>
   : T | Accessor<T>;
 

@@ -4,7 +4,7 @@ import type { KeyEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
-import { createSignal, resolve } from "../core/signals.ts";
+import { type MaybeAccessor, createSignal, resolve } from "../core/signals.ts";
 import { Popover } from "./popover.ts";
 
 /**
@@ -40,7 +40,7 @@ export interface SelectOptionRenderProps<T> {
  */
 export interface SelectProps<T> {
   /** Currently selected value */
-  value: T | (() => T);
+  value: MaybeAccessor<T>;
 
   /** Called when selection changes */
   onChange?: (value: T) => void;
@@ -49,10 +49,10 @@ export interface SelectProps<T> {
   options: SelectOption<T>[];
 
   /** Placeholder when no value selected */
-  placeholder?: string | (() => string);
+  placeholder?: MaybeAccessor<string>;
 
   /** Disable the select */
-  disabled?: boolean | (() => boolean);
+  disabled?: MaybeAccessor<boolean>;
 
   /** Render function for trigger - controls all styling */
   renderTrigger?: (props: SelectTriggerRenderProps) => Node;

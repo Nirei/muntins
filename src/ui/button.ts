@@ -4,7 +4,7 @@ import type { KeyEvent, MouseEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
-import { resolve } from "../core/signals.ts";
+import { type MaybeAccessor, resolve } from "../core/signals.ts";
 
 /**
  * Props for the Button component.
@@ -17,7 +17,7 @@ export interface ButtonProps {
   onClick?: () => void;
 
   /** Disable the button */
-  disabled?: boolean | (() => boolean);
+  disabled?: MaybeAccessor<boolean>;
 
   /** Focus control */
   focusable?: boolean;
