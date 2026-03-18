@@ -2484,94 +2484,6 @@ interface BindableNode {
 }
 
 /**
- * Visitor callbacks for traversing visible (non-contents) nodes.
- */
-interface NodeVisitor<TContext, TResult> {
-  /** Called for each visible node. Returns context for children. */
-  visit: (node: Node, ctx: TContext, result: TResult[]) => TContext;
-  /** Called for contents nodes to derive child context. */
-  contentsContext: (node: Node, ctx: TContext) => TContext;
-}
-
-/**
- * Traverses a node tree, hoisting children of `display: "contents"` nodes.
- * Calls visitor.visit for each visible node, visitor.contentsContext for contents nodes.
- */
-function traverseVisibleNodes<TContext, TResult>(
-  node: Node,
-  context: TContext,
-  visitor: NodeVisitor<TContext, TResult>,
-  result: TResult[],
-): void {
-  const style = resolveNodeStyle(node);
-
-  if (style.display === "contents") {
-    const childCtx = visitor.contentsContext(node, context);
-    for (const child of resolveNodeChildren(node)) {
-      if (child._isPortal) continue;
-      traverseVisibleNodes(child, childCtx, visitor, result);
-    }
-    return;
-  }
-
-  const childCtx = visitor.visit(node, context, result);
-  for (const child of resolveNodeChildren(node)) {
-    if (child._isPortal) continue;
-    traverseVisibleNodes(child, childCtx, visitor, result);
-  }
-}
-
-/** Context for bindable node traversal */
-interface BindableContext {
-  inheritedAccessor: InheritedStyleAccessor;
-  clipAccessor: Accessor<ClipRect>;
-}
-
-/** Visitor for collecting bindable nodes */
-const bindableNodeVisitor: NodeVisitor<BindableContext, BindableNode> = {
-  visit(node, ctx, result) {
-    result.push({
-      node,
-      inheritedAccessor: ctx.inheritedAccessor,
-      clipAccessor: ctx.clipAccessor,
-    });
-
-    // Create accessors for children
-    const nodeInheritedAccessor: InheritedStyleAccessor = () =>
-      computeInheritedStyle(node, ctx.inheritedAccessor());
-
-    const nodeClipAccessor: Accessor<ClipRect> = () => {
-      const parentClip = ctx.clipAccessor();
-      const s = resolveNodeStyle(node);
-      const layout = node._layout;
-      if (s.overflow === "hidden" && layout) {
-        return intersectClipRect(parentClip, {
-          x: layout.screenX(),
-          y: layout.screenY(),
-          width: layout.width(),
-          height: layout.height(),
-        });
-      }
-      return parentClip;
-    };
-
-    return {
-      inheritedAccessor: nodeInheritedAccessor,
-      clipAccessor: nodeClipAccessor,
-    };
-  },
-
-  contentsContext(node, ctx) {
-    const wrapperInheritedAccessor: InheritedStyleAccessor = () =>
-      computeInheritedStyle(node, ctx.inheritedAccessor());
-    return {
-      inheritedAccessor: wrapperInheritedAccessor,
-      clipAccessor: ctx.clipAccessor,
-    };
-  },
-};
-
-/**
  * Flattens a node tree into a list of bindable nodes, hoisting children of
  * `display: "contents"` nodes.
  */
@@ -2581,12 +2493,55 @@ function flattenBindableNodes(
   clipAccessor: Accessor<ClipRect>,
   result: BindableNode[],
 ): void {
-  traverseVisibleNodes(
-    node,
-    { inheritedAccessor, clipAccessor },
-    bindableNodeVisitor,
-    result,
-  );
+  const style = resolveNodeStyle(node);
+
+  if (style.display === "contents") {
+    // Contents nodes pass through inherited style but don't appear in result
+    const wrapperInheritedAccessor: InheritedStyleAccessor = () =>
+      computeInheritedStyle(node, inheritedAccessor());
+    for (const child of resolveNodeChildren(node)) {
+      if (child._isPortal) continue;
+      flattenBindableNodes(
+        child,
+        wrapperInheritedAccessor,
+        clipAccessor,
+        result,
+      );
+    }
+    return;
+  }
+
+  // Add this node to result
+  result.push({ node, inheritedAccessor, clipAccessor });
+
+  // Create accessors for children
+  const childInheritedAccessor: InheritedStyleAccessor = () =>
+    computeInheritedStyle(node, inheritedAccessor());
+
+  const childClipAccessor: Accessor<ClipRect> = () => {
+    const parentClip = clipAccessor();
+    const s = resolveNodeStyle(node);
+    const layout = node._layout;
+    if (s.overflow === "hidden" && layout) {
+      return intersectClipRect(parentClip, {
+        x: layout.screenX(),
+        y: layout.screenY(),
+        width: layout.width(),
+        height: layout.height(),
+      });
+    }
+    return parentClip;
+  };
+
+  for (const child of resolveNodeChildren(node)) {
+    if (child._isPortal) continue;
+    flattenBindableNodes(
+      child,
+      childInheritedAccessor,
+      childClipAccessor,
+      result,
+    );
+  }
 }
 
 /**
@@ -2759,23 +2714,28 @@ function updateAllLayoutSignals(root: Node, layoutResult: LayoutResult): void {
   }
 }
 
-/** Visitor for collecting just nodes (no context needed) */
-const nodeOnlyVisitor: NodeVisitor<void, Node> = {
-  visit(node, _ctx, result) {
-    result.push(node);
-    return undefined;
-  },
-  contentsContext() {
-    return undefined;
-  },
-};
-
 /**
  * Flattens a node tree into a list, hoisting children of `display: "contents"` nodes.
  * Used by updateAllLayoutSignals where we only need the nodes, not accessors.
  */
 function flattenNodes(node: Node, result: Node[]): void {
-  traverseVisibleNodes(node, undefined, nodeOnlyVisitor, result);
+  const style = resolveNodeStyle(node);
+
+  if (style.display === "contents") {
+    // Contents nodes don't appear in result, but their children do
+    for (const child of resolveNodeChildren(node)) {
+      if (child._isPortal) continue;
+      flattenNodes(child, result);
+    }
+    return;
+  }
+
+  result.push(node);
+
+  for (const child of resolveNodeChildren(node)) {
+    if (child._isPortal) continue;
+    flattenNodes(child, result);
+  }
 }
 
 /**
