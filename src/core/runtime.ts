@@ -2437,7 +2437,7 @@ function doRelayout(
   const rootInheritedAccessor: InheritedStyleAccessor = () =>
     DEFAULT_INHERITED_STYLE;
 
-  bindNewNodesFlat(
+  bindNodes(
     root,
     layoutResult,
     buffer,
@@ -2445,6 +2445,7 @@ function doRelayout(
     rootClipAccessor,
     scheduleFlush,
     scheduleRelayout,
+    true, // onlyNew: only bind nodes created by Show/For since last bind
   );
 
   // Bind new portals
@@ -2659,10 +2660,13 @@ function bindSingleNode(
 }
 
 /**
- * Binds all nodes in the tree by flattening both node tree and layout results,
+ * Binds nodes in the tree by flattening both node tree and layout results,
  * then iterating in parallel.
+ *
+ * @param onlyNew - If true, only binds nodes that don't have layout signals yet.
+ *                  Used during relayout to bind newly created nodes (Show/For).
  */
-function bindAllNodes(
+function bindNodes(
   root: Node,
   layoutResult: LayoutResult,
   buffer: Buffer,
@@ -2670,6 +2674,7 @@ function bindAllNodes(
   rootClipAccessor: Accessor<ClipRect>,
   scheduleFlush: () => void,
   scheduleRelayout: () => void,
+  onlyNew = false,
 ): void {
   const bindableNodes: BindableNode[] = [];
   flattenBindableNodes(
@@ -2684,6 +2689,8 @@ function bindAllNodes(
 
   // Parallel iteration - both lists have the same length and order
   for (let i = 0; i < bindableNodes.length; i++) {
+    const { node } = bindableNodes[i];
+    if (onlyNew && node._layout) continue;
     bindSingleNode(
       bindableNodes[i],
       layouts[i],
@@ -2735,45 +2742,6 @@ function flattenNodes(node: Node, result: Node[]): void {
   for (const child of resolveNodeChildren(node)) {
     if (child._isPortal) continue;
     flattenNodes(child, result);
-  }
-}
-
-/**
- * Binds new nodes that don't yet have layout signals (created by Show/For).
- * Uses flattened parallel iteration.
- */
-function bindNewNodesFlat(
-  root: Node,
-  layoutResult: LayoutResult,
-  buffer: Buffer,
-  rootInheritedAccessor: InheritedStyleAccessor,
-  rootClipAccessor: Accessor<ClipRect>,
-  scheduleFlush: () => void,
-  scheduleRelayout: () => void,
-): void {
-  const bindableNodes: BindableNode[] = [];
-  flattenBindableNodes(
-    root,
-    rootInheritedAccessor,
-    rootClipAccessor,
-    bindableNodes,
-  );
-
-  const layouts: LayoutResult[] = [];
-  flattenLayoutResults(layoutResult, root, layouts);
-
-  // Parallel iteration - bind only nodes that don't have layout signals yet
-  for (let i = 0; i < bindableNodes.length; i++) {
-    const { node } = bindableNodes[i];
-    if (!node._layout) {
-      bindSingleNode(
-        bindableNodes[i],
-        layouts[i],
-        buffer,
-        scheduleFlush,
-        scheduleRelayout,
-      );
-    }
   }
 }
 
@@ -2924,7 +2892,7 @@ function bindPortals(
       height: portalStdout.rows,
     });
 
-    bindAllNodes(
+    bindNodes(
       node,
       layout,
       buffer,
@@ -3139,7 +3107,7 @@ export function mount(component: () => Node, options?: MountOptions): App {
       DEFAULT_INHERITED_STYLE;
 
     // Bind phase: create render effects
-    bindAllNodes(
+    bindNodes(
       state.root,
       layoutResult,
       buffer,
