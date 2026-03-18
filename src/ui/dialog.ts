@@ -85,8 +85,6 @@ export function Dialog(props: DialogProps): Node {
     children: () =>
       Portal({
         children: [
-          // Full-screen container for centering
-          // Uses absolute positioning to cover the viewport
           Box({
             position: "absolute",
             top: 0,

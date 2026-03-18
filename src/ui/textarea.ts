@@ -79,7 +79,6 @@ function posToLineCol(text: string, pos: number): CursorPosition {
     remaining -= lineLen + 1; // +1 for newline
   }
 
-  // Past end - return end of last line
   const lastLine = lines.length - 1;
   return { line: lastLine, column: textLength(lines[lastLine]) };
 }
@@ -169,15 +168,12 @@ export function Textarea(props: TextareaProps): Node {
   const getMaxHeight = () => resolve(props.maxHeight);
   const getPlaceholder = () => resolve(props.placeholder) ?? "";
 
-  // Try to get focus accessor from context (may be null in tests)
   const ctx = getActiveContext();
   const focusedNodeAccessor: Accessor<Node | null> | null =
     ctx?.state.focusedNode ?? null;
 
-  // The focusable node that receives keyboard events
   let focusableNode: Node;
 
-  // Clamp cursor when value changes externally
   createEffect(() => {
     const val = getValue();
     const len = textLength(val);
@@ -186,7 +182,6 @@ export function Textarea(props: TextareaProps): Node {
     }
   });
 
-  // Auto-scroll to keep cursor visible
   createEffect(() => {
     const maxHeight = getMaxHeight();
     if (maxHeight === undefined) return; // No scrolling without maxHeight
@@ -194,20 +189,15 @@ export function Textarea(props: TextareaProps): Node {
     const val = getValue();
     const cursorLineCol = posToLineCol(val, cursorPos());
     const cursorLine = cursorLineCol.line;
-    // Read scrollTop without tracking to avoid circular dependency
     const currentScrollTop = untrack(scrollTop);
 
-    // If cursor is above visible area, scroll up
     if (cursorLine < currentScrollTop) {
       setScrollTop(cursorLine);
-    }
-    // If cursor is below visible area, scroll down
-    else if (cursorLine >= currentScrollTop + maxHeight) {
+    } else if (cursorLine >= currentScrollTop + maxHeight) {
       setScrollTop(cursorLine - maxHeight + 1);
     }
   });
 
-  // Clamp scrollTop when content shrinks
   createEffect(() => {
     const maxHeight = getMaxHeight();
     if (maxHeight === undefined) return;
@@ -216,7 +206,6 @@ export function Textarea(props: TextareaProps): Node {
     const lineCount = val.length === 0 ? 1 : val.split("\n").length;
     const maxScroll = Math.max(0, lineCount - maxHeight);
 
-    // Read scrollTop without tracking to avoid circular dependency
     if (untrack(scrollTop) > maxScroll) {
       setScrollTop(maxScroll);
     }
@@ -247,7 +236,6 @@ export function Textarea(props: TextareaProps): Node {
 
     if (key.name === "up") {
       if (cursorLineCol.line > 0) {
-        // Move to previous line, same column or end of line if shorter
         const prevLineLen = textLength(lines[cursorLineCol.line - 1]);
         const newCol = Math.min(cursorLineCol.column, prevLineLen);
         setCursorPos(
@@ -259,7 +247,6 @@ export function Textarea(props: TextareaProps): Node {
 
     if (key.name === "down") {
       if (cursorLineCol.line < lines.length - 1) {
-        // Move to next line, same column or end of line if shorter
         const nextLineLen = textLength(lines[cursorLineCol.line + 1]);
         const newCol = Math.min(cursorLineCol.column, nextLineLen);
         setCursorPos(
@@ -270,13 +257,11 @@ export function Textarea(props: TextareaProps): Node {
     }
 
     if (key.name === "home" || (key.ctrl && key.name === "a")) {
-      // Move to start of current line
       setCursorPos(lineColToPos(val, { line: cursorLineCol.line, column: 0 }));
       return true;
     }
 
     if (key.name === "end" || (key.ctrl && key.name === "e")) {
-      // Move to end of current line
       const currentLineLen = textLength(lines[cursorLineCol.line]);
       setCursorPos(
         lineColToPos(val, { line: cursorLineCol.line, column: currentLineLen }),
@@ -302,19 +287,16 @@ export function Textarea(props: TextareaProps): Node {
     }
 
     if (key.ctrl && key.name === "k") {
-      // Delete from cursor to end of current line
       const currentLineEnd = lineColToPos(val, {
         line: cursorLineCol.line,
         column: textLength(lines[cursorLineCol.line]),
       });
 
       if (pos === currentLineEnd && cursorLineCol.line < lines.length - 1) {
-        // At end of line, delete the newline (join with next line)
         const beforeCursor = val.slice(0, posToCharIndex(val, pos));
         const afterCursor = val.slice(posToCharIndex(val, pos + 1));
         props.onChange?.(beforeCursor + afterCursor);
       } else {
-        // Delete from cursor to end of line
         const beforeCursor = val.slice(0, posToCharIndex(val, pos));
         const afterLine = val.slice(posToCharIndex(val, currentLineEnd));
         props.onChange?.(beforeCursor + afterLine);
@@ -323,7 +305,6 @@ export function Textarea(props: TextareaProps): Node {
     }
 
     if (key.ctrl && key.name === "u") {
-      // Delete from start of current line to cursor
       const currentLineStart = lineColToPos(val, {
         line: cursorLineCol.line,
         column: 0,
@@ -337,7 +318,6 @@ export function Textarea(props: TextareaProps): Node {
     }
 
     if (key.name === "enter") {
-      // Insert newline
       const beforeCursor = val.slice(0, posToCharIndex(val, pos));
       const afterCursor = val.slice(posToCharIndex(val, pos));
       const newVal = `${beforeCursor}\n${afterCursor}`;
@@ -358,13 +338,11 @@ export function Textarea(props: TextareaProps): Node {
     return false;
   };
 
-  // Check if the focusable node is focused (used in render)
   const isFocused = (): boolean => {
     if (!focusedNodeAccessor) return false;
     return focusedNodeAccessor() === focusableNode;
   };
 
-  // Create the content node that renders the text
   const contentNode: Node = {
     get style() {
       const val = getValue();
@@ -401,7 +379,6 @@ export function Textarea(props: TextareaProps): Node {
       const fg = inherited.color;
       const bg = inherited.backgroundColor;
 
-      // Show placeholder when empty
       if (val.length === 0 && placeholder.length > 0) {
         renderTextareaContent(
           buffer,
@@ -419,7 +396,6 @@ export function Textarea(props: TextareaProps): Node {
         return;
       }
 
-      // Render value with cursor
       const showCursor = !disabled && isFocused();
 
       renderTextareaContent(
@@ -441,9 +417,6 @@ export function Textarea(props: TextareaProps): Node {
   const maxHeight = getMaxHeight();
 
   if (maxHeight !== undefined) {
-    // With maxHeight: wrap content in ScrollArea
-    // Use a Box wrapper to be the focusable element
-    // Build props as Record to allow reactive width (Box resolves functions at runtime)
     const boxProps: Record<string, unknown> = {
       width: props.width ?? 40,
       focusable: props.focusable ?? true,
@@ -463,7 +436,6 @@ export function Textarea(props: TextareaProps): Node {
     };
     focusableNode = Box(boxProps as Parameters<typeof Box>[0]);
   } else {
-    // Without maxHeight: content node is the focusable element
     focusableNode = {
       ...contentNode,
       focusable: props.focusable ?? true,
@@ -472,7 +444,6 @@ export function Textarea(props: TextareaProps): Node {
     };
   }
 
-  // Bind ref to the focusable node
   if (props.ref) {
     props.ref.current = focusableNode;
   }
@@ -509,16 +480,13 @@ function renderTextareaContent(
 
       const graphemeWidth = graphemeDisplayWidth(grapheme);
 
-      // Determine modifiers for this grapheme
       let modifiers = dim ? DIM : 0;
       if (showCursor && globalGraphemeIndex === cursorPos) {
         modifiers |= INVERSE;
       }
 
-      // Write grapheme to buffer
       buffer.set(x + col, y + row, grapheme, fg, bg, modifiers);
 
-      // Handle double-width chars
       if (graphemeWidth === 2 && col + 1 < width) {
         buffer.set(x + col + 1, y + row, "", fg, bg, modifiers);
       }
@@ -527,24 +495,20 @@ function renderTextareaContent(
       globalGraphemeIndex++;
     }
 
-    // Draw cursor at end of line if cursor is at end of this line
     if (
       showCursor &&
       globalGraphemeIndex === cursorPos &&
       col < width &&
       row < lines.length - 1
     ) {
-      // Cursor is on the newline character
       buffer.set(x + col, y + row, " ", fg, bg, INVERSE);
     }
 
-    // Account for newline in position tracking (except for last line)
     if (row < lines.length - 1) {
-      globalGraphemeIndex++; // newline
+      globalGraphemeIndex++;
     }
   }
 
-  // Draw cursor at very end of text if it's there and visible
   if (showCursor && cursorPos === textLength(text)) {
     const cursorLineCol = posToLineCol(text, cursorPos);
 

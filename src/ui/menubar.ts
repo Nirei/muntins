@@ -92,7 +92,6 @@ function defaultRenderMenuItem(props: MenuItemRenderProps): Node {
     justifyContent: "space-between",
     gap: 2,
     children: [
-      // Note: props.highlighted is an accessor for reactivity
       Text({ content: props.item.label }),
       Show({
         when: () => props.item.shortcut !== undefined,
@@ -193,7 +192,6 @@ export function Menubar(props: MenubarProps): Node {
 
   const handleKeyPress = (key: KeyEvent): boolean | undefined => {
     if (!isOpen()) {
-      // Menubar navigation
       if (key.name === "left") {
         setFocusedMenuIndex((i) => Math.max(0, i - 1));
         return true;
@@ -204,7 +202,6 @@ export function Menubar(props: MenubarProps): Node {
       }
       if (key.name === "enter" || key.name === "space" || key.name === "down") {
         setActiveMenuIndex(focusedMenuIndex());
-        // Find first non-separator item
         const menu = props.menus[focusedMenuIndex()];
         setHighlightedItemIndex(findNextItem(menu, -1, 1));
         return true;

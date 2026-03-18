@@ -175,7 +175,6 @@ export function measureText(
   const lines = text.split("\n");
 
   if (wrap === "wrap") {
-    // Wrap lines to available width
     const wrappedLines = lines.flatMap((line) =>
       wrapLine(line, availableWidth),
     );
@@ -188,7 +187,6 @@ export function measureText(
     };
   }
 
-  // No wrapping, single line per input line
   const maxWidth = Math.max(...lines.map((line) => lineDisplayWidth(line)));
   return {
     width: Math.min(maxWidth, availableWidth),
@@ -229,7 +227,6 @@ function truncateStart(line: string, maxWidth: number): string {
 
   if (targetWidth <= 0) return ellipsis.slice(0, maxWidth);
 
-  // Collect graphemes in reverse
   const chars = [...graphemes(line)];
   let result = "";
   let width = 0;

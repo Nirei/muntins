@@ -333,7 +333,6 @@ function updateIfNecessary(node: Computation): void {
  * Runs onMount callbacks after initial execution.
  */
 function update(node: Computation): void {
-  // Run cleanups and dispose children before re-executing
   cleanupNode(node);
   updatingNodes.add(node);
 
@@ -541,12 +540,10 @@ export function createEffect(fn: () => void): void {
     effect: true,
   };
 
-  // Register with owner for disposal
   if (currentOwner) {
     currentOwner.children.push(node);
   }
 
-  // Run immediately
   runTopLevelEffect(node);
 }
 

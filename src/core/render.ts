@@ -191,7 +191,6 @@ export function parseBorderProp(border: BorderProp | undefined): {
   }
 
   if (border === true || typeof border === "string") {
-    // All sides
     return { top: true, end: true, bottom: true, start: true };
   }
 
@@ -211,15 +210,8 @@ export function getBorderStyleName(
   border: BorderProp | undefined,
   borderStyle: BorderStyleName | undefined,
 ): BorderStyleName {
-  // borderStyle prop overrides everything
-  if (borderStyle) {
-    return borderStyle;
-  }
-  // If border is a style name string, use it
-  if (typeof border === "string") {
-    return border;
-  }
-  // Default to 'single'
+  if (borderStyle) return borderStyle;
+  if (typeof border === "string") return border;
   return "single";
 }
 
@@ -260,7 +252,6 @@ export function renderBorder(
   const chars = BORDER_CHARS[styleName];
   const { top, end, bottom, start } = borders;
 
-  // Draw horizontal edges
   if (top) {
     const startCol = start ? x + 1 : x;
     const endCol = end ? x + width - 1 : x + width;
@@ -280,7 +271,6 @@ export function renderBorder(
     }
   }
 
-  // Draw vertical edges
   if (start) {
     const startRow = top ? y + 1 : y;
     const endRow = bottom ? y + height - 1 : y + height;
@@ -300,7 +290,6 @@ export function renderBorder(
     }
   }
 
-  // Draw corners using table-driven approach
   const corners: [number, number, boolean, boolean, string, string, string][] =
     [
       [x, y, top, start, chars.tl, chars.h, chars.v], // top-left
@@ -363,7 +352,6 @@ export function renderText(
   inherited: InheritedStyle,
   clip: ClipRect,
 ): void {
-  // Early out if entirely outside clip rect
   if (
     x >= clip.x + clip.width ||
     x + width <= clip.x ||
@@ -373,7 +361,6 @@ export function renderText(
     return;
   }
 
-  // Resolve reactive props with inheritance
   const fg = resolveInheritable(props.color, inherited.color);
   const bg = resolveInheritable(
     props.backgroundColor,
@@ -390,11 +377,9 @@ export function renderText(
 
   for (let row = 0; row < Math.min(displayLines.length, height); row++) {
     const screenY = y + row;
-    // Skip rows outside clip
     if (screenY < clip.y || screenY >= clip.y + clip.height) continue;
 
     const line = displayLines[row];
-    // For each grapheme, check if it's in clip
     let col = x;
     for (const char of graphemes(line)) {
       const charWidth = graphemeDisplayWidth(char);

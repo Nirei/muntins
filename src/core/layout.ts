@@ -344,10 +344,8 @@ export function distribute(total: number, weights: number[]): number[] {
   if (sum === 0) return weights.map(() => 0);
   if (total <= 0) return weights.map(() => 0);
 
-  // Calculate base amounts
   const result = weights.map((w) => Math.floor((w / sum) * total));
 
-  // Distribute remainder to first items
   let remainder = total - result.reduce((a, b) => a + b, 0);
   for (let i = 0; i < result.length && remainder > 0; i++) {
     result[i]++;
@@ -395,7 +393,6 @@ function collectLines(
     return [createLine(visibleChildren, effectiveGap, isRow)];
   }
 
-  // wrap: distribute items into multiple lines
   const lines: FlexLine[] = [];
   let currentItems: LayoutBox[] = [];
   let currentMainSize = 0;
@@ -415,18 +412,15 @@ function collectLines(
     const hasItemsOnLine = currentItems.length > 0;
 
     if (wouldOverflow && hasItemsOnLine) {
-      // Start new line
       lines.push(createLine(currentItems, effectiveGap, isRow));
       currentItems = [child];
       currentMainSize = childTotalMain;
     } else {
-      // Either fits, or this is the first item on the line (must accept it)
       currentItems.push(child);
       currentMainSize += gapBefore + childTotalMain;
     }
   }
 
-  // Don't forget the last line
   if (currentItems.length > 0) {
     lines.push(createLine(currentItems, effectiveGap, isRow));
   }
@@ -448,7 +442,6 @@ function calculateIntrinsicSize(
       ? getWidthPaddingBorder(style)
       : getHeightPaddingBorder(style);
 
-  // Collect visible children (excluding absolute positioned, which are out of flow)
   const visibleChildren: LayoutBox[] = [];
   for (const child of box.children) {
     if (child.style.display === "none") continue;
@@ -588,7 +581,6 @@ function distributeGrowForLine(
 ): void {
   if (availableSpace <= 0) return;
 
-  // Collect flex children and their weights
   const flexChildren: LayoutBox[] = [];
   const weights: number[] = [];
 
@@ -601,7 +593,6 @@ function distributeGrowForLine(
 
   if (flexChildren.length === 0) return;
 
-  // Distribute space proportionally
   const growAmounts = distribute(availableSpace, weights);
 
   // Add grow amount to existing size (not replace!)
@@ -623,7 +614,6 @@ function distributeShrinkForLine(
 ): void {
   if (overflow <= 0) return;
 
-  // Collect shrinkable children and calculate weighted shrink factors
   const shrinkChildren: LayoutBox[] = [];
   const weights: number[] = [];
 
@@ -638,7 +628,6 @@ function distributeShrinkForLine(
 
   if (shrinkChildren.length === 0) return;
 
-  // Distribute shrink amounts proportionally
   const shrinkAmounts = distribute(overflow, weights);
 
   for (let i = 0; i < shrinkChildren.length; i++) {
@@ -686,13 +675,11 @@ function applyJustifyContentForLine(
 
   const remaining = availableMain - line.mainSize;
 
-  // Starting position (after border and padding)
   const borderStart = isRow
     ? borderSize(style.borderStart)
     : borderSize(style.borderTop);
   let pos = (isRow ? style.paddingStart : style.paddingTop) + borderStart;
 
-  // Adjust starting position based on justifyContent
   switch (style.justifyContent) {
     case "flex-start":
       break;
@@ -712,7 +699,6 @@ function applyJustifyContentForLine(
       break;
   }
 
-  // Calculate gap between items
   let gap: number;
 
   if (style.justifyContent === "space-between") {
@@ -725,7 +711,6 @@ function applyJustifyContentForLine(
     gap = style.gap;
   }
 
-  // Position each item along main axis (O(n) with running sum)
   let precedingSize = 0;
   for (let i = 0; i < line.items.length; i++) {
     const child = line.items[i];
@@ -741,7 +726,6 @@ function applyJustifyContentForLine(
       child.y = Math.round(childPos);
     }
 
-    // Accumulate for next iteration
     precedingSize += marginStart + mainSize + marginEnd;
   }
 }
@@ -1136,7 +1120,6 @@ export function computeLayout(
   // 7. Convert to LayoutResult
   const result = toLayoutResult(root);
 
-  // Store in cache
   if (!nodeCache) {
     nodeCache = new Map();
     layoutCache.set(node, nodeCache);

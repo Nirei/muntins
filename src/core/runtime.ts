@@ -767,8 +767,6 @@ export function Box(props: BoxProps): Node {
     ...styleProps
   } = props;
 
-  // Normalize children to always be an array of Nodes
-  // Strings and string accessors are wrapped in Text nodes
   const normalizeChild = (child: BoxChild): Node => {
     if (typeof child === "string") {
       return Text({ content: child });
@@ -785,24 +783,20 @@ export function Box(props: BoxProps): Node {
       : [normalizeChild(childrenProp)]
     : [];
 
-  // Reactive border getter - evaluates border prop (which may be a signal)
   const getBorderFlags = () => {
     const borderValue = typeof border === "function" ? border() : border;
     return parseBorderProp(borderValue);
   };
 
-  // Determine if we need a render function (border prop could be reactive)
   const needsRender = backgroundColor !== undefined || border !== undefined;
 
   const node: Node = {
     get style() {
-      // Resolve any reactive style props
       const resolved: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(styleProps)) {
         resolved[key] =
           typeof value === "function" ? (value as () => unknown)() : value;
       }
-      // Add border flags to FlexStyle for layout (reactive)
       const borderFlags = getBorderFlags();
       return {
         ...DEFAULT_FLEX_STYLE,
@@ -823,16 +817,13 @@ export function Box(props: BoxProps): Node {
     onScroll,
     onHover,
 
-    // Store inheritable props for style resolution during paint
     _inheritableProps: {
       backgroundColor,
       borderColor,
     },
 
-    // Render function when backgroundColor or border is set
     render: needsRender
       ? (x, y, width, height, buffer, inherited, clip) => {
-          // Early out if entirely outside clip rect
           if (
             x >= clip.x + clip.width ||
             x + width <= clip.x ||
@@ -842,16 +833,12 @@ export function Box(props: BoxProps): Node {
             return;
           }
 
-          // Resolve background color with inheritance
           const bg = resolveInheritable(
             backgroundColor,
             inherited.backgroundColor,
           );
 
-          // Render background first (if set or inherited)
-          // Only fill if we have an explicit backgroundColor prop
           if (backgroundColor !== undefined) {
-            // Clip background fill to clip rect
             const fillX = Math.max(x, clip.x);
             const fillY = Math.max(y, clip.y);
             const fillRight = Math.min(x + width, clip.x + clip.width);
@@ -872,7 +859,6 @@ export function Box(props: BoxProps): Node {
             }
           }
 
-          // Render border (if set) - reactive evaluation
           const borderFlags = getBorderFlags();
           const hasBorder =
             borderFlags.top ||
@@ -904,12 +890,10 @@ export function Box(props: BoxProps): Node {
       : undefined,
   };
 
-  // Bind ref
   if (ref) {
     ref.current = node;
   }
 
-  // Set parent references on children for O(depth) tree traversal
   for (const child of children) {
     child._parent = node;
   }
@@ -961,7 +945,6 @@ export function Text(props: TextProps): Node {
     onScroll,
     onHover,
 
-    // Store inheritable props for style resolution during paint
     _inheritableProps: {
       color,
       backgroundColor,
@@ -1010,7 +993,6 @@ export function Text(props: TextProps): Node {
     },
   };
 
-  // Bind ref
   if (ref) {
     ref.current = node;
   }
@@ -1042,14 +1024,11 @@ export function Portal(props: PortalProps): Node {
     : [props.children];
 
   const node: Node = {
-    // Portal uses display: "contents" so it's invisible in layout
-    // (only its children render, and they render at root level)
     style: { ...DEFAULT_FLEX_STYLE, display: "contents" },
     children,
     _isPortal: true,
   };
 
-  // Set parent references on children
   for (const child of children) {
     child._parent = node;
   }
@@ -1078,15 +1057,11 @@ export interface ShowProps<T> {
 export function Show<T>(props: ShowProps<T>): Node {
   const { when: condition, children: childrenBranch, fallback } = props;
 
-  // Capture context for cleanup (may be null if used outside mount)
   const ctx = activeContext;
-
   const children: Node[] = [];
   let currentDispose: (() => void) | null = null;
   let currentChild: Node | null = null;
 
-  // Define container first so children can reference it.
-  // Use display: "contents" so Show doesn't affect parent layout.
   const container: Node = {
     style: { ...DEFAULT_FLEX_STYLE, display: "contents" },
     get children() {
@@ -1094,14 +1069,11 @@ export function Show<T>(props: ShowProps<T>): Node {
     },
   };
 
-  // Helper to clean up previous subtree
   const disposeChild = () => {
     if (currentDispose) {
-      // Clean up focus/hover state before disposing
       if (ctx && currentChild) {
         cleanupSubtreeState(ctx.state, currentChild);
       }
-      // Dispose render effects for the removed subtree
       if (currentChild) {
         disposeSubtreeRenderEffects(currentChild);
       }
@@ -1111,19 +1083,15 @@ export function Show<T>(props: ShowProps<T>): Node {
     }
   };
 
-  // Helper to create child node with proper context
   const createChildNode = (
     factory: () => Node,
     dispose: () => void,
   ): (() => void) => {
-    // Run factory with captured context to support components that need it
-    // (e.g., TabFocus which calls getContext())
     const node = ctx ? withContext(ctx, factory) : factory();
     node._parent = container;
     children.push(node);
     currentChild = node;
 
-    // Register focusable nodes from new subtree
     if (ctx) {
       registerSubtreeFocusables(ctx.state, node);
     }
@@ -1131,33 +1099,25 @@ export function Show<T>(props: ShowProps<T>): Node {
     return dispose;
   };
 
-  // Create a reactive effect that updates the child
   createEffect(() => {
     const value = condition();
 
-    // Dispose previous subtree
     disposeChild();
-
-    // Clear children array
     children.length = 0;
 
-    // Create new subtree in a fresh root
     if (value) {
       currentDispose = createRoot((dispose) =>
         createChildNode(() => childrenBranch(value), dispose),
       );
-      // Schedule relayout to bind new nodes
       ctx?.scheduleRelayout();
     } else if (fallback) {
       currentDispose = createRoot((dispose) =>
         createChildNode(fallback, dispose),
       );
-      // Schedule relayout to bind new nodes
       ctx?.scheduleRelayout();
     }
   });
 
-  // Ensure we clean up when Show itself is disposed
   onCleanup(() => {
     disposeChild();
   });
@@ -1197,18 +1157,11 @@ interface ForItemEntry<T> {
 export function For<T>(props: ForProps<T>): Node {
   const { each: items, render, key: keyFn } = props;
 
-  // Capture context for cleanup (may be null if used outside mount)
   const ctx = activeContext;
-
   const children: Node[] = [];
-  // Map from key to array of entries (supports duplicates)
   const itemRoots: Map<unknown, ForItemEntry<T>[]> = new Map();
-
-  // Key function defaults to identity
   const getKey = keyFn ?? ((item: T) => item);
 
-  // Define container first so children can reference it.
-  // Use display: "contents" so For doesn't affect parent layout.
   const container: Node = {
     style: { ...DEFAULT_FLEX_STYLE, display: "contents" },
     get children() {
@@ -1216,7 +1169,6 @@ export function For<T>(props: ForProps<T>): Node {
     },
   };
 
-  // Helper to dispose an entry with proper focus/hover cleanup
   const disposeEntry = (entry: ForItemEntry<T>) => {
     if (ctx) {
       cleanupSubtreeState(ctx.state, entry.node);
@@ -1227,9 +1179,7 @@ export function For<T>(props: ForProps<T>): Node {
     entry.dispose();
   };
 
-  // Helper to create a new entry with its own detached root.
-  // Detached roots are not children of the effect, so they persist across
-  // effect re-runs. We manage their lifecycle manually via dispose().
+  // Detached roots persist across effect re-runs. We manage lifecycle manually.
   const createEntry = (
     item: T,
     index: number,
@@ -1246,7 +1196,6 @@ export function For<T>(props: ForProps<T>): Node {
         node._parent = container;
         entry = { dispose, node, setItem, setIndex };
 
-        // Add to entries array for this key
         const existing = itemRoots.get(key);
         if (existing) {
           existing.push(entry);
@@ -1254,7 +1203,6 @@ export function For<T>(props: ForProps<T>): Node {
           itemRoots.set(key, [entry]);
         }
 
-        // Register focusable nodes from new subtree
         if (ctx) {
           registerSubtreeFocusables(ctx.state, node);
         }
@@ -1270,17 +1218,13 @@ export function For<T>(props: ForProps<T>): Node {
   createEffect(() => {
     const currentItems = items();
 
-    // Count how many times each key appears in the new array
     const keyCounts = new Map<unknown, number>();
     for (const item of currentItems) {
       const key = getKey(item);
       keyCounts.set(key, (keyCounts.get(key) ?? 0) + 1);
     }
 
-    // Track how many entries we've used per key
     const keyUsed = new Map<unknown, number>();
-
-    // Update children array in new order
     children.length = 0;
 
     for (let i = 0; i < currentItems.length; i++) {
@@ -1291,13 +1235,11 @@ export function For<T>(props: ForProps<T>): Node {
       const usedCount = keyUsed.get(key) ?? 0;
 
       if (entries && usedCount < entries.length) {
-        // Reuse existing entry
         const entry = entries[usedCount];
         entry.setItem(item);
         entry.setIndex(i);
         children.push(entry.node);
       } else {
-        // Create new entry (outside effect ownership)
         const entry = createEntry(item, i, key);
         children.push(entry.node);
       }
@@ -1305,17 +1247,14 @@ export function For<T>(props: ForProps<T>): Node {
       keyUsed.set(key, usedCount + 1);
     }
 
-    // Dispose entries that are no longer needed
     for (const [key, entries] of itemRoots) {
       const needed = keyCounts.get(key) ?? 0;
       if (needed === 0) {
-        // Key no longer exists, dispose all entries
         for (const entry of entries) {
           disposeEntry(entry);
         }
         itemRoots.delete(key);
       } else if (entries.length > needed) {
-        // More entries than needed, dispose excess
         const excess = entries.splice(needed);
         for (const entry of excess) {
           disposeEntry(entry);
@@ -1323,11 +1262,9 @@ export function For<T>(props: ForProps<T>): Node {
       }
     }
 
-    // Schedule relayout to bind new nodes
     ctx?.scheduleRelayout();
   });
 
-  // Ensure we clean up all item roots when For itself is disposed
   onCleanup(() => {
     for (const entries of itemRoots.values()) {
       for (const entry of entries) {
@@ -1362,7 +1299,6 @@ function createFocusScopeNode(
 ): Node {
   const ctx = getContext();
 
-  // Create new scope as child of current
   const scope: FocusScope = {
     parent: ctx.currentScope,
     focusableNodes: [],
@@ -1370,7 +1306,6 @@ function createFocusScopeNode(
     trap: props.trap ?? false,
   };
 
-  // Build children within new scope context
   const childCtx: RuntimeContext = {
     state: ctx.state,
     currentScope: scope,
@@ -1379,13 +1314,9 @@ function createFocusScopeNode(
 
   const node = withContext(childCtx, () => boxFactory(props.children, scope));
 
-  // Store scope reference on node for cleanup and boundary detection
   (node as NodeWithFocusScope)._focusScope = scope;
-
-  // Collect focusable nodes into this scope
   collectFocusableInScope(node, scope);
 
-  // Don't auto-focus here; let initializeFocus handle it after tree construction.
   return node;
 }
 
@@ -1432,8 +1363,6 @@ export function TabFocus(props: TabFocusProps): Node {
 function nodeToLayoutNode(node: Node): LayoutNode {
   const style = resolveNodeStyle(node);
   const children = resolveNodeChildren(node);
-
-  // Filter out portal children - they're laid out separately at root level
   const filteredChildren = children.filter((child) => !child._isPortal);
 
   return {
@@ -1520,15 +1449,13 @@ function routeKeyEvent(state: RuntimeState, event: KeyEvent): void {
   const focused = state.focusedNode();
   if (!focused) return;
 
-  // Build path from focused node to root using parent pointers
   const path = buildPathToRoot(focused);
 
-  // Dispatch from focused node upward (bubbling)
   for (const node of path) {
     if (node.onKeyPress) {
       const consumed = node.onKeyPress(event);
       if (consumed === true) {
-        return; // Event consumed, stop bubbling
+        return;
       }
     }
   }
@@ -1552,7 +1479,6 @@ export function hitTest(
   x: number,
   y: number,
 ): Node | null {
-  // Use screen coordinates for hit testing (mouse x,y are absolute)
   const { screenX, screenY, width, height } = layout;
 
   // Check if point is within this node's bounds
@@ -1568,8 +1494,7 @@ export function hitTest(
   const children = resolveNodeChildren(node);
   const childLayouts = layout.children ?? [];
 
-  // Check children in reverse order for proper z-ordering
-  // Later children are considered "on top" and checked first
+  // Check children in reverse order (later = on top)
   for (let i = children.length - 1; i >= 0; i--) {
     const childLayout = childLayouts[i];
     if (!childLayout) continue;
@@ -1580,7 +1505,6 @@ export function hitTest(
     }
   }
 
-  // No child contains point, return this node
   return node;
 }
 
@@ -1594,10 +1518,8 @@ function routeMouseEvent(state: RuntimeState, event: MouseEvent): void {
   const { root, layoutResult, hoverState } = state;
   if (!layoutResult) return;
 
-  // Find node under cursor
   const target = hitTest(root, layoutResult, event.x, event.y);
 
-  // Update hover state
   if (target !== hoverState.currentNode) {
     if (hoverState.currentNode?.onHover) {
       hoverState.currentNode.onHover(false);
@@ -1608,7 +1530,6 @@ function routeMouseEvent(state: RuntimeState, event: MouseEvent): void {
     hoverState.currentNode = target;
   }
 
-  // Dispatch event to target
   if (!target) return;
 
   switch (event.action) {
@@ -1644,7 +1565,6 @@ function routeScrollEvent(state: RuntimeState, event: ScrollEvent): void {
   const target = hitTest(root, layoutResult, event.x, event.y);
   if (!target) return;
 
-  // Build path from target to root and bubble
   const path = buildPathToRoot(target);
 
   for (const node of path) {
@@ -1666,10 +1586,8 @@ function routePasteEvent(state: RuntimeState, event: PasteEvent): void {
   const focused = state.focusedNode();
   if (!focused) return;
 
-  // Build path from focused node to root for bubbling
   const path = buildPathToRoot(focused);
 
-  // Process each grapheme (not codepoint) to handle emoji correctly
   for (const char of graphemes(event.text)) {
     const keyEvent: KeyEvent = {
       type: "key",
@@ -1681,19 +1599,17 @@ function routePasteEvent(state: RuntimeState, event: PasteEvent): void {
       sequence: char,
     };
 
-    // Bubble the event up the tree
     let consumed = false;
     for (const node of path) {
       if (node.onKeyPress) {
         const result = node.onKeyPress(keyEvent);
         if (result === true) {
           consumed = true;
-          break; // Event consumed, stop bubbling this character
+          break;
         }
       }
     }
 
-    // If a handler consumed the event, stop processing remaining characters
     if (consumed) {
       return;
     }
@@ -1768,21 +1684,16 @@ function collectAllFocusables(node: Node): Node[] {
  * Otherwise, focuses the first focusable node in tree order.
  */
 export function initializeFocus(state: RuntimeState): void {
-  // Clear and collect focusable nodes into root scope
   state.rootScope.focusableNodes = [];
   collectFocusableInScope(state.root, state.rootScope);
 
-  // Search ALL focusables (including nested scopes) for autoFocus or first focusable
   const allFocusables = collectAllFocusables(state.root);
 
   if (allFocusables.length === 0) {
-    return; // Nothing focusable
+    return;
   }
 
-  // Prefer autoFocus node, otherwise use first focusable
   const targetNode = allFocusables.find((n) => n.autoFocus) ?? allFocusables[0];
-
-  // Find which scope contains this node and update its state
   const scope = findScopeForNode(targetNode, state.rootScope);
   const index = scope.focusableNodes.indexOf(targetNode);
   if (index !== -1) {
@@ -1795,7 +1706,6 @@ export function initializeFocus(state: RuntimeState): void {
  * Find the scope that contains a node by traversing scope boundaries.
  */
 function findScopeForNode(target: Node, defaultScope: FocusScope): FocusScope {
-  // Walk up from target to find the nearest scope
   let current: Node | undefined = target;
   while (current) {
     const scope = (current as NodeWithFocusScope)._focusScope;
@@ -1902,7 +1812,6 @@ function createScheduleRelayout(
   state: RuntimeState,
   scheduleFlush: () => void,
 ): () => void {
-  // Create scheduleRelayout closure that captures itself
   const scheduleRelayout = (): void => {
     if (state.relayoutScheduled) return;
     state.relayoutScheduled = true;
@@ -1948,7 +1857,6 @@ function flattenBindableNodes(
   const style = resolveNodeStyle(node);
 
   if (style.display === "contents") {
-    // Contents nodes pass through inherited style but don't appear in result
     const wrapperInheritedAccessor: InheritedStyleAccessor = () =>
       computeInheritedStyle(node, inheritedAccessor());
 
@@ -1974,10 +1882,8 @@ function flattenBindableNodes(
     return;
   }
 
-  // Add this node to result
   result.push({ node, inheritedAccessor, clipAccessor });
 
-  // Create accessors for children
   const childInheritedAccessor: InheritedStyleAccessor = () =>
     computeInheritedStyle(node, inheritedAccessor());
 
@@ -2033,8 +1939,6 @@ function flattenLayoutResultsInner(
   const style = resolveNodeStyle(node);
 
   if (style.display === "contents") {
-    // Contents nodes don't have their own layout - their children are hoisted
-    // Continue consuming from the same layoutChildren array
     let consumed = 0;
     for (const child of resolveNodeChildren(node)) {
       if (child._isPortal) continue;
@@ -2048,13 +1952,11 @@ function flattenLayoutResultsInner(
     return consumed;
   }
 
-  // Non-contents node: consume one layout result
   const layout = layoutChildren[startIndex];
-  if (!layout) return 0; // Safety check
+  if (!layout) return 0;
 
   result.push(layout);
 
-  // Recurse into children using this layout's children
   let childConsumed = 0;
   for (const child of resolveNodeChildren(node)) {
     if (child._isPortal) continue;
@@ -2080,8 +1982,6 @@ function flattenLayoutResults(
   const rootStyle = resolveNodeStyle(root);
 
   if (rootStyle.display === "contents") {
-    // Root is contents - it has a layout box but we don't bind to it
-    // Its children are hoisted as layout.children
     let consumed = 0;
     for (const child of resolveNodeChildren(root)) {
       if (child._isPortal) continue;
@@ -2111,13 +2011,11 @@ function bindSingleNode(
 ): void {
   const { node, inheritedAccessor, clipAccessor } = bindable;
 
-  // Create layout signals if not already present
   if (!node._layout) {
     node._layout = createLayoutSignals();
   }
   node._layout.setLayout(layout);
 
-  // Create render effect if node has a render function
   if (node.render && !node._disposeRenderEffect) {
     createRenderEffect(
       node,
@@ -2163,7 +2061,6 @@ function bindNodes(
   const layouts: LayoutResult[] = [];
   flattenLayoutResults(layoutResult, root, layouts);
 
-  // Bind regular nodes
   for (let i = 0; i < bindableNodes.length; i++) {
     const { node } = bindableNodes[i];
     if (onlyNew && node._layout) continue;
@@ -2176,11 +2073,9 @@ function bindNodes(
     );
   }
 
-  // Bind portal children at root level
   for (const { node, inheritedAccessor } of portals) {
     if (onlyNew && node._layout) continue;
 
-    // Layout portal child as root
     const portalLayoutNode = nodeToLayoutNode(node);
     const portalLayout = computeLayout(
       portalLayoutNode,
@@ -2188,7 +2083,6 @@ function bindNodes(
       stdout.rows,
     );
 
-    // Portal uses full viewport clip
     const portalClipAccessor: Accessor<ClipRect> = () => ({
       x: 0,
       y: 0,
@@ -2196,7 +2090,6 @@ function bindNodes(
       height: stdout.rows,
     });
 
-    // Recursively bind portal subtree (portals can contain portals)
     bindNodes(
       node,
       portalLayout,
@@ -2222,7 +2115,6 @@ function updateAllLayoutSignals(root: Node, layoutResult: LayoutResult): void {
   const layouts: LayoutResult[] = [];
   flattenLayoutResults(layoutResult, root, layouts);
 
-  // Parallel iteration - update layout signals
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i];
     if (node._layout) {
@@ -2239,7 +2131,6 @@ function flattenNodes(node: Node, result: Node[]): void {
   const style = resolveNodeStyle(node);
 
   if (style.display === "contents") {
-    // Contents nodes don't appear in result, but their children do
     for (const child of resolveNodeChildren(node)) {
       if (child._isPortal) continue;
       flattenNodes(child, result);
@@ -2269,15 +2160,11 @@ function createRenderEffect(
   scheduleFlush: () => void,
   scheduleRelayout: () => void,
 ): void {
-  // Track previous intrinsic size for nodes with measure
-  // Initialize from current intrinsic size to avoid false positives on first run
   const initialIntrinsic = node.measure
     ? node.measure(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY)
     : { width: layoutResult.width, height: layoutResult.height };
   let prevIntrinsicW = initialIntrinsic.width;
   let prevIntrinsicH = initialIntrinsic.height;
-
-  // Track previous render position to mark old area dirty when moving
   let prevX = layoutResult.screenX;
   let prevY = layoutResult.screenY;
   let prevW = layoutResult.width;
@@ -2294,8 +2181,6 @@ function createRenderEffect(
         const w = layout.width();
         const h = layout.height();
 
-        // Check if intrinsic size changed (for nodes with measure like Text)
-        // Trigger relayout if intrinsic size differs from layout (grow or shrink)
         if (node.measure) {
           const intrinsic = node.measure(
             Number.POSITIVE_INFINITY,
@@ -2321,7 +2206,6 @@ function createRenderEffect(
         const inherited = inheritedAccessor();
         const clip = clipAccessor();
 
-        // Fill old position with inherited background if layout changed
         if (x !== prevX || y !== prevY || w !== prevW || h !== prevH) {
           buffer.fillRect(
             prevX,
@@ -2351,16 +2235,13 @@ function createRenderEffect(
  * Disposes render effects for a subtree being removed.
  */
 function disposeSubtreeRenderEffects(node: Node): void {
-  // Dispose this node's render effect
   if (node._disposeRenderEffect) {
     node._disposeRenderEffect();
     node._disposeRenderEffect = undefined;
   }
 
-  // Clear stale layout
   node._layout = undefined;
 
-  // Recurse to children
   for (const child of resolveNodeChildren(node)) {
     disposeSubtreeRenderEffects(child);
   }
@@ -2375,28 +2256,22 @@ function handleEvent(
   event: InputEvent,
   scheduleFlush: () => void,
 ): void {
-  // Handle resize: update buffer size and trigger relayout
   if (event.type === "resize") {
     state.flushState.buffer.resize(event.width, event.height);
     state.flushState.buffer.clear();
 
-    // Re-run layout
     const layoutNode = nodeToLayoutNode(state.root);
     const layoutResult = computeLayout(layoutNode, event.width, event.height);
     state.layoutResult = layoutResult;
 
-    // Update layout signals (effects will re-run automatically)
     updateAllLayoutSignals(state.root, layoutResult);
     return;
   }
 
-  // Route event to nodes within a batch
-  // This ensures all signal updates from event handlers are coalesced
+  // Batch ensures all signal updates from event handlers are coalesced
   batch(() => {
     routeEvent(state, event);
   });
-
-  // Effects triggered by signal updates will schedule flush automatically
 }
 
 /**
@@ -2406,27 +2281,18 @@ function unmountState(state: RuntimeState, cleanupHandlers?: () => void): void {
   const { options } = state;
   const { stdout } = options;
 
-  // Remove signal handlers if provided
   if (cleanupHandlers) {
     cleanupHandlers();
   }
 
-  // Clear any pending flush timeout
   if (state.flushState.timeout) {
     clearTimeout(state.flushState.timeout);
     state.flushState.timeout = null;
   }
 
-  // Dispose root (disposes component effects)
   state.rootDispose();
-
-  // Dispose all render effects by walking the tree
   disposeSubtreeRenderEffects(state.root);
-
-  // Destroy input parser (restores terminal input state)
   state.inputParser.destroy();
-
-  // Exit TUI mode (display)
   exitTuiMode(stdout, { alternateScreen: options.alternateScreen });
 }
 
@@ -2444,7 +2310,6 @@ export function mount(component: () => Node, options?: MountOptions): App {
   const opts: Required<MountOptions> = { ...DEFAULT_MOUNT_OPTIONS, ...options };
   const { stdin, stdout } = opts;
 
-  // Create reactive signal for focus tracking
   const [focusedNode, setFocusedNode] = createSignal<Node | null>(null);
 
   const buffer = new Buffer(stdout.columns, stdout.rows);
@@ -2478,14 +2343,11 @@ export function mount(component: () => Node, options?: MountOptions): App {
     stdin,
   };
 
-  // Create schedule closures that capture state
   const scheduleFlush = createScheduleFlush(state);
   const scheduleRelayout = createScheduleRelayout(state, scheduleFlush);
 
-  // Enter TUI mode (display)
   enterTuiMode(stdout, { alternateScreen: opts.alternateScreen });
 
-  // Setup input parsing
   state.inputParser = createInputParser(
     stdin,
     stdout,
@@ -2493,27 +2355,22 @@ export function mount(component: () => Node, options?: MountOptions): App {
     { mouse: opts.mouse },
   );
 
-  // Create runtime context for component construction
   const ctx: RuntimeContext = {
     state,
     currentScope: state.rootScope,
     scheduleRelayout,
   };
 
-  // Build component tree AND bind effects inside the same root
   state.rootDispose = createRoot((dispose) => {
     state.root = withContext(ctx, () => component());
 
-    // Initialize focus
     initializeFocus(state);
 
-    // Initial layout
     buffer.clear();
     const layoutNode = nodeToLayoutNode(state.root);
     const layoutResult = computeLayout(layoutNode, stdout.columns, stdout.rows);
     state.layoutResult = layoutResult;
 
-    // Root clip accessor reads viewport dimensions dynamically (for resize)
     const rootClipAccessor: Accessor<ClipRect> = () => ({
       x: 0,
       y: 0,
@@ -2523,7 +2380,6 @@ export function mount(component: () => Node, options?: MountOptions): App {
     const rootInheritedAccessor: InheritedStyleAccessor = () =>
       DEFAULT_INHERITED_STYLE;
 
-    // Bind phase: create render effects (includes portals)
     bindNodes(
       state.root,
       layoutResult,
@@ -2538,13 +2394,10 @@ export function mount(component: () => Node, options?: MountOptions): App {
     return dispose;
   });
 
-  // Initial flush
   doFlush(state);
 
-  // Track if already unmounted to prevent double cleanup
   let unmounted = false;
 
-  // Setup signal handlers for clean terminal restoration on exit
   const handleExit = () => {
     if (!unmounted) {
       unmounted = true;
@@ -2564,7 +2417,6 @@ export function mount(component: () => Node, options?: MountOptions): App {
     process.exit(1);
   };
 
-  // Store handlers for removal
   const sigintHandler = () => handleSignal("SIGINT");
   const sigtermHandler = () => handleSignal("SIGTERM");
 

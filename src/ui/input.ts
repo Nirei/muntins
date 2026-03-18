@@ -89,15 +89,12 @@ export function Input(props: InputProps): Node {
   const getWidth = () => resolve(props.width) ?? 20;
   const getPlaceholder = () => resolve(props.placeholder) ?? "";
 
-  // Create internal ref to track this node for focus checking
   const internalRef = createRef();
 
-  // Try to get focus accessor from context (may be null in tests)
   const ctx = getActiveContext();
   const focusedNodeAccessor: Accessor<Node | null> | null =
     ctx?.state.focusedNode ?? null;
 
-  // Clamp cursor when value changes externally
   createEffect(() => {
     const val = getValue();
     const len = textLength(val);
@@ -106,7 +103,6 @@ export function Input(props: InputProps): Node {
     }
   });
 
-  // Update scroll offset to keep cursor visible
   createEffect(() => {
     const pos = cursorPos();
     const width = getWidth();
@@ -114,12 +110,9 @@ export function Input(props: InputProps): Node {
     const cursorDisplayPos = displayWidthToPosition(val, pos);
     const offset = scrollOffset();
 
-    // Scroll right if cursor is past visible area
     if (cursorDisplayPos >= offset + width) {
       setScrollOffset(cursorDisplayPos - width + 1);
-    }
-    // Scroll left if cursor is before visible area
-    else if (cursorDisplayPos < offset) {
+    } else if (cursorDisplayPos < offset) {
       setScrollOffset(cursorDisplayPos);
     }
   });
@@ -180,28 +173,20 @@ export function Input(props: InputProps): Node {
     return false;
   };
 
-  // Check if this node is focused
   const isFocused = (): boolean => {
     if (!focusedNodeAccessor) return false;
     return focusedNodeAccessor() === internalRef.current;
   };
 
-  // Computed text segments
   const beforeCursor = () => textSlice(getValue(), 0, cursorPos());
   const cursorChar = () => {
     const char = textSlice(getValue(), cursorPos(), cursorPos() + 1);
     return char || " "; // Space at end of text
   };
   const afterCursor = () => textSlice(getValue(), cursorPos() + 1);
-
-  // Show cursor only when focused and not disabled
   const showCursor = () => !isDisabled() && isFocused();
-
-  // Show placeholder when value is empty
   const showPlaceholder = () =>
     getValue().length === 0 && getPlaceholder().length > 0;
-
-  // Bind external ref if provided
   const boundRef = props.ref ?? internalRef;
 
   return Box({
@@ -214,25 +199,18 @@ export function Input(props: InputProps): Node {
     onKeyPress: handleKeyPress,
     ...props.style,
     children: [
-      // Content container with negative margin for horizontal scrolling
       Box({
         flexDirection: "row",
         marginStart: -scrollOffset(),
         children: showPlaceholder()
-          ? [
-              // Placeholder (dimmed)
-              Text({ content: getPlaceholder, dim: true }),
-            ]
+          ? [Text({ content: getPlaceholder, dim: true })]
           : [
-              // Text before cursor
               Text({ content: beforeCursor, dim: isDisabled }),
-              // Cursor character (inverse when focused)
               Text({
                 content: cursorChar,
                 inverse: showCursor,
                 dim: isDisabled,
               }),
-              // Text after cursor
               Text({ content: afterCursor, dim: isDisabled }),
             ],
       }),

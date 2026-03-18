@@ -150,17 +150,14 @@ export function Select<T>(props: SelectProps<T>): Node {
     if (isDisabled()) return false;
 
     if (!isOpen()) {
-      // Closed: open on Enter/Space/Down
       if (key.name === "enter" || key.name === "space" || key.name === "down") {
         setIsOpen(true);
-        // Find index of currently selected value
         const val = getValue();
         const idx = props.options.findIndex((o) => o.value === val);
         setHighlightedIndex(idx >= 0 ? idx : 0);
         return true;
       }
     } else {
-      // Open: handle navigation and selection
       if (key.name === "escape") {
         setIsOpen(false);
         return true;
@@ -200,7 +197,6 @@ export function Select<T>(props: SelectProps<T>): Node {
     content: () =>
       Box({
         flexDirection: "column",
-        // Note: keyboard events are handled by the trigger, not this Box
         focusable: false,
         children: props.options.map((opt, index) =>
           renderOption({
@@ -226,7 +222,6 @@ export function Select<T>(props: SelectProps<T>): Node {
         ],
       });
 
-      // Bind user's ref if provided
       if (props.ref) {
         props.ref.current = node;
       }

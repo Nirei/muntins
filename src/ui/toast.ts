@@ -103,7 +103,6 @@ export function Toast(props: ToastProps): Node {
   const getPosition = () => resolve(props.position) ?? "bottom-right";
   const duration = props.duration ?? 3000;
 
-  // Auto-dismiss timer
   if (duration !== 0) {
     const timer = setTimeout(() => {
       props.onDismiss?.();

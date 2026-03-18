@@ -670,7 +670,6 @@ export class Buffer {
     const x2 = Math.min(this._width, x + width);
     const y2 = Math.min(this._height, y + height);
 
-    // Early exit if rect is completely outside buffer
     if (x1 >= x2 || y1 >= y2) return;
 
     const packedFg = packColor(fg);
@@ -687,7 +686,6 @@ export class Buffer {
       }
     }
 
-    // Mark the filled region as dirty
     if (x1 < this._dirtyMinX) this._dirtyMinX = x1;
     if (y1 < this._dirtyMinY) this._dirtyMinY = y1;
     if (x2 - 1 > this._dirtyMaxX) this._dirtyMaxX = x2 - 1;
@@ -754,7 +752,6 @@ export class Buffer {
     this.front = this.allocateCells(size);
     this.back = this.allocateCells(size);
 
-    // Mark entire buffer dirty for full redraw
     this._dirtyMinX = 0;
     this._dirtyMinY = 0;
     this._dirtyMaxX = width - 1;
@@ -780,7 +777,6 @@ export class Buffer {
    * Reset for full redraw. Use when terminal state is unknown.
    */
   forceFullRedraw(): void {
-    // Reset front buffer to all defaults (forces full diff)
     for (const cell of this.front) {
       cell.symbol = " ";
       cell.fg = COLOR_DEFAULT;
@@ -793,7 +789,6 @@ export class Buffer {
     this._styleBg = COLOR_DEFAULT;
     this._styleModifiers = 0;
 
-    // Mark entire buffer for scanning
     this._dirtyMinX = 0;
     this._dirtyMinY = 0;
     this._dirtyMaxX = this._width - 1;
@@ -815,15 +810,11 @@ export class Buffer {
           // Skip continuation cells (empty symbol marks continuation of wide char)
           if (curr.symbol === "") continue;
 
-          // Emit cursor move if needed
           if (y !== this._cursorY || x !== this._cursorX) {
             parts.push(`\x1b[${y + 1};${x + 1}H`);
           }
 
-          // Emit style diff
           this.emitStyleDiff(parts, curr);
-
-          // Emit symbol
           parts.push(curr.symbol);
 
           // Track cursor (advances by display width)
@@ -874,7 +865,6 @@ export class Buffer {
       this._styleModifiers = 0;
     }
 
-    // Add new modifiers
     const addedModifiers = cell.modifiers & ~this._styleModifiers;
     if (addedModifiers & BOLD) codes.push(1);
     if (addedModifiers & DIM) codes.push(2);
@@ -885,12 +875,10 @@ export class Buffer {
     if (addedModifiers & HIDDEN) codes.push(8);
     if (addedModifiers & STRIKETHROUGH) codes.push(9);
 
-    // Foreground color
     if (cell.fg !== this._styleFg) {
       this.appendColorCodes(codes, cell.fg, true);
     }
 
-    // Background color
     if (cell.bg !== this._styleBg) {
       this.appendColorCodes(codes, cell.bg, false);
     }

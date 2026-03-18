@@ -136,17 +136,13 @@ export function mapKeypressToEvent(
   char: string | undefined,
   key: ReadlineKey | undefined,
 ): KeyEvent | null {
-  // Handle edge cases
   if (!key && !char) {
     return null;
   }
 
-  // Get the key name, normalize it
   const rawName = key?.name ?? char ?? "";
   const name = normalizeKeyName(rawName);
   const sequence = key?.sequence ?? char ?? "";
-
-  // Determine if char is printable
   const printableChar = isPrintable(char) ? (char as string) : "";
 
   return {
@@ -178,7 +174,6 @@ export function setupKeyboardInput(
   // The keypress events will continue until the process exits.
   readline.emitKeypressEvents(stdin);
 
-  // Handler for keypress events
   const handler = (char: string | undefined, key: ReadlineKey | undefined) => {
     const event = mapKeypressToEvent(char, key);
     if (event) {
@@ -207,31 +202,23 @@ export function setupTerminal(
   stdout: NodeJS.WriteStream,
   options: { mouse?: boolean } = {},
 ): void {
-  // Check TTY
   if (!stdin.isTTY) {
     throw new Error("stdin is not a TTY; raw mode not supported");
   }
 
-  // Enable raw mode
   stdin.setRawMode(true);
 
-  // Build escape sequence
   let seq = "";
 
-  // Mouse tracking (optional)
   if (options.mouse) {
     seq += "\x1b[?1000h"; // Basic mouse press/release
     seq += "\x1b[?1002h"; // Button-event tracking (motion while pressed)
     seq += "\x1b[?1006h"; // SGR extended coordinates
   }
 
-  // Focus reporting
-  seq += "\x1b[?1004h";
+  seq += "\x1b[?1004h"; // Focus reporting
+  seq += "\x1b[?2004h"; // Bracketed paste
 
-  // Bracketed paste
-  seq += "\x1b[?2004h";
-
-  // Write to terminal
   stdout.write(seq);
 }
 
@@ -245,24 +232,15 @@ export function teardownTerminal(
   stdin: NodeJS.ReadStream,
   stdout: NodeJS.WriteStream,
 ): void {
-  // Build reverse sequence
   let seq = "";
-
-  // Disable bracketed paste
-  seq += "\x1b[?2004l";
-
-  // Disable focus reporting
-  seq += "\x1b[?1004l";
-
-  // Disable mouse tracking (all modes)
-  seq += "\x1b[?1006l";
+  seq += "\x1b[?2004l"; // Disable bracketed paste
+  seq += "\x1b[?1004l"; // Disable focus reporting
+  seq += "\x1b[?1006l"; // Disable mouse tracking
   seq += "\x1b[?1002l";
   seq += "\x1b[?1000l";
 
-  // Write to terminal
   stdout.write(seq);
 
-  // Disable raw mode
   if (stdin.isTTY) {
     stdin.setRawMode(false);
   }
@@ -306,21 +284,16 @@ export function parseMouseSequence(
   if (Number.isNaN(button) || Number.isNaN(col) || Number.isNaN(row))
     return null;
 
-  // Extract modifiers
   const shift = (button & 4) !== 0;
   const alt = (button & 8) !== 0;
   const ctrl = (button & 16) !== 0;
   const isMotion = (button & 32) !== 0;
-
-  // Extract base button (bits 0-1, plus bit 6-7 for scroll)
   const baseButton = button & 3;
   const isScroll = (button & 64) !== 0;
-
-  // Convert to 0-indexed coordinates
   const x = col - 1;
   const y = row - 1;
 
-  // Handle scroll events (bits 0-1 encode direction: 0=up, 1=down, 2=left, 3=right)
+  // Scroll: bits 0-1 encode direction (0=up, 1=down, 2=left, 3=right)
   if (isScroll) {
     const directions = ["up", "down", "left", "right"] as const;
     const direction = directions[baseButton];
@@ -335,7 +308,6 @@ export function parseMouseSequence(
     };
   }
 
-  // Handle mouse events
   const action: "press" | "release" | "move" = isMotion
     ? "move"
     : isPress
@@ -540,12 +512,10 @@ export class PasteParser {
           return { text: null, remaining: "", beforePaste };
         }
       }
-      // Incomplete paste, buffer it
       this.pasteBuffer += remaining;
       return { text: null, remaining: "", beforePaste };
     }
 
-    // Complete paste
     this.pasteBuffer += remaining.slice(0, endIdx);
     const text = this.pasteBuffer;
 
@@ -609,17 +579,14 @@ export function createInputParser(
 ): { destroy: () => void } {
   const cleanups: (() => void)[] = [];
 
-  // Setup terminal
   setupTerminal(stdin, stdout, options);
   cleanups.push(() => teardownTerminal(stdin, stdout));
 
-  // Keyboard input (via readline)
   const keyboardCleanup = setupKeyboardInput(stdin, (event) => {
     onEvent(event);
   });
   cleanups.push(keyboardCleanup);
 
-  // Mouse and special sequence parser
   const sequenceParser = new SequenceParser();
   const pasteParser = new PasteParser();
 
@@ -629,7 +596,6 @@ export function createInputParser(
     // Check for paste first (consumes entire paste content)
     const pasteResult = pasteParser.feed(str);
 
-    // Process any data that appeared before the paste
     if (pasteResult.beforePaste) {
       const events = sequenceParser.feed(pasteResult.beforePaste);
       for (const event of events) {
@@ -637,12 +603,10 @@ export function createInputParser(
       }
     }
 
-    // Emit paste event if complete
     if (pasteResult.text !== null) {
       onEvent({ type: "paste", text: pasteResult.text });
     }
 
-    // Parse remaining data for mouse/focus events
     str = pasteResult.remaining;
     if (str) {
       const events = sequenceParser.feed(str);
@@ -655,7 +619,6 @@ export function createInputParser(
   stdin.on("data", dataHandler);
   cleanups.push(() => stdin.off("data", dataHandler));
 
-  // Resize events
   const resizeCleanup = setupResizeHandler(stdout, (event) => {
     onEvent(event);
   });
@@ -671,7 +634,6 @@ export function createInputParser(
     }
   };
 
-  // Register process cleanup
   const unregisterCleanup = registerCleanup(cleanup);
   cleanups.push(unregisterCleanup);
 
@@ -694,7 +656,6 @@ export function createInputParser(
  * @returns Unregister function to remove all handlers (for tests/cleanup)
  */
 export function registerCleanup(cleanup: () => void): () => void {
-  // Track registration to prevent duplicates
   let registered = true;
 
   const onExit = () => {
@@ -723,7 +684,6 @@ export function registerCleanup(cleanup: () => void): () => void {
     process.exit(1);
   };
 
-  // Register handlers
   process.on("exit", onExit);
   process.on("SIGINT", onSigInt);
   process.on("SIGTERM", onSigTerm);
@@ -731,7 +691,6 @@ export function registerCleanup(cleanup: () => void): () => void {
   process.on("uncaughtException", onException);
   process.on("unhandledRejection", onRejection);
 
-  // Return unregister function
   return () => {
     if (!registered) return;
     registered = false;

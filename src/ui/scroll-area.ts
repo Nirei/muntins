@@ -54,24 +54,20 @@ function Scrollbar(props: {
     const contentHeight = props.contentHeight();
     const scrollTop = props.scrollTop();
 
-    // If content fits, show full thumb (no scrolling needed)
     if (contentHeight <= viewportHeight) {
       return THUMB_CHAR.repeat(viewportHeight).split("").join("\n");
     }
 
-    // Calculate thumb size (proportional to viewport/content ratio)
     const thumbHeight = Math.max(
       1,
       Math.floor((viewportHeight * viewportHeight) / contentHeight),
     );
 
-    // Calculate thumb position
     const maxScroll = contentHeight - viewportHeight;
     const trackSpace = viewportHeight - thumbHeight;
     const thumbPosition =
       maxScroll > 0 ? Math.floor((scrollTop * trackSpace) / maxScroll) : 0;
 
-    // Build scrollbar string
     const lines: string[] = [];
     for (let i = 0; i < viewportHeight; i++) {
       if (i >= thumbPosition && i < thumbPosition + thumbHeight) {
@@ -135,24 +131,20 @@ function Scrollbar(props: {
 export function ScrollArea(props: ScrollAreaProps): Node {
   const [internalOffset, setInternalOffset] = createSignal(0);
 
-  // Capture context for scheduling relayout on scroll changes
   const ctx = getActiveContext();
 
-  // Use controlled scrollTop if provided, otherwise use internal state
   const getScrollTop = () => resolve(props.scrollTop) ?? internalOffset();
   const getHeight = () => resolve(props.height) ?? DEFAULT_HEIGHT;
   const getWidth = () => resolve(props.width);
 
-  // Track content height - we'll compute this from children count
   const [contentHeight, setContentHeight] = createSignal(0);
 
-  // Schedule relayout when scroll position changes (marginTop affects layout)
   createEffect(() => {
     getScrollTop(); // Track scroll position
     ctx?.scheduleRelayout();
   });
 
-  const handleScroll = (delta: number) => {
+  const handleScroll = (delta: number): void => {
     const currentOffset = getScrollTop();
     const viewportHeight = getHeight();
     const maxScroll = Math.max(0, contentHeight() - viewportHeight);
@@ -209,30 +201,25 @@ export function ScrollArea(props: ScrollAreaProps): Node {
     handleScroll(delta);
   };
 
-  // Normalize children to an array for passing to Box
   const children = Array.isArray(props.children)
     ? props.children
     : [props.children];
 
-  // Estimate content height for initial state (before first paint)
-  // This is used until onLayout fires with the actual rendered height
   const estimateContentHeight = (): number => {
     let height = 0;
     const countHeight = (node: Node): number => {
       if (node.measure) {
-        // Leaf node with measure function
         const size = node.measure(1000, 1000);
         return size.height;
       }
       if (node.children) {
-        // Container - sum children heights (assuming column direction)
         let total = 0;
         for (const child of node.children) {
           total += countHeight(child);
         }
         return total;
       }
-      return 1; // Default 1 line
+      return 1;
     };
 
     for (const child of children) {
@@ -241,13 +228,10 @@ export function ScrollArea(props: ScrollAreaProps): Node {
     return height;
   };
 
-  // Set initial estimate (will be updated by layout signal)
   setContentHeight(estimateContentHeight());
 
-  // Create ref to track content box layout
   const contentRef = createRef();
 
-  // Content box with negative margin to simulate scrolling
   const contentBox = Box({
     flexDirection: "column",
     marginTop: () => -getScrollTop(),
@@ -255,7 +239,6 @@ export function ScrollArea(props: ScrollAreaProps): Node {
     children,
   });
 
-  // Track content height via layout signals
   createEffect(() => {
     const node = contentRef.current;
     if (node?._layout) {
@@ -276,14 +259,12 @@ export function ScrollArea(props: ScrollAreaProps): Node {
     onScroll: handleScrollEvent,
     ...props.style,
     children: [
-      // Content container with overflow: hidden for clipping
       Box({
         flexGrow: 1,
         overflow: "hidden",
         maxHeight: props.height,
         children: [contentBox],
       }),
-      // Scrollbar
       Scrollbar({
         height: getHeight,
         contentHeight: () => contentHeight(),
