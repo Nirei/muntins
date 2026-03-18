@@ -20,7 +20,7 @@ export function* graphemes(text: string): Generator<string> {
  */
 export function graphemeCount(str: string): number {
   let count = 0;
-  for (const _ of graphemes(str)) {
+  for (const _ of segmenter.segment(str)) {
     count++;
   }
   return count;
@@ -35,6 +35,8 @@ export function graphemeSlice(
   start: number,
   end?: number,
 ): string {
+  if (start === 0 && end === undefined) return str;
+
   let result = "";
   let i = 0;
   for (const grapheme of graphemes(str)) {
@@ -534,10 +536,8 @@ export class Buffer {
 
     if (x1 >= x2 || y1 >= y2) return;
 
-    if (x1 < this._dirtyMinX) this._dirtyMinX = x1;
-    if (y1 < this._dirtyMinY) this._dirtyMinY = y1;
-    if (x2 - 1 > this._dirtyMaxX) this._dirtyMaxX = x2 - 1;
-    if (y2 - 1 > this._dirtyMaxY) this._dirtyMaxY = y2 - 1;
+    this.markDirty(x1, y1);
+    this.markDirty(x2 - 1, y2 - 1);
   }
 
   /**
