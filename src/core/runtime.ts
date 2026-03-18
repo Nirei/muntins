@@ -2445,11 +2445,9 @@ function doRelayout(
     rootClipAccessor,
     scheduleFlush,
     scheduleRelayout,
+    stdout,
     true, // onlyNew: only bind nodes created by Show/For since last bind
   );
-
-  // Bind new portals
-  bindPortals(root, buffer, scheduleFlush, scheduleRelayout, stdout);
 }
 
 /**
@@ -2484,15 +2482,23 @@ interface BindableNode {
   clipAccessor: Accessor<ClipRect>;
 }
 
+/** A portal child node with its inherited style accessor. */
+interface PortalChild {
+  node: Node;
+  inheritedAccessor: InheritedStyleAccessor;
+}
+
 /**
- * Flattens a node tree into a list of bindable nodes, hoisting children of
- * `display: "contents"` nodes.
+ * Flattens a node tree into bindable nodes and portal children.
+ * Hoists children of `display: "contents"` nodes.
+ * Portal children are collected separately for root-level layout.
  */
 function flattenBindableNodes(
   node: Node,
   inheritedAccessor: InheritedStyleAccessor,
   clipAccessor: Accessor<ClipRect>,
   result: BindableNode[],
+  portals: PortalChild[],
 ): void {
   const style = resolveNodeStyle(node);
 
@@ -2500,13 +2506,24 @@ function flattenBindableNodes(
     // Contents nodes pass through inherited style but don't appear in result
     const wrapperInheritedAccessor: InheritedStyleAccessor = () =>
       computeInheritedStyle(node, inheritedAccessor());
+
     for (const child of resolveNodeChildren(node)) {
-      if (child._isPortal) continue;
+      if (child._isPortal) {
+        // Collect portal's children with current inherited style
+        for (const portalChild of resolveNodeChildren(child)) {
+          portals.push({
+            node: portalChild,
+            inheritedAccessor: wrapperInheritedAccessor,
+          });
+        }
+        continue;
+      }
       flattenBindableNodes(
         child,
         wrapperInheritedAccessor,
         clipAccessor,
         result,
+        portals,
       );
     }
     return;
@@ -2535,12 +2552,22 @@ function flattenBindableNodes(
   };
 
   for (const child of resolveNodeChildren(node)) {
-    if (child._isPortal) continue;
+    if (child._isPortal) {
+      // Collect portal's children with current inherited style
+      for (const portalChild of resolveNodeChildren(child)) {
+        portals.push({
+          node: portalChild,
+          inheritedAccessor: childInheritedAccessor,
+        });
+      }
+      continue;
+    }
     flattenBindableNodes(
       child,
       childInheritedAccessor,
       childClipAccessor,
       result,
+      portals,
     );
   }
 }
@@ -2660,8 +2687,9 @@ function bindSingleNode(
 }
 
 /**
- * Binds nodes in the tree by flattening both node tree and layout results,
- * then iterating in parallel.
+ * Binds nodes in the tree including portals.
+ * Flattens both node tree and layout results, then iterates in parallel.
+ * Portal children are collected during traversal and bound at root level.
  *
  * @param onlyNew - If true, only binds nodes that don't have layout signals yet.
  *                  Used during relayout to bind newly created nodes (Show/For).
@@ -2674,20 +2702,23 @@ function bindNodes(
   rootClipAccessor: Accessor<ClipRect>,
   scheduleFlush: () => void,
   scheduleRelayout: () => void,
+  stdout: NodeJS.WriteStream,
   onlyNew = false,
 ): void {
   const bindableNodes: BindableNode[] = [];
+  const portals: PortalChild[] = [];
   flattenBindableNodes(
     root,
     rootInheritedAccessor,
     rootClipAccessor,
     bindableNodes,
+    portals,
   );
 
   const layouts: LayoutResult[] = [];
   flattenLayoutResults(layoutResult, root, layouts);
 
-  // Parallel iteration - both lists have the same length and order
+  // Bind regular nodes
   for (let i = 0; i < bindableNodes.length; i++) {
     const { node } = bindableNodes[i];
     if (onlyNew && node._layout) continue;
@@ -2697,6 +2728,40 @@ function bindNodes(
       buffer,
       scheduleFlush,
       scheduleRelayout,
+    );
+  }
+
+  // Bind portal children at root level
+  for (const { node, inheritedAccessor } of portals) {
+    if (onlyNew && node._layout) continue;
+
+    // Layout portal child as root
+    const portalLayoutNode = nodeToLayoutNode(node);
+    const portalLayout = computeLayout(
+      portalLayoutNode,
+      stdout.columns,
+      stdout.rows,
+    );
+
+    // Portal uses full viewport clip
+    const portalClipAccessor: Accessor<ClipRect> = () => ({
+      x: 0,
+      y: 0,
+      width: stdout.columns,
+      height: stdout.rows,
+    });
+
+    // Recursively bind portal subtree (portals can contain portals)
+    bindNodes(
+      node,
+      portalLayout,
+      buffer,
+      inheritedAccessor,
+      portalClipAccessor,
+      scheduleFlush,
+      scheduleRelayout,
+      stdout,
+      onlyNew,
     );
   }
 }
@@ -2857,99 +2922,6 @@ function disposeSubtreeRenderEffects(node: Node): void {
 }
 
 /**
- * Collects portals and binds them at root level (used during relayout).
- */
-function bindPortals(
-  root: Node,
-  buffer: Buffer,
-  scheduleFlush: () => void,
-  scheduleRelayout: () => void,
-  stdout: NodeJS.WriteStream,
-): void {
-  const portals = collectPortalsForBinding(
-    root,
-    () => DEFAULT_INHERITED_STYLE,
-    stdout,
-  );
-
-  for (const { node, inheritedAccessor, stdout: portalStdout } of portals) {
-    // Skip if already bound
-    if (node._layout) continue;
-
-    // Layout this portal child as if it were a root
-    const layoutNode = nodeToLayoutNode(node);
-    const layout = computeLayout(
-      layoutNode,
-      portalStdout.columns,
-      portalStdout.rows,
-    );
-
-    // Portal uses full viewport clip
-    const portalClipAccessor: Accessor<ClipRect> = () => ({
-      x: 0,
-      y: 0,
-      width: portalStdout.columns,
-      height: portalStdout.rows,
-    });
-
-    bindNodes(
-      node,
-      layout,
-      buffer,
-      inheritedAccessor,
-      portalClipAccessor,
-      scheduleFlush,
-      scheduleRelayout,
-    );
-  }
-}
-
-/**
- * Collects portal children with their inherited style accessors.
- */
-function collectPortalsForBinding(
-  node: Node,
-  inheritedAccessor: InheritedStyleAccessor,
-  stdout: NodeJS.WriteStream,
-): Array<{
-  node: Node;
-  inheritedAccessor: InheritedStyleAccessor;
-  stdout: NodeJS.WriteStream;
-}> {
-  const portals: Array<{
-    node: Node;
-    inheritedAccessor: InheritedStyleAccessor;
-    stdout: NodeJS.WriteStream;
-  }> = [];
-
-  // Compute this node's inherited style accessor
-  const nodeInheritedAccessor: InheritedStyleAccessor = () => {
-    return computeInheritedStyle(node, inheritedAccessor());
-  };
-
-  // If this is a portal, collect its children
-  if (node._isPortal) {
-    for (const child of resolveNodeChildren(node)) {
-      portals.push({
-        node: child,
-        inheritedAccessor: nodeInheritedAccessor,
-        stdout,
-      });
-    }
-  }
-
-  const children = resolveNodeChildren(node);
-
-  for (const child of children) {
-    portals.push(
-      ...collectPortalsForBinding(child, nodeInheritedAccessor, stdout),
-    );
-  }
-
-  return portals;
-}
-
-/**
  * Handle incoming input events.
  * Resize events trigger relayout; others route events (effects handle rendering).
  */
@@ -3106,7 +3078,7 @@ export function mount(component: () => Node, options?: MountOptions): App {
     const rootInheritedAccessor: InheritedStyleAccessor = () =>
       DEFAULT_INHERITED_STYLE;
 
-    // Bind phase: create render effects
+    // Bind phase: create render effects (includes portals)
     bindNodes(
       state.root,
       layoutResult,
@@ -3115,10 +3087,8 @@ export function mount(component: () => Node, options?: MountOptions): App {
       rootClipAccessor,
       scheduleFlush,
       scheduleRelayout,
+      stdout,
     );
-
-    // Bind portals separately
-    bindPortals(state.root, buffer, scheduleFlush, scheduleRelayout, stdout);
 
     return dispose;
   });
