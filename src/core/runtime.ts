@@ -2485,7 +2485,7 @@ function doRelayout(
   state.layoutResult = layoutResult;
 
   // Update existing nodes' layout signals
-  updateLayoutSignals(root, layoutResult);
+  updateAllLayoutSignals(root, layoutResult);
 
   // Bind any new nodes (created by Show/For since last bind)
   const rootClipAccessor: Accessor<ClipRect> = () => ({
@@ -2497,7 +2497,7 @@ function doRelayout(
   const rootInheritedAccessor: InheritedStyleAccessor = () =>
     DEFAULT_INHERITED_STYLE;
 
-  bindNewNodes(
+  bindNewNodesFlat(
     root,
     layoutResult,
     buffer,
@@ -2532,6 +2532,319 @@ function createScheduleRelayout(
 
 /** Accessor for inherited style values */
 type InheritedStyleAccessor = Accessor<InheritedStyle>;
+
+/**
+ * A bindable node with its context (parent accessors).
+ * Used for parallel iteration with flattened layout results.
+ */
+interface BindableNode {
+  node: Node;
+  inheritedAccessor: InheritedStyleAccessor;
+  clipAccessor: Accessor<ClipRect>;
+}
+
+/**
+ * Flattens a node tree into a list of bindable nodes, hoisting children of
+ * `display: "contents"` nodes. The resulting list matches the structure
+ * produced by layout's `collectLayoutChildren`.
+ *
+ * @param node - The node to flatten (and recurse into)
+ * @param inheritedAccessor - Parent's inherited style accessor
+ * @param clipAccessor - Parent's clip rect accessor
+ * @param result - Array to append bindable nodes to
+ */
+function flattenBindableNodes(
+  node: Node,
+  inheritedAccessor: InheritedStyleAccessor,
+  clipAccessor: Accessor<ClipRect>,
+  result: BindableNode[],
+): void {
+  const style = resolveNodeStyle(node);
+
+  if (style.display === "contents") {
+    // Contents nodes are invisible - pass through to children with updated inherited style
+    const wrapperInheritedAccessor: InheritedStyleAccessor = () =>
+      computeInheritedStyle(node, inheritedAccessor());
+
+    for (const child of resolveNodeChildren(node)) {
+      if (child._isPortal) continue;
+      flattenBindableNodes(
+        child,
+        wrapperInheritedAccessor,
+        clipAccessor,
+        result,
+      );
+    }
+    return;
+  }
+
+  // Non-contents node: add to result
+  result.push({ node, inheritedAccessor, clipAccessor });
+
+  // Create accessors for children
+  const nodeInheritedAccessor: InheritedStyleAccessor = () =>
+    computeInheritedStyle(node, inheritedAccessor());
+
+  const nodeClipAccessor: Accessor<ClipRect> = () => {
+    const parentClip = clipAccessor();
+    const s = resolveNodeStyle(node);
+    const layout = node._layout;
+    if (s.overflow === "hidden" && layout) {
+      const x = layout.screenX();
+      const y = layout.screenY();
+      const w = layout.width();
+      const h = layout.height();
+      return intersectClipRect(parentClip, { x, y, width: w, height: h });
+    }
+    return parentClip;
+  };
+
+  // Recurse into children
+  for (const child of resolveNodeChildren(node)) {
+    if (child._isPortal) continue;
+    flattenBindableNodes(
+      child,
+      nodeInheritedAccessor,
+      nodeClipAccessor,
+      result,
+    );
+  }
+}
+
+/**
+ * Flattens a LayoutResult tree into a list matching the order produced by
+ * `flattenBindableNodes`. Traverses node tree and layout tree in parallel,
+ * skipping contents nodes (which don't have layout results).
+ *
+ * Returns the number of layout results consumed from the layoutChildren array.
+ */
+function flattenLayoutResultsInner(
+  node: Node,
+  layoutChildren: LayoutResult[],
+  startIndex: number,
+  result: LayoutResult[],
+): number {
+  const style = resolveNodeStyle(node);
+
+  if (style.display === "contents") {
+    // Contents nodes don't have their own layout - their children are hoisted
+    // Continue consuming from the same layoutChildren array
+    let consumed = 0;
+    for (const child of resolveNodeChildren(node)) {
+      if (child._isPortal) continue;
+      consumed += flattenLayoutResultsInner(
+        child,
+        layoutChildren,
+        startIndex + consumed,
+        result,
+      );
+    }
+    return consumed;
+  }
+
+  // Non-contents node: consume one layout result
+  const layout = layoutChildren[startIndex];
+  if (!layout) return 0; // Safety check
+
+  result.push(layout);
+
+  // Recurse into children using this layout's children
+  let childConsumed = 0;
+  for (const child of resolveNodeChildren(node)) {
+    if (child._isPortal) continue;
+    childConsumed += flattenLayoutResultsInner(
+      child,
+      layout.children,
+      childConsumed,
+      result,
+    );
+  }
+
+  return 1; // We consumed one layout result from layoutChildren
+}
+
+/**
+ * Flattens a LayoutResult tree into a list matching `flattenBindableNodes`.
+ */
+function flattenLayoutResults(
+  layoutResult: LayoutResult,
+  root: Node,
+  result: LayoutResult[],
+): void {
+  const rootStyle = resolveNodeStyle(root);
+
+  if (rootStyle.display === "contents") {
+    // Root is contents - it has a layout box but we don't bind to it
+    // Its children are hoisted as layout.children
+    let consumed = 0;
+    for (const child of resolveNodeChildren(root)) {
+      if (child._isPortal) continue;
+      consumed += flattenLayoutResultsInner(
+        child,
+        layoutResult.children,
+        consumed,
+        result,
+      );
+    }
+  } else {
+    // Normal root - bind to it and recurse
+    flattenLayoutResultsInner(root, [layoutResult], 0, result);
+  }
+}
+
+/**
+ * Binds a single node with its layout result.
+ * Creates layout signals and render effect if needed.
+ */
+function bindSingleNode(
+  bindable: BindableNode,
+  layout: LayoutResult,
+  buffer: Buffer,
+  scheduleFlush: () => void,
+  scheduleRelayout: () => void,
+): void {
+  const { node, inheritedAccessor, clipAccessor } = bindable;
+
+  // Create layout signals if not already present
+  if (!node._layout) {
+    node._layout = createLayoutSignals();
+  }
+  node._layout.setLayout(layout);
+
+  // Create render effect if node has a render function
+  if (node.render && !node._disposeRenderEffect) {
+    createRenderEffect(
+      node,
+      layout,
+      buffer,
+      inheritedAccessor,
+      clipAccessor,
+      scheduleFlush,
+      scheduleRelayout,
+    );
+  }
+}
+
+/**
+ * Binds all nodes in the tree by flattening both node tree and layout results,
+ * then iterating in parallel.
+ */
+function bindAllNodes(
+  root: Node,
+  layoutResult: LayoutResult,
+  buffer: Buffer,
+  rootInheritedAccessor: InheritedStyleAccessor,
+  rootClipAccessor: Accessor<ClipRect>,
+  scheduleFlush: () => void,
+  scheduleRelayout: () => void,
+): void {
+  const bindableNodes: BindableNode[] = [];
+  flattenBindableNodes(
+    root,
+    rootInheritedAccessor,
+    rootClipAccessor,
+    bindableNodes,
+  );
+
+  const layouts: LayoutResult[] = [];
+  flattenLayoutResults(layoutResult, root, layouts);
+
+  // Parallel iteration - both lists have the same length and order
+  for (let i = 0; i < bindableNodes.length; i++) {
+    bindSingleNode(
+      bindableNodes[i],
+      layouts[i],
+      buffer,
+      scheduleFlush,
+      scheduleRelayout,
+    );
+  }
+}
+
+/**
+ * Updates layout signals for all existing nodes.
+ * Uses flattened parallel iteration.
+ */
+function updateAllLayoutSignals(root: Node, layoutResult: LayoutResult): void {
+  const nodes: Node[] = [];
+  flattenNodes(root, nodes);
+
+  const layouts: LayoutResult[] = [];
+  flattenLayoutResults(layoutResult, root, layouts);
+
+  // Parallel iteration - update layout signals
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    if (node._layout) {
+      node._layout.setLayout(layouts[i]);
+    }
+  }
+}
+
+/**
+ * Flattens a node tree into a list, hoisting children of `display: "contents"` nodes.
+ * Used by updateAllLayoutSignals where we only need the nodes, not accessors.
+ */
+function flattenNodes(node: Node, result: Node[]): void {
+  const style = resolveNodeStyle(node);
+
+  if (style.display === "contents") {
+    // Contents nodes are invisible - pass through to children
+    for (const child of resolveNodeChildren(node)) {
+      if (child._isPortal) continue;
+      flattenNodes(child, result);
+    }
+    return;
+  }
+
+  // Non-contents node: add to result
+  result.push(node);
+
+  // Recurse into children
+  for (const child of resolveNodeChildren(node)) {
+    if (child._isPortal) continue;
+    flattenNodes(child, result);
+  }
+}
+
+/**
+ * Binds new nodes that don't yet have layout signals (created by Show/For).
+ * Uses flattened parallel iteration.
+ */
+function bindNewNodesFlat(
+  root: Node,
+  layoutResult: LayoutResult,
+  buffer: Buffer,
+  rootInheritedAccessor: InheritedStyleAccessor,
+  rootClipAccessor: Accessor<ClipRect>,
+  scheduleFlush: () => void,
+  scheduleRelayout: () => void,
+): void {
+  const bindableNodes: BindableNode[] = [];
+  flattenBindableNodes(
+    root,
+    rootInheritedAccessor,
+    rootClipAccessor,
+    bindableNodes,
+  );
+
+  const layouts: LayoutResult[] = [];
+  flattenLayoutResults(layoutResult, root, layouts);
+
+  // Parallel iteration - bind only nodes that don't have layout signals yet
+  for (let i = 0; i < bindableNodes.length; i++) {
+    const { node } = bindableNodes[i];
+    if (!node._layout) {
+      bindSingleNode(
+        bindableNodes[i],
+        layouts[i],
+        buffer,
+        scheduleFlush,
+        scheduleRelayout,
+      );
+    }
+  }
+}
 
 /**
  * Creates a render effect for a node that has a render function.
@@ -2626,409 +2939,6 @@ function createRenderEffect(
 }
 
 /**
- * Binds a node by creating layout signals and render effects.
- */
-function bindNode(
-  node: Node,
-  layoutResult: LayoutResult,
-  buffer: Buffer,
-  parentInheritedAccessor: InheritedStyleAccessor,
-  parentClipAccessor: Accessor<ClipRect>,
-  scheduleFlush: () => void,
-  scheduleRelayout: () => void,
-): void {
-  // Create layout signals if not already present
-  if (!node._layout) {
-    node._layout = createLayoutSignals();
-  }
-  node._layout.setLayout(layoutResult);
-
-  // Create accessor for this node's inherited style (reactive)
-  const nodeInheritedAccessor: InheritedStyleAccessor = () => {
-    return computeInheritedStyle(node, parentInheritedAccessor());
-  };
-
-  // Create accessor for this node's clip rect (reactive)
-  const nodeClipAccessor: Accessor<ClipRect> = () => {
-    const parentClip = parentClipAccessor();
-    const style = resolveNodeStyle(node);
-    const layout = node._layout;
-    if (style.overflow === "hidden" && layout) {
-      const x = layout.screenX();
-      const y = layout.screenY();
-      const w = layout.width();
-      const h = layout.height();
-      return intersectClipRect(parentClip, { x, y, width: w, height: h });
-    }
-    return parentClip;
-  };
-
-  // Create render effect if node has a render function
-  if (node.render && !node._disposeRenderEffect) {
-    createRenderEffect(
-      node,
-      layoutResult,
-      buffer,
-      nodeInheritedAccessor,
-      nodeClipAccessor,
-      scheduleFlush,
-      scheduleRelayout,
-    );
-  }
-
-  // Recursively bind children (handling display: "contents")
-  bindChildren(
-    node,
-    layoutResult,
-    buffer,
-    nodeInheritedAccessor,
-    nodeClipAccessor,
-    scheduleFlush,
-    scheduleRelayout,
-  );
-}
-
-/**
- * Binds children nodes with their corresponding layout results.
- * Handles display: "contents" nodes by recursively binding their children.
- */
-function bindChildren(
-  node: Node,
-  layoutResult: LayoutResult,
-  buffer: Buffer,
-  inheritedAccessor: InheritedStyleAccessor,
-  clipAccessor: Accessor<ClipRect>,
-  scheduleFlush: () => void,
-  scheduleRelayout: () => void,
-): void {
-  const children = resolveNodeChildren(node);
-  const childLayouts = layoutResult.children ?? [];
-
-  let layoutIndex = 0;
-
-  for (const child of children) {
-    // Skip portals (bound separately at root level)
-    if (child._isPortal) continue;
-
-    const style = resolveNodeStyle(child);
-
-    if (style.display === "contents") {
-      // display: "contents" nodes don't get layout boxes.
-      // Their children consume layout results directly.
-      const wrapperInheritedAccessor: InheritedStyleAccessor = () => {
-        return computeInheritedStyle(child, inheritedAccessor());
-      };
-
-      // Recursively bind grandchildren, consuming layout results
-      layoutIndex += bindContentsChildren(
-        child,
-        childLayouts,
-        layoutIndex,
-        buffer,
-        wrapperInheritedAccessor,
-        clipAccessor,
-        scheduleFlush,
-        scheduleRelayout,
-      );
-    } else if (childLayouts[layoutIndex]) {
-      bindNode(
-        child,
-        childLayouts[layoutIndex],
-        buffer,
-        inheritedAccessor,
-        clipAccessor,
-        scheduleFlush,
-        scheduleRelayout,
-      );
-      layoutIndex++;
-    }
-  }
-}
-
-/**
- * Binds children of a display: "contents" node.
- * Returns the number of layout results consumed.
- */
-function bindContentsChildren(
-  contentsNode: Node,
-  layouts: LayoutResult[],
-  startIndex: number,
-  buffer: Buffer,
-  inheritedAccessor: InheritedStyleAccessor,
-  clipAccessor: Accessor<ClipRect>,
-  scheduleFlush: () => void,
-  scheduleRelayout: () => void,
-): number {
-  let consumed = 0;
-
-  for (const child of resolveNodeChildren(contentsNode)) {
-    if (child._isPortal) continue;
-
-    const style = resolveNodeStyle(child);
-
-    if (style.display === "contents") {
-      // Nested display: "contents" - recurse
-      const nestedInheritedAccessor: InheritedStyleAccessor = () => {
-        return computeInheritedStyle(child, inheritedAccessor());
-      };
-      consumed += bindContentsChildren(
-        child,
-        layouts,
-        startIndex + consumed,
-        buffer,
-        nestedInheritedAccessor,
-        clipAccessor,
-        scheduleFlush,
-        scheduleRelayout,
-      );
-    } else if (layouts[startIndex + consumed]) {
-      bindNode(
-        child,
-        layouts[startIndex + consumed],
-        buffer,
-        inheritedAccessor,
-        clipAccessor,
-        scheduleFlush,
-        scheduleRelayout,
-      );
-      consumed++;
-    }
-  }
-
-  return consumed;
-}
-
-/**
- * Updates layout signals for existing nodes on resize/relayout.
- */
-function updateLayoutSignals(node: Node, layoutResult: LayoutResult): void {
-  const style = resolveNodeStyle(node);
-
-  if (style.display === "contents") {
-    // Recurse into children, consuming layout results for hoisted children
-    updateContentsChildren(node, layoutResult.children ?? [], 0);
-    return;
-  }
-
-  if (node._layout) {
-    node._layout.setLayout(layoutResult);
-  }
-
-  const childLayouts = layoutResult.children ?? [];
-
-  let layoutIndex = 0;
-  for (const child of resolveNodeChildren(node)) {
-    if (child._isPortal) continue;
-
-    const childStyle = resolveNodeStyle(child);
-    if (childStyle.display === "contents") {
-      layoutIndex += updateContentsChildren(child, childLayouts, layoutIndex);
-    } else if (childLayouts[layoutIndex]) {
-      updateLayoutSignals(child, childLayouts[layoutIndex]);
-      layoutIndex++;
-    }
-  }
-}
-
-/**
- * Updates layout signals for children of a display: "contents" node.
- * Returns the number of layout results consumed.
- */
-function updateContentsChildren(
-  contentsNode: Node,
-  layouts: LayoutResult[],
-  startIndex: number,
-): number {
-  let consumed = 0;
-  for (const child of resolveNodeChildren(contentsNode)) {
-    if (child._isPortal) continue;
-
-    const style = resolveNodeStyle(child);
-    if (style.display === "contents") {
-      consumed += updateContentsChildren(child, layouts, startIndex + consumed);
-    } else if (layouts[startIndex + consumed]) {
-      updateLayoutSignals(child, layouts[startIndex + consumed]);
-      consumed++;
-    }
-  }
-  return consumed;
-}
-
-/**
- * Binds nodes that don't yet have layout signals (new nodes from Show/For).
- */
-function bindNewNodes(
-  node: Node,
-  layoutResult: LayoutResult,
-  buffer: Buffer,
-  inheritedAccessor: InheritedStyleAccessor,
-  clipAccessor: Accessor<ClipRect>,
-  scheduleFlush: () => void,
-  scheduleRelayout: () => void,
-): void {
-  const style = resolveNodeStyle(node);
-
-  if (style.display === "contents") {
-    // display: "contents" nodes don't have layout, but their children do
-    const wrapperInheritedAccessor: InheritedStyleAccessor = () => {
-      return computeInheritedStyle(node, inheritedAccessor());
-    };
-
-    const childLayouts = layoutResult.children ?? [];
-
-    let layoutIndex = 0;
-    for (const child of resolveNodeChildren(node)) {
-      if (child._isPortal) continue;
-
-      const childStyle = resolveNodeStyle(child);
-      if (childStyle.display === "contents") {
-        layoutIndex += bindNewContentsChildren(
-          child,
-          childLayouts,
-          layoutIndex,
-          buffer,
-          wrapperInheritedAccessor,
-          clipAccessor,
-          scheduleFlush,
-          scheduleRelayout,
-        );
-      } else if (childLayouts[layoutIndex]) {
-        bindNewNodes(
-          child,
-          childLayouts[layoutIndex],
-          buffer,
-          wrapperInheritedAccessor,
-          clipAccessor,
-          scheduleFlush,
-          scheduleRelayout,
-        );
-        layoutIndex++;
-      }
-    }
-    return;
-  }
-
-  // Non-contents node: bind if not already bound
-  if (!node._layout) {
-    node._layout = createLayoutSignals();
-  }
-  node._layout.setLayout(layoutResult);
-
-  // Create accessors for this node's inherited style and clip rect
-  const nodeInheritedAccessor: InheritedStyleAccessor = () => {
-    return computeInheritedStyle(node, inheritedAccessor());
-  };
-  const nodeClipAccessor: Accessor<ClipRect> = () => {
-    const parentClip = clipAccessor();
-    const s = resolveNodeStyle(node);
-    const layout = node._layout;
-    if (s.overflow === "hidden" && layout) {
-      const x = layout.screenX();
-      const y = layout.screenY();
-      const w = layout.width();
-      const h = layout.height();
-      return intersectClipRect(parentClip, { x, y, width: w, height: h });
-    }
-    return parentClip;
-  };
-
-  // Create render effect if needed (not already bound)
-  if (node.render && !node._disposeRenderEffect) {
-    createRenderEffect(
-      node,
-      layoutResult,
-      buffer,
-      nodeInheritedAccessor,
-      nodeClipAccessor,
-      scheduleFlush,
-      scheduleRelayout,
-    );
-  }
-
-  const childLayouts = layoutResult.children ?? [];
-
-  let layoutIndex = 0;
-  for (const child of resolveNodeChildren(node)) {
-    if (child._isPortal) continue;
-
-    const childStyle = resolveNodeStyle(child);
-    if (childStyle.display === "contents") {
-      layoutIndex += bindNewContentsChildren(
-        child,
-        childLayouts,
-        layoutIndex,
-        buffer,
-        nodeInheritedAccessor,
-        nodeClipAccessor,
-        scheduleFlush,
-        scheduleRelayout,
-      );
-    } else if (childLayouts[layoutIndex]) {
-      bindNewNodes(
-        child,
-        childLayouts[layoutIndex],
-        buffer,
-        nodeInheritedAccessor,
-        nodeClipAccessor,
-        scheduleFlush,
-        scheduleRelayout,
-      );
-      layoutIndex++;
-    }
-  }
-}
-
-/**
- * Binds new children of a display: "contents" node.
- * Returns the number of layout results consumed.
- */
-function bindNewContentsChildren(
-  contentsNode: Node,
-  layouts: LayoutResult[],
-  startIndex: number,
-  buffer: Buffer,
-  inheritedAccessor: InheritedStyleAccessor,
-  clipAccessor: Accessor<ClipRect>,
-  scheduleFlush: () => void,
-  scheduleRelayout: () => void,
-): number {
-  const wrapperInheritedAccessor: InheritedStyleAccessor = () => {
-    return computeInheritedStyle(contentsNode, inheritedAccessor());
-  };
-
-  let consumed = 0;
-  for (const child of resolveNodeChildren(contentsNode)) {
-    if (child._isPortal) continue;
-
-    const style = resolveNodeStyle(child);
-    if (style.display === "contents") {
-      consumed += bindNewContentsChildren(
-        child,
-        layouts,
-        startIndex + consumed,
-        buffer,
-        wrapperInheritedAccessor,
-        clipAccessor,
-        scheduleFlush,
-        scheduleRelayout,
-      );
-    } else if (layouts[startIndex + consumed]) {
-      bindNewNodes(
-        child,
-        layouts[startIndex + consumed],
-        buffer,
-        wrapperInheritedAccessor,
-        clipAccessor,
-        scheduleFlush,
-        scheduleRelayout,
-      );
-      consumed++;
-    }
-  }
-  return consumed;
-}
-
-/**
  * Disposes render effects for a subtree being removed.
  */
 function disposeSubtreeRenderEffects(node: Node): void {
@@ -3083,7 +2993,7 @@ function bindPortals(
       height: portalStdout.rows,
     });
 
-    bindNode(
+    bindAllNodes(
       node,
       layout,
       buffer,
@@ -3160,7 +3070,7 @@ function handleEvent(
     state.layoutResult = layoutResult;
 
     // Update layout signals (effects will re-run automatically)
-    updateLayoutSignals(state.root, layoutResult);
+    updateAllLayoutSignals(state.root, layoutResult);
     return;
   }
 
@@ -3298,7 +3208,7 @@ export function mount(component: () => Node, options?: MountOptions): App {
       DEFAULT_INHERITED_STYLE;
 
     // Bind phase: create render effects
-    bindNode(
+    bindAllNodes(
       state.root,
       layoutResult,
       buffer,
