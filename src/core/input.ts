@@ -232,9 +232,7 @@ export function setupTerminal(
   seq += "\x1b[?2004h";
 
   // Write to terminal
-  if (seq) {
-    stdout.write(seq);
-  }
+  stdout.write(seq);
 }
 
 /**
