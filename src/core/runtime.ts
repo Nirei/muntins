@@ -1,17 +1,9 @@
 // Render pipeline and component primitives
 
 import {
-  BOLD,
   Buffer,
-  type Color,
   DEFAULT_COLOR,
-  DIM,
-  INVERSE,
-  ITALIC,
   type InheritableColor,
-  STRIKETHROUGH,
-  UNDERLINE,
-  graphemeDisplayWidth,
   graphemes,
 } from "./buffer.ts";
 import type { FocusEvent, PasteEvent } from "./input.ts";
@@ -30,6 +22,26 @@ import {
   type ReactiveFlexStyle,
   computeLayout,
 } from "./layout.ts";
+import {
+  BORDER_CHARS,
+  type BorderProp,
+  type BorderStyleName,
+  type ClipRect,
+  DEFAULT_CLIP,
+  DEFAULT_INHERITED_STYLE,
+  type InheritableBool,
+  type InheritedStyle,
+  enterTuiMode,
+  exitTuiMode,
+  flushFrame,
+  getBorderStyleName,
+  intersectClipRect,
+  isInClipRect,
+  parseBorderProp,
+  renderBorder,
+  renderText,
+  resolveInheritable,
+} from "./render.ts";
 import { batch } from "./signals.ts";
 import {
   type Accessor,
@@ -39,6 +51,7 @@ import {
   createSignal,
   onCleanup,
 } from "./signals.ts";
+import { type WrapMode, measureText } from "./text.ts";
 
 /**
  * Layout signals for reactive layout coordinates.
@@ -631,170 +644,26 @@ export function useFocus(): FocusController {
   return createFocusController(ctx.state, ctx.currentScope);
 }
 
-// Screen control functions
+// Re-export from render.ts and text.ts for public API
+export type { ClipRect, InheritableBool, InheritedStyle } from "./render.ts";
+export {
+  BORDER_CHARS,
+  DEFAULT_CLIP,
+  DEFAULT_INHERITED_STYLE,
+  enterTuiMode,
+  exitTuiMode,
+  flushFrame,
+} from "./render.ts";
+export type { WrapMode } from "./text.ts";
+export {
+  lineDisplayWidth,
+  measureText,
+  truncateLine,
+  wrapLine,
+} from "./text.ts";
 
-/**
- * Enter TUI mode (display setup).
- *
- * Optionally enters alternate screen buffer, hides cursor, clears screen,
- * and moves cursor home.
- */
-export function enterTuiMode(
-  stdout: NodeJS.WriteStream,
-  options: { alternateScreen: boolean },
-): void {
-  let seq = "";
-
-  if (options.alternateScreen) {
-    seq += "\x1b[?1049h"; // Enter alternate screen
-  }
-
-  seq += "\x1b[?25l"; // Hide cursor
-  seq += "\x1b[2J"; // Clear screen
-  seq += "\x1b[H"; // Move cursor home
-
-  stdout.write(seq);
-}
-
-/**
- * Exit TUI mode (display teardown).
- *
- * Shows cursor and optionally exits alternate screen buffer.
- */
-export function exitTuiMode(
-  stdout: NodeJS.WriteStream,
-  options: { alternateScreen: boolean },
-): void {
-  let seq = "";
-
-  seq += "\x1b[?25h"; // Show cursor
-
-  if (options.alternateScreen) {
-    seq += "\x1b[?1049l"; // Exit alternate screen
-  }
-
-  stdout.write(seq);
-}
-
-/**
- * Write frame content to stdout.
- *
- * The cursor is already hidden by enterTuiMode and restored by exitTuiMode,
- * so this function simply writes the content without cursor manipulation.
- * No-op for empty content.
- */
-export function flushFrame(stdout: NodeJS.WriteStream, content: string): void {
-  if (content.length === 0) return;
-
-  stdout.write(content);
-}
-
-/**
- * Inherited style values passed down through the node tree during paint.
- * All properties are resolved (no "inherit" values).
- */
-export interface InheritedStyle {
-  color: Color;
-  backgroundColor: Color;
-  borderColor: Color;
-  bold: boolean;
-  dim: boolean;
-  italic: boolean;
-  underline: boolean;
-  strikethrough: boolean;
-  inverse: boolean;
-}
-
-/**
- * Default inherited style values.
- * Used at the root when no parent style exists.
- */
-export const DEFAULT_INHERITED_STYLE: InheritedStyle = {
-  color: DEFAULT_COLOR,
-  backgroundColor: DEFAULT_COLOR,
-  borderColor: DEFAULT_COLOR,
-  bold: false,
-  dim: false,
-  italic: false,
-  underline: false,
-  strikethrough: false,
-  inverse: false,
-};
-
-/** Inheritable boolean value for text modifiers. */
-export type InheritableBool = boolean | "inherit";
-
-/**
- * Clipping rectangle for paint-time clipping.
- * Coordinates are absolute screen positions.
- */
-export interface ClipRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-/**
- * Default clip rect covering the full terminal.
- * Used when no parent clipping is in effect.
- */
-export const DEFAULT_CLIP: ClipRect = {
-  x: 0,
-  y: 0,
-  width: Number.POSITIVE_INFINITY,
-  height: Number.POSITIVE_INFINITY,
-};
-
-/**
- * Intersect two clip rects, returning the overlapping region.
- * Returns a zero-area rect if there's no overlap.
- */
-export function intersectClipRect(a: ClipRect, b: ClipRect): ClipRect {
-  const x = Math.max(a.x, b.x);
-  const y = Math.max(a.y, b.y);
-  const right = Math.min(a.x + a.width, b.x + b.width);
-  const bottom = Math.min(a.y + a.height, b.y + b.height);
-  return {
-    x,
-    y,
-    width: Math.max(0, right - x),
-    height: Math.max(0, bottom - y),
-  };
-}
-
-/**
- * Check if a point is within the clip rect.
- */
-export function isInClipRect(x: number, y: number, clip: ClipRect): boolean {
-  return (
-    x >= clip.x &&
-    x < clip.x + clip.width &&
-    y >= clip.y &&
-    y < clip.y + clip.height
-  );
-}
-
-/** A value that can be inherited from a parent. */
-type Inheritable<T> = T | "inherit";
-
-/**
- * Resolve an inheritable value (color or boolean).
- * Returns the inherited value if the prop is undefined or "inherit".
- */
-function resolveInheritable<T>(
-  value: Inheritable<T> | (() => Inheritable<T>) | undefined,
-  inherited: T,
-): T {
-  if (value === undefined || value === "inherit") {
-    return inherited;
-  }
-  if (typeof value === "function") {
-    const resolved = (value as () => Inheritable<T>)();
-    return resolved === "inherit" ? inherited : resolved;
-  }
-  return value as T;
-}
+// Re-export types for BoxProps/TextProps
+export type { BorderProp, BorderStyleName } from "./render.ts";
 
 /**
  * Compute resolved inherited style from a node's inheritable props.
@@ -849,58 +718,6 @@ export interface BoxProps extends Partial<ReactiveFlexStyle> {
   onHover?: (hovering: boolean) => void;
 }
 
-/** Border style names. */
-export type BorderStyleName =
-  | "single"
-  | "round"
-  | "double"
-  | "bold"
-  | "dashed"
-  | "ascii";
-
-/**
- * Border prop for BoxProps.
- * - boolean: true = 'single' on all sides
- * - BorderStyleName: style on all sides
- * - object: selective borders per side
- */
-export type BorderProp =
-  | boolean
-  | BorderStyleName
-  | {
-      top?: boolean;
-      right?: boolean;
-      bottom?: boolean;
-      left?: boolean;
-    };
-
-/**
- * Border character set for a style.
- */
-interface BorderChars {
-  tl: string; // top-left corner
-  tr: string; // top-right corner
-  bl: string; // bottom-left corner
-  br: string; // bottom-right corner
-  h: string; // horizontal
-  v: string; // vertical
-}
-
-/**
- * Border character sets for each style.
- */
-export const BORDER_CHARS: Record<BorderStyleName, BorderChars> = {
-  single: { tl: "┌", tr: "┐", bl: "└", br: "┘", h: "─", v: "│" },
-  round: { tl: "╭", tr: "╮", bl: "╰", br: "╯", h: "─", v: "│" },
-  double: { tl: "╔", tr: "╗", bl: "╚", br: "╝", h: "═", v: "║" },
-  bold: { tl: "┏", tr: "┓", bl: "┗", br: "┛", h: "━", v: "┃" },
-  dashed: { tl: "┌", tr: "┐", bl: "└", br: "┘", h: "┄", v: "┆" },
-  ascii: { tl: "+", tr: "+", bl: "+", br: "+", h: "-", v: "|" },
-};
-
-/** Text wrap mode. */
-export type WrapMode = "wrap" | "truncate" | "truncate-end" | "truncate-start";
-
 /** Props for Text component. */
 export interface TextProps {
   content: string | (() => string);
@@ -922,377 +739,6 @@ export interface TextProps {
   onMouseMove?: (event: MouseEvent) => void;
   onScroll?: (event: ScrollEvent) => void;
   onHover?: (hovering: boolean) => void;
-}
-
-/**
- * Calculates the display width of a line of text.
- */
-export function lineDisplayWidth(line: string): number {
-  let width = 0;
-  for (const grapheme of graphemes(line)) {
-    width += graphemeDisplayWidth(grapheme);
-  }
-  return width;
-}
-
-/**
- * Wraps a single line of text at grapheme boundaries to fit within maxWidth.
- * Returns an array of wrapped line segments.
- */
-export function wrapLine(line: string, maxWidth: number): string[] {
-  if (maxWidth <= 0) return [line];
-
-  const result: string[] = [];
-  let current = "";
-  let currentWidth = 0;
-
-  for (const grapheme of graphemes(line)) {
-    const w = graphemeDisplayWidth(grapheme);
-
-    if (currentWidth + w > maxWidth && current.length > 0) {
-      result.push(current);
-      current = "";
-      currentWidth = 0;
-    }
-
-    current += grapheme;
-    currentWidth += w;
-  }
-
-  if (current.length > 0) {
-    result.push(current);
-  }
-
-  return result.length > 0 ? result : [""];
-}
-
-/**
- * Measures text for layout purposes.
- * Returns the width and height needed to display the text.
- *
- * @param text - The text to measure
- * @param availableWidth - Available width for wrapping
- * @param wrap - Wrapping mode: "wrap" for line wrapping, or truncate modes for single line
- */
-export function measureText(
-  text: string,
-  availableWidth: number,
-  wrap: WrapMode,
-): { width: number; height: number } {
-  if (text.length === 0) {
-    return { width: 0, height: 0 };
-  }
-
-  const lines = text.split("\n");
-
-  if (wrap === "wrap") {
-    // Wrap lines to available width
-    const wrappedLines = lines.flatMap((line) =>
-      wrapLine(line, availableWidth),
-    );
-    const maxWidth = Math.max(
-      ...wrappedLines.map((line) => lineDisplayWidth(line)),
-    );
-    return {
-      width: Math.min(maxWidth, availableWidth),
-      height: wrappedLines.length,
-    };
-  }
-
-  // No wrapping, single line per input line
-  const maxWidth = Math.max(...lines.map((line) => lineDisplayWidth(line)));
-  return {
-    width: Math.min(maxWidth, availableWidth),
-    height: lines.length,
-  };
-}
-
-/**
- * Truncates a line from the end, adding ellipsis.
- */
-function truncateEnd(line: string, maxWidth: number): string {
-  const ellipsis = "…";
-  const ellipsisWidth = 1;
-  const targetWidth = maxWidth - ellipsisWidth;
-
-  if (targetWidth <= 0) return ellipsis.slice(0, maxWidth);
-
-  let result = "";
-  let width = 0;
-
-  for (const grapheme of graphemes(line)) {
-    const w = graphemeDisplayWidth(grapheme);
-    if (width + w > targetWidth) break;
-    result += grapheme;
-    width += w;
-  }
-
-  return result + ellipsis;
-}
-
-/**
- * Truncates a line from the start, adding ellipsis.
- */
-function truncateStart(line: string, maxWidth: number): string {
-  const ellipsis = "…";
-  const ellipsisWidth = 1;
-  const targetWidth = maxWidth - ellipsisWidth;
-
-  if (targetWidth <= 0) return ellipsis.slice(0, maxWidth);
-
-  // Collect graphemes in reverse
-  const chars = [...graphemes(line)];
-  let result = "";
-  let width = 0;
-
-  for (let i = chars.length - 1; i >= 0; i--) {
-    const w = graphemeDisplayWidth(chars[i]);
-    if (width + w > targetWidth) break;
-    result = chars[i] + result;
-    width += w;
-  }
-
-  return ellipsis + result;
-}
-
-/**
- * Truncates a line to fit within maxWidth, using the specified mode.
- * Returns the line unchanged if it already fits.
- */
-export function truncateLine(
-  line: string,
-  maxWidth: number,
-  mode: "truncate" | "truncate-end" | "truncate-start",
-): string {
-  const width = lineDisplayWidth(line);
-  if (width <= maxWidth) return line;
-
-  if (mode === "truncate" || mode === "truncate-end") {
-    return truncateEnd(line, maxWidth);
-  }
-
-  return truncateStart(line, maxWidth);
-}
-
-/**
- * Resolves a value that may be static or a getter function.
- */
-function resolveValue<T>(value: T | (() => T) | undefined): T | undefined {
-  return typeof value === "function" ? (value as () => T)() : value;
-}
-
-/**
- * Computes the modifier bitmask from TextProps using inherited styles.
- */
-function computeModifiers(props: TextProps, inherited: InheritedStyle): number {
-  let mods = 0;
-  if (resolveInheritable(props.bold, inherited.bold)) mods |= BOLD;
-  if (resolveInheritable(props.dim, inherited.dim)) mods |= DIM;
-  if (resolveInheritable(props.italic, inherited.italic)) mods |= ITALIC;
-  if (resolveInheritable(props.underline, inherited.underline))
-    mods |= UNDERLINE;
-  if (resolveInheritable(props.strikethrough, inherited.strikethrough))
-    mods |= STRIKETHROUGH;
-  if (resolveInheritable(props.inverse, inherited.inverse)) mods |= INVERSE;
-  return mods;
-}
-
-/**
- * Renders text into the buffer with styling and wrapping/truncation.
- */
-function renderText(
-  buffer: Buffer,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  text: string,
-  props: TextProps,
-  inherited: InheritedStyle,
-  clip: ClipRect,
-): void {
-  // Early out if entirely outside clip rect
-  if (
-    x >= clip.x + clip.width ||
-    x + width <= clip.x ||
-    y >= clip.y + clip.height ||
-    y + height <= clip.y
-  ) {
-    return;
-  }
-
-  // Resolve reactive props with inheritance
-  const fg = resolveInheritable(props.color, inherited.color);
-  const bg = resolveInheritable(
-    props.backgroundColor,
-    inherited.backgroundColor,
-  );
-  const modifiers = computeModifiers(props, inherited);
-  const wrapValue = resolveValue(props.wrap) ?? "wrap";
-
-  const lines = text.split("\n");
-  const displayLines =
-    wrapValue === "wrap"
-      ? lines.flatMap((line) => wrapLine(line, width))
-      : lines.map((line) => truncateLine(line, width, wrapValue));
-
-  for (let row = 0; row < Math.min(displayLines.length, height); row++) {
-    const screenY = y + row;
-    // Skip rows outside clip
-    if (screenY < clip.y || screenY >= clip.y + clip.height) continue;
-
-    const line = displayLines[row];
-    // For each grapheme, check if it's in clip
-    let col = x;
-    for (const char of graphemes(line)) {
-      const charWidth = graphemeDisplayWidth(char);
-      if (col >= clip.x && col < clip.x + clip.width) {
-        buffer.set(col, screenY, char, fg, bg, modifiers);
-      }
-      col += charWidth;
-      if (col >= clip.x + clip.width) break;
-    }
-  }
-}
-
-/**
- * Parse BorderProp into individual border flags for each side.
- */
-function parseBorderProp(border: BorderProp | undefined): {
-  top: boolean;
-  end: boolean;
-  bottom: boolean;
-  start: boolean;
-} {
-  if (border === undefined || border === false) {
-    return { top: false, end: false, bottom: false, start: false };
-  }
-
-  if (border === true || typeof border === "string") {
-    // All sides
-    return { top: true, end: true, bottom: true, start: true };
-  }
-
-  // Selective borders object - map right to end, left to start
-  return {
-    top: border.top ?? false,
-    end: border.right ?? false,
-    bottom: border.bottom ?? false,
-    start: border.left ?? false,
-  };
-}
-
-/**
- * Determine the border style name from props.
- */
-function getBorderStyleName(
-  border: BorderProp | undefined,
-  borderStyle: BorderStyleName | undefined,
-): BorderStyleName {
-  // borderStyle prop overrides everything
-  if (borderStyle) {
-    return borderStyle;
-  }
-  // If border is a style name string, use it
-  if (typeof border === "string") {
-    return border;
-  }
-  // Default to 'single'
-  return "single";
-}
-
-/**
- * Get the character for a corner position based on which adjacent edges exist.
- * Returns corner char if both edges exist, edge char if one exists, undefined if neither.
- */
-function getCornerChar(
-  chars: BorderChars,
-  hasEdge1: boolean,
-  hasEdge2: boolean,
-  corner: string,
-  edge1Char: string,
-  edge2Char: string,
-): string | undefined {
-  if (hasEdge1 && hasEdge2) return corner;
-  if (hasEdge1) return edge1Char;
-  if (hasEdge2) return edge2Char;
-  return undefined;
-}
-
-/**
- * Render border onto the buffer.
- * Uses correct corner logic: corners only render when both adjacent edges exist.
- */
-function renderBorder(
-  buffer: Buffer,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  borders: { top: boolean; end: boolean; bottom: boolean; start: boolean },
-  styleName: BorderStyleName,
-  fg: Color,
-  bg: Color,
-  clip: ClipRect,
-): void {
-  const chars = BORDER_CHARS[styleName];
-  const { top, end, bottom, start } = borders;
-
-  // Draw horizontal edges
-  if (top) {
-    const startCol = start ? x + 1 : x;
-    const endCol = end ? x + width - 1 : x + width;
-    for (let col = startCol; col < endCol; col++) {
-      if (isInClipRect(col, y, clip)) {
-        buffer.set(col, y, chars.h, fg, bg, 0);
-      }
-    }
-  }
-  if (bottom) {
-    const startCol = start ? x + 1 : x;
-    const endCol = end ? x + width - 1 : x + width;
-    for (let col = startCol; col < endCol; col++) {
-      if (isInClipRect(col, y + height - 1, clip)) {
-        buffer.set(col, y + height - 1, chars.h, fg, bg, 0);
-      }
-    }
-  }
-
-  // Draw vertical edges
-  if (start) {
-    const startRow = top ? y + 1 : y;
-    const endRow = bottom ? y + height - 1 : y + height;
-    for (let row = startRow; row < endRow; row++) {
-      if (isInClipRect(x, row, clip)) {
-        buffer.set(x, row, chars.v, fg, bg, 0);
-      }
-    }
-  }
-  if (end) {
-    const startRow = top ? y + 1 : y;
-    const endRow = bottom ? y + height - 1 : y + height;
-    for (let row = startRow; row < endRow; row++) {
-      if (isInClipRect(x + width - 1, row, clip)) {
-        buffer.set(x + width - 1, row, chars.v, fg, bg, 0);
-      }
-    }
-  }
-
-  // Draw corners using table-driven approach
-  const corners: [number, number, boolean, boolean, string, string, string][] =
-    [
-      [x, y, top, start, chars.tl, chars.h, chars.v], // top-left
-      [x + width - 1, y, top, end, chars.tr, chars.h, chars.v], // top-right
-      [x, y + height - 1, bottom, start, chars.bl, chars.h, chars.v], // bottom-left
-      [x + width - 1, y + height - 1, bottom, end, chars.br, chars.h, chars.v], // bottom-right
-    ];
-
-  for (const [cx, cy, hasHoriz, hasVert, corner, hChar, vChar] of corners) {
-    const char = getCornerChar(chars, hasHoriz, hasVert, corner, hChar, vChar);
-    if (char && isInClipRect(cx, cy, clip)) {
-      buffer.set(cx, cy, char, fg, bg, 0);
-    }
-  }
 }
 
 /**
@@ -1548,7 +994,6 @@ export function Text(props: TextProps): Node {
         height,
         getContent(),
         {
-          content,
           color,
           backgroundColor,
           bold,

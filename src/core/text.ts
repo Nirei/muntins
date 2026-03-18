@@ -109,3 +109,160 @@ export function displayWidthToPosition(text: string, pos: number): number {
   }
   return width;
 }
+
+// =============================================================================
+// Text Layout & Measurement
+// =============================================================================
+
+/** Text wrap mode for layout. */
+export type WrapMode = "wrap" | "truncate" | "truncate-end" | "truncate-start";
+
+/**
+ * Calculates the display width of a line of text.
+ */
+export function lineDisplayWidth(line: string): number {
+  let width = 0;
+  for (const grapheme of graphemes(line)) {
+    width += graphemeDisplayWidth(grapheme);
+  }
+  return width;
+}
+
+/**
+ * Wraps a single line of text at grapheme boundaries to fit within maxWidth.
+ * Returns an array of wrapped line segments.
+ */
+export function wrapLine(line: string, maxWidth: number): string[] {
+  if (maxWidth <= 0) return [line];
+
+  const result: string[] = [];
+  let current = "";
+  let currentWidth = 0;
+
+  for (const grapheme of graphemes(line)) {
+    const w = graphemeDisplayWidth(grapheme);
+
+    if (currentWidth + w > maxWidth && current.length > 0) {
+      result.push(current);
+      current = "";
+      currentWidth = 0;
+    }
+
+    current += grapheme;
+    currentWidth += w;
+  }
+
+  if (current.length > 0) {
+    result.push(current);
+  }
+
+  return result.length > 0 ? result : [""];
+}
+
+/**
+ * Measures text for layout purposes.
+ * Returns the width and height needed to display the text.
+ *
+ * @param text - The text to measure
+ * @param availableWidth - Available width for wrapping
+ * @param wrap - Wrapping mode: "wrap" for line wrapping, or truncate modes for single line
+ */
+export function measureText(
+  text: string,
+  availableWidth: number,
+  wrap: WrapMode,
+): { width: number; height: number } {
+  if (text.length === 0) {
+    return { width: 0, height: 0 };
+  }
+
+  const lines = text.split("\n");
+
+  if (wrap === "wrap") {
+    // Wrap lines to available width
+    const wrappedLines = lines.flatMap((line) =>
+      wrapLine(line, availableWidth),
+    );
+    const maxWidth = Math.max(
+      ...wrappedLines.map((line) => lineDisplayWidth(line)),
+    );
+    return {
+      width: Math.min(maxWidth, availableWidth),
+      height: wrappedLines.length,
+    };
+  }
+
+  // No wrapping, single line per input line
+  const maxWidth = Math.max(...lines.map((line) => lineDisplayWidth(line)));
+  return {
+    width: Math.min(maxWidth, availableWidth),
+    height: lines.length,
+  };
+}
+
+/**
+ * Truncates a line from the end, adding ellipsis.
+ */
+function truncateEnd(line: string, maxWidth: number): string {
+  const ellipsis = "…";
+  const ellipsisWidth = 1;
+  const targetWidth = maxWidth - ellipsisWidth;
+
+  if (targetWidth <= 0) return ellipsis.slice(0, maxWidth);
+
+  let result = "";
+  let width = 0;
+
+  for (const grapheme of graphemes(line)) {
+    const w = graphemeDisplayWidth(grapheme);
+    if (width + w > targetWidth) break;
+    result += grapheme;
+    width += w;
+  }
+
+  return result + ellipsis;
+}
+
+/**
+ * Truncates a line from the start, adding ellipsis.
+ */
+function truncateStart(line: string, maxWidth: number): string {
+  const ellipsis = "…";
+  const ellipsisWidth = 1;
+  const targetWidth = maxWidth - ellipsisWidth;
+
+  if (targetWidth <= 0) return ellipsis.slice(0, maxWidth);
+
+  // Collect graphemes in reverse
+  const chars = [...graphemes(line)];
+  let result = "";
+  let width = 0;
+
+  for (let i = chars.length - 1; i >= 0; i--) {
+    const w = graphemeDisplayWidth(chars[i]);
+    if (width + w > targetWidth) break;
+    result = chars[i] + result;
+    width += w;
+  }
+
+  return ellipsis + result;
+}
+
+/**
+ * Truncates a line to fit within maxWidth, using the specified mode.
+ * Returns the line unchanged if it already fits.
+ */
+export function truncateLine(
+  line: string,
+  maxWidth: number,
+  mode: "truncate" | "truncate-end" | "truncate-start",
+): string {
+  const width = lineDisplayWidth(line);
+  if (width <= maxWidth) return line;
+
+  if (mode === "truncate" || mode === "truncate-end") {
+    return truncateEnd(line, maxWidth);
+  }
+
+  return truncateStart(line, maxWidth);
+}
