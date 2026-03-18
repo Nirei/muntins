@@ -110,10 +110,6 @@ export function displayWidthToPosition(text: string, pos: number): number {
   return width;
 }
 
-// =============================================================================
-// Text Layout & Measurement
-// =============================================================================
-
 /** Text wrap mode for layout. */
 export type WrapMode = "wrap" | "truncate" | "truncate-end" | "truncate-start";
 

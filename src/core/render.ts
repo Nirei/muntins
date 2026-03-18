@@ -21,10 +21,6 @@ import {
   wrapLine,
 } from "./text.ts";
 
-// =============================================================================
-// Style Inheritance
-// =============================================================================
-
 /**
  * Inherited style values passed down through the node tree during paint.
  * All properties are resolved (no "inherit" values).
@@ -81,10 +77,6 @@ export function resolveInheritable<T>(
   return value as T;
 }
 
-// =============================================================================
-// Clipping
-// =============================================================================
-
 /**
  * Clipping rectangle for paint-time clipping.
  * Coordinates are absolute screen positions.
@@ -135,10 +127,6 @@ export function isInClipRect(x: number, y: number, clip: ClipRect): boolean {
     y < clip.y + clip.height
   );
 }
-
-// =============================================================================
-// Border Rendering
-// =============================================================================
 
 /** Border style names. */
 export type BorderStyleName =
@@ -329,10 +317,6 @@ export function renderBorder(
   }
 }
 
-// =============================================================================
-// Text Rendering
-// =============================================================================
-
 /** Props for text rendering (subset of TextProps used by renderText). */
 export interface TextRenderProps {
   color?: InheritableColor | (() => InheritableColor);
@@ -422,10 +406,6 @@ export function renderText(
     }
   }
 }
-
-// =============================================================================
-// Terminal Control
-// =============================================================================
 
 /**
  * Enter TUI mode (display setup).
