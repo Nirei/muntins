@@ -477,92 +477,74 @@ function countFocusablesInAncestors(scope: FocusScope | null): number {
   return count;
 }
 
+/** Direction for focus navigation: 1 = next, -1 = prev */
+type FocusDirection = 1 | -1;
+
 /**
- * Navigate focus to the next focusable node within a scope.
+ * Navigate focus in a direction within a scope.
  * Handles wrapping and scope escaping based on trap setting.
  */
-export function focusNext(state: RuntimeState, scope: FocusScope): void {
+function focusNavigate(
+  state: RuntimeState,
+  scope: FocusScope,
+  direction: FocusDirection,
+): void {
   const { focusableNodes, focusedIndex } = scope;
 
   if (focusableNodes.length === 0) {
     // No focusables in this scope, try parent if not trapped
     if (!scope.trap && scope.parent) {
-      focusNext(state, scope.parent);
+      focusNavigate(state, scope.parent, direction);
     }
     return;
   }
 
   if (focusedIndex === -1) {
-    // Nothing focused, focus first
-    scope.focusedIndex = 0;
-    state.setFocusedNode(focusableNodes[0]);
+    // Nothing focused: focus first (next) or last (prev)
+    const index = direction === 1 ? 0 : focusableNodes.length - 1;
+    scope.focusedIndex = index;
+    state.setFocusedNode(focusableNodes[index]);
     return;
   }
 
-  const nextIndex = focusedIndex + 1;
+  const targetIndex = focusedIndex + direction;
+  const atBoundary =
+    direction === 1 ? targetIndex >= focusableNodes.length : targetIndex < 0;
 
-  if (nextIndex >= focusableNodes.length) {
-    // At end of scope
+  if (atBoundary) {
+    const wrapIndex = direction === 1 ? 0 : focusableNodes.length - 1;
+
     if (scope.trap) {
       // Wrap within scope
-      scope.focusedIndex = 0;
-      state.setFocusedNode(focusableNodes[0]);
+      scope.focusedIndex = wrapIndex;
+      state.setFocusedNode(focusableNodes[wrapIndex]);
     } else if (scope.parent && countFocusablesInAncestors(scope.parent) > 0) {
       // Escape to parent (only if parent has focusables)
       scope.focusedIndex = -1;
-      focusNext(state, scope.parent);
+      focusNavigate(state, scope.parent, direction);
     } else {
       // No parent focusables or at root, wrap
-      scope.focusedIndex = 0;
-      state.setFocusedNode(focusableNodes[0]);
+      scope.focusedIndex = wrapIndex;
+      state.setFocusedNode(focusableNodes[wrapIndex]);
     }
   } else {
-    scope.focusedIndex = nextIndex;
-    state.setFocusedNode(focusableNodes[nextIndex]);
+    scope.focusedIndex = targetIndex;
+    state.setFocusedNode(focusableNodes[targetIndex]);
   }
 }
 
 /**
+ * Navigate focus to the next focusable node within a scope.
+ */
+export function focusNext(state: RuntimeState, scope: FocusScope): void {
+  focusNavigate(state, scope, 1);
+}
+
+/**
  * Navigate focus to the previous focusable node within a scope.
- * Handles wrapping and scope escaping based on trap setting.
  */
 export function focusPrev(state: RuntimeState, scope: FocusScope): void {
-  const { focusableNodes, focusedIndex } = scope;
-
-  if (focusableNodes.length === 0) {
-    if (!scope.trap && scope.parent) {
-      focusPrev(state, scope.parent);
-    }
-    return;
-  }
-
-  if (focusedIndex === -1) {
-    // Nothing focused, focus last
-    scope.focusedIndex = focusableNodes.length - 1;
-    state.setFocusedNode(focusableNodes[scope.focusedIndex]);
-    return;
-  }
-
-  const prevIndex = focusedIndex - 1;
-
-  if (prevIndex < 0) {
-    if (scope.trap) {
-      // Wrap within scope
-      scope.focusedIndex = focusableNodes.length - 1;
-      state.setFocusedNode(focusableNodes[scope.focusedIndex]);
-    } else if (scope.parent && countFocusablesInAncestors(scope.parent) > 0) {
-      // Escape to parent (only if parent has focusables)
-      scope.focusedIndex = -1;
-      focusPrev(state, scope.parent);
-    } else {
-      // No parent focusables or at root, wrap
-      scope.focusedIndex = focusableNodes.length - 1;
-      state.setFocusedNode(focusableNodes[scope.focusedIndex]);
-    }
-  } else {
-    scope.focusedIndex = prevIndex;
-    state.setFocusedNode(focusableNodes[prevIndex]);
-  }
+  focusNavigate(state, scope, -1);
 }
 
 /**
@@ -793,40 +775,25 @@ export function isInClipRect(x: number, y: number, clip: ClipRect): boolean {
   );
 }
 
-/**
- * Resolve an inheritable color value.
- * Returns the inherited value if the prop is undefined or "inherit".
- */
-function resolveInheritableColor(
-  value: InheritableColor | (() => InheritableColor) | undefined,
-  inherited: Color,
-): Color {
-  if (value === undefined || value === "inherit") {
-    return inherited;
-  }
-  if (typeof value === "function") {
-    const resolved = value();
-    return resolved === "inherit" ? inherited : resolved;
-  }
-  return value;
-}
+/** A value that can be inherited from a parent. */
+type Inheritable<T> = T | "inherit";
 
 /**
- * Resolve an inheritable boolean value.
+ * Resolve an inheritable value (color or boolean).
  * Returns the inherited value if the prop is undefined or "inherit".
  */
-function resolveInheritableBool(
-  value: InheritableBool | (() => InheritableBool) | undefined,
-  inherited: boolean,
-): boolean {
+function resolveInheritable<T>(
+  value: Inheritable<T> | (() => Inheritable<T>) | undefined,
+  inherited: T,
+): T {
   if (value === undefined || value === "inherit") {
     return inherited;
   }
   if (typeof value === "function") {
-    const resolved = value();
+    const resolved = (value as () => Inheritable<T>)();
     return resolved === "inherit" ? inherited : resolved;
   }
-  return value;
+  return value as T;
 }
 
 /**
@@ -843,24 +810,21 @@ function computeInheritedStyle(
   }
 
   return {
-    color: resolveInheritableColor(props.color, parentStyle.color),
-    backgroundColor: resolveInheritableColor(
+    color: resolveInheritable(props.color, parentStyle.color),
+    backgroundColor: resolveInheritable(
       props.backgroundColor,
       parentStyle.backgroundColor,
     ),
-    borderColor: resolveInheritableColor(
-      props.borderColor,
-      parentStyle.borderColor,
-    ),
-    bold: resolveInheritableBool(props.bold, parentStyle.bold),
-    dim: resolveInheritableBool(props.dim, parentStyle.dim),
-    italic: resolveInheritableBool(props.italic, parentStyle.italic),
-    underline: resolveInheritableBool(props.underline, parentStyle.underline),
-    strikethrough: resolveInheritableBool(
+    borderColor: resolveInheritable(props.borderColor, parentStyle.borderColor),
+    bold: resolveInheritable(props.bold, parentStyle.bold),
+    dim: resolveInheritable(props.dim, parentStyle.dim),
+    italic: resolveInheritable(props.italic, parentStyle.italic),
+    underline: resolveInheritable(props.underline, parentStyle.underline),
+    strikethrough: resolveInheritable(
       props.strikethrough,
       parentStyle.strikethrough,
     ),
-    inverse: resolveInheritableBool(props.inverse, parentStyle.inverse),
+    inverse: resolveInheritable(props.inverse, parentStyle.inverse),
   };
 }
 
@@ -1122,14 +1086,14 @@ function resolveValue<T>(value: T | (() => T) | undefined): T | undefined {
  */
 function computeModifiers(props: TextProps, inherited: InheritedStyle): number {
   let mods = 0;
-  if (resolveInheritableBool(props.bold, inherited.bold)) mods |= BOLD;
-  if (resolveInheritableBool(props.dim, inherited.dim)) mods |= DIM;
-  if (resolveInheritableBool(props.italic, inherited.italic)) mods |= ITALIC;
-  if (resolveInheritableBool(props.underline, inherited.underline))
+  if (resolveInheritable(props.bold, inherited.bold)) mods |= BOLD;
+  if (resolveInheritable(props.dim, inherited.dim)) mods |= DIM;
+  if (resolveInheritable(props.italic, inherited.italic)) mods |= ITALIC;
+  if (resolveInheritable(props.underline, inherited.underline))
     mods |= UNDERLINE;
-  if (resolveInheritableBool(props.strikethrough, inherited.strikethrough))
+  if (resolveInheritable(props.strikethrough, inherited.strikethrough))
     mods |= STRIKETHROUGH;
-  if (resolveInheritableBool(props.inverse, inherited.inverse)) mods |= INVERSE;
+  if (resolveInheritable(props.inverse, inherited.inverse)) mods |= INVERSE;
   return mods;
 }
 
@@ -1158,8 +1122,8 @@ function renderText(
   }
 
   // Resolve reactive props with inheritance
-  const fg = resolveInheritableColor(props.color, inherited.color);
-  const bg = resolveInheritableColor(
+  const fg = resolveInheritable(props.color, inherited.color);
+  const bg = resolveInheritable(
     props.backgroundColor,
     inherited.backgroundColor,
   );
@@ -1433,7 +1397,7 @@ export function Box(props: BoxProps): Node {
           }
 
           // Resolve background color with inheritance
-          const bg = resolveInheritableColor(
+          const bg = resolveInheritable(
             backgroundColor,
             inherited.backgroundColor,
           );
@@ -1471,10 +1435,7 @@ export function Box(props: BoxProps): Node {
             borderFlags.start;
 
           if (hasBorder) {
-            const fg = resolveInheritableColor(
-              borderColor,
-              inherited.borderColor,
-            );
+            const fg = resolveInheritable(borderColor, inherited.borderColor);
             const borderValue =
               typeof border === "function" ? border() : border;
             const borderStyleValue =
@@ -1940,13 +1901,20 @@ export interface FocusScopeProps {
   children: Node[];
 }
 
+/** Props for TabFocus component */
+export interface TabFocusProps {
+  children: Node[];
+  trap?: boolean;
+}
+
 /**
- * Creates a nested focus scope for organizing focusable elements.
- *
- * When `trap` is true, Tab/Shift+Tab navigation wraps within this scope
- * instead of escaping to the parent. Useful for modal dialogs.
+ * Creates a focus scope node with the given box factory.
+ * Shared implementation for FocusScopeComponent and TabFocus.
  */
-export function FocusScopeComponent(props: FocusScopeProps): Node {
+function createFocusScopeNode(
+  props: { children: Node[]; trap?: boolean },
+  boxFactory: (children: Node[], scope: FocusScope) => Node,
+): Node {
   const ctx = getContext();
 
   // Create new scope as child of current
@@ -1964,7 +1932,7 @@ export function FocusScopeComponent(props: FocusScopeProps): Node {
     scheduleRelayout: ctx.scheduleRelayout,
   };
 
-  const node = withContext(childCtx, () => Box({ children: props.children }));
+  const node = withContext(childCtx, () => boxFactory(props.children, scope));
 
   // Store scope reference on node for cleanup and boundary detection
   (node as NodeWithFocusScope)._focusScope = scope;
@@ -1973,15 +1941,17 @@ export function FocusScopeComponent(props: FocusScopeProps): Node {
   collectFocusableInScope(node, scope);
 
   // Don't auto-focus here; let initializeFocus handle it after tree construction.
-  // This ensures autoFocus props anywhere in the tree are considered together.
-
   return node;
 }
 
-/** Props for TabFocus component */
-export interface TabFocusProps {
-  children: Node[];
-  trap?: boolean;
+/**
+ * Creates a nested focus scope for organizing focusable elements.
+ *
+ * When `trap` is true, Tab/Shift+Tab navigation wraps within this scope
+ * instead of escaping to the parent. Useful for modal dialogs.
+ */
+export function FocusScopeComponent(props: FocusScopeProps): Node {
+  return createFocusScopeNode(props, (children) => Box({ children }));
 }
 
 /**
@@ -1993,50 +1963,20 @@ export interface TabFocusProps {
 export function TabFocus(props: TabFocusProps): Node {
   const ctx = getContext();
 
-  // Create new scope as child of current
-  const scope: FocusScope = {
-    parent: ctx.currentScope,
-    focusableNodes: [],
-    focusedIndex: -1,
-    trap: props.trap ?? false,
-  };
-
-  // Build children within new scope context
-  const childCtx: RuntimeContext = {
-    state: ctx.state,
-    currentScope: scope,
-    scheduleRelayout: ctx.scheduleRelayout,
-  };
-
-  const node = withContext(childCtx, () => {
+  return createFocusScopeNode(props, (children, scope) => {
     const focus = createFocusController(ctx.state, scope);
 
     return Box({
-      children: props.children,
+      children,
       onKeyPress(event) {
         if (event.name === "tab") {
-          if (event.shift) {
-            focus.prev();
-          } else {
-            focus.next();
-          }
+          event.shift ? focus.prev() : focus.next();
           return true;
         }
         return false;
       },
     });
   });
-
-  // Store scope reference on node
-  (node as NodeWithFocusScope)._focusScope = scope;
-
-  // Collect focusable nodes into this scope
-  collectFocusableInScope(node, scope);
-
-  // Don't auto-focus here; let initializeFocus handle it after tree construction.
-  // This ensures autoFocus props anywhere in the tree are considered together.
-
-  return node;
 }
 
 /**
@@ -2544,14 +2484,96 @@ interface BindableNode {
 }
 
 /**
+ * Visitor callbacks for traversing visible (non-contents) nodes.
+ */
+interface NodeVisitor<TContext, TResult> {
+  /** Called for each visible node. Returns context for children. */
+  visit: (node: Node, ctx: TContext, result: TResult[]) => TContext;
+  /** Called for contents nodes to derive child context. */
+  contentsContext: (node: Node, ctx: TContext) => TContext;
+}
+
+/**
+ * Traverses a node tree, hoisting children of `display: "contents"` nodes.
+ * Calls visitor.visit for each visible node, visitor.contentsContext for contents nodes.
+ */
+function traverseVisibleNodes<TContext, TResult>(
+  node: Node,
+  context: TContext,
+  visitor: NodeVisitor<TContext, TResult>,
+  result: TResult[],
+): void {
+  const style = resolveNodeStyle(node);
+
+  if (style.display === "contents") {
+    const childCtx = visitor.contentsContext(node, context);
+    for (const child of resolveNodeChildren(node)) {
+      if (child._isPortal) continue;
+      traverseVisibleNodes(child, childCtx, visitor, result);
+    }
+    return;
+  }
+
+  const childCtx = visitor.visit(node, context, result);
+  for (const child of resolveNodeChildren(node)) {
+    if (child._isPortal) continue;
+    traverseVisibleNodes(child, childCtx, visitor, result);
+  }
+}
+
+/** Context for bindable node traversal */
+interface BindableContext {
+  inheritedAccessor: InheritedStyleAccessor;
+  clipAccessor: Accessor<ClipRect>;
+}
+
+/** Visitor for collecting bindable nodes */
+const bindableNodeVisitor: NodeVisitor<BindableContext, BindableNode> = {
+  visit(node, ctx, result) {
+    result.push({
+      node,
+      inheritedAccessor: ctx.inheritedAccessor,
+      clipAccessor: ctx.clipAccessor,
+    });
+
+    // Create accessors for children
+    const nodeInheritedAccessor: InheritedStyleAccessor = () =>
+      computeInheritedStyle(node, ctx.inheritedAccessor());
+
+    const nodeClipAccessor: Accessor<ClipRect> = () => {
+      const parentClip = ctx.clipAccessor();
+      const s = resolveNodeStyle(node);
+      const layout = node._layout;
+      if (s.overflow === "hidden" && layout) {
+        return intersectClipRect(parentClip, {
+          x: layout.screenX(),
+          y: layout.screenY(),
+          width: layout.width(),
+          height: layout.height(),
+        });
+      }
+      return parentClip;
+    };
+
+    return {
+      inheritedAccessor: nodeInheritedAccessor,
+      clipAccessor: nodeClipAccessor,
+    };
+  },
+
+  contentsContext(node, ctx) {
+    const wrapperInheritedAccessor: InheritedStyleAccessor = () =>
+      computeInheritedStyle(node, ctx.inheritedAccessor());
+    return {
+      inheritedAccessor: wrapperInheritedAccessor,
+      clipAccessor: ctx.clipAccessor,
+    };
+  },
+};
+
+/**
  * Flattens a node tree into a list of bindable nodes, hoisting children of
- * `display: "contents"` nodes. The resulting list matches the structure
- * produced by layout's `collectLayoutChildren`.
- *
- * @param node - The node to flatten (and recurse into)
- * @param inheritedAccessor - Parent's inherited style accessor
- * @param clipAccessor - Parent's clip rect accessor
- * @param result - Array to append bindable nodes to
+ * `display: "contents"` nodes.
  */
 function flattenBindableNodes(
   node: Node,
@@ -2559,56 +2581,12 @@ function flattenBindableNodes(
   clipAccessor: Accessor<ClipRect>,
   result: BindableNode[],
 ): void {
-  const style = resolveNodeStyle(node);
-
-  if (style.display === "contents") {
-    // Contents nodes are invisible - pass through to children with updated inherited style
-    const wrapperInheritedAccessor: InheritedStyleAccessor = () =>
-      computeInheritedStyle(node, inheritedAccessor());
-
-    for (const child of resolveNodeChildren(node)) {
-      if (child._isPortal) continue;
-      flattenBindableNodes(
-        child,
-        wrapperInheritedAccessor,
-        clipAccessor,
-        result,
-      );
-    }
-    return;
-  }
-
-  // Non-contents node: add to result
-  result.push({ node, inheritedAccessor, clipAccessor });
-
-  // Create accessors for children
-  const nodeInheritedAccessor: InheritedStyleAccessor = () =>
-    computeInheritedStyle(node, inheritedAccessor());
-
-  const nodeClipAccessor: Accessor<ClipRect> = () => {
-    const parentClip = clipAccessor();
-    const s = resolveNodeStyle(node);
-    const layout = node._layout;
-    if (s.overflow === "hidden" && layout) {
-      const x = layout.screenX();
-      const y = layout.screenY();
-      const w = layout.width();
-      const h = layout.height();
-      return intersectClipRect(parentClip, { x, y, width: w, height: h });
-    }
-    return parentClip;
-  };
-
-  // Recurse into children
-  for (const child of resolveNodeChildren(node)) {
-    if (child._isPortal) continue;
-    flattenBindableNodes(
-      child,
-      nodeInheritedAccessor,
-      nodeClipAccessor,
-      result,
-    );
-  }
+  traverseVisibleNodes(
+    node,
+    { inheritedAccessor, clipAccessor },
+    bindableNodeVisitor,
+    result,
+  );
 }
 
 /**
@@ -2781,30 +2759,23 @@ function updateAllLayoutSignals(root: Node, layoutResult: LayoutResult): void {
   }
 }
 
+/** Visitor for collecting just nodes (no context needed) */
+const nodeOnlyVisitor: NodeVisitor<void, Node> = {
+  visit(node, _ctx, result) {
+    result.push(node);
+    return undefined;
+  },
+  contentsContext() {
+    return undefined;
+  },
+};
+
 /**
  * Flattens a node tree into a list, hoisting children of `display: "contents"` nodes.
  * Used by updateAllLayoutSignals where we only need the nodes, not accessors.
  */
 function flattenNodes(node: Node, result: Node[]): void {
-  const style = resolveNodeStyle(node);
-
-  if (style.display === "contents") {
-    // Contents nodes are invisible - pass through to children
-    for (const child of resolveNodeChildren(node)) {
-      if (child._isPortal) continue;
-      flattenNodes(child, result);
-    }
-    return;
-  }
-
-  // Non-contents node: add to result
-  result.push(node);
-
-  // Recurse into children
-  for (const child of resolveNodeChildren(node)) {
-    if (child._isPortal) continue;
-    flattenNodes(child, result);
-  }
+  traverseVisibleNodes(node, undefined, nodeOnlyVisitor, result);
 }
 
 /**
