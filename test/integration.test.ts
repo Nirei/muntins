@@ -15,6 +15,7 @@ import {
   mount,
   onCleanup,
 } from "../src/index.ts";
+import { Input } from "../src/ui/input.ts";
 
 /**
  * Virtual terminal screen that simulates a real terminal.
@@ -334,7 +335,7 @@ describe("integration", () => {
               }),
             ],
           }),
-        { stdin, stdout },
+        { stdin, stdout, fpsLimit: 0 },
       );
 
       // Initial render should show A=0 B=0
@@ -377,7 +378,7 @@ describe("integration", () => {
             },
             children: [Text({ content: () => `Doubled: ${doubled()}` })],
           }),
-        { stdin, stdout },
+        { stdin, stdout, fpsLimit: 0 },
       );
 
       assert.ok(screen.contains("Doubled: 2"), "Initial: 1*2=2");
@@ -901,7 +902,7 @@ describe("integration", () => {
               }),
             ],
           }),
-        { stdin, stdout },
+        { stdin, stdout, fpsLimit: 0 },
       );
 
       assert.ok(screen.contains("a"), "Initial: has a");
@@ -1134,6 +1135,366 @@ describe("integration", () => {
       assert.ok(
         screen.getRawOutput().includes("\x1b[2J"),
         "Should clear screen",
+      );
+
+      app.unmount();
+    });
+  });
+
+  describe("Input component rendering", () => {
+    /**
+     * Extended VirtualScreen that tracks SGR modifiers (bold, inverse, etc.)
+     * for each cell, not just the character.
+     */
+    class VirtualScreenWithModifiers {
+      private cells: Array<{ char: string; inverse: boolean }>[];
+      private cursorX = 0;
+      private cursorY = 0;
+      private currentInverse = false;
+      width: number;
+      height: number;
+
+      constructor(width: number, height: number) {
+        this.width = width;
+        this.height = height;
+        this.cells = Array.from({ length: height }, () =>
+          Array.from({ length: width }, () => ({ char: " ", inverse: false })),
+        );
+      }
+
+      write(data: string): void {
+        let i = 0;
+        while (i < data.length) {
+          if (data[i] === "\x1b" && data[i + 1] === "[") {
+            // Parse CSI sequence
+            let j = i + 2;
+
+            // Handle optional ? for private mode sequences
+            if (data[j] === "?") {
+              j++;
+            }
+
+            // Collect parameters
+            let params = "";
+            while (j < data.length && /[0-9;]/.test(data[j])) {
+              params += data[j];
+              j++;
+            }
+
+            const command = data[j];
+            j++;
+
+            if (command === "H") {
+              // Cursor position
+              const parts = params
+                .split(";")
+                .map((p) => Number.parseInt(p, 10) || 1);
+              this.cursorY = Math.max(
+                0,
+                Math.min(this.height - 1, parts[0] - 1),
+              );
+              this.cursorX = Math.max(
+                0,
+                Math.min(this.width - 1, (parts[1] || 1) - 1),
+              );
+            } else if (command === "J") {
+              // Clear screen (2J = entire screen)
+              if (params === "2") {
+                for (let y = 0; y < this.height; y++) {
+                  for (let x = 0; x < this.width; x++) {
+                    this.cells[y][x] = { char: " ", inverse: false };
+                  }
+                }
+              }
+            } else if (command === "m") {
+              // SGR - style attributes
+              const codes = params
+                .split(";")
+                .map((p) => Number.parseInt(p, 10) || 0);
+              for (const code of codes) {
+                if (code === 0) {
+                  // Reset
+                  this.currentInverse = false;
+                } else if (code === 7) {
+                  // Inverse
+                  this.currentInverse = true;
+                } else if (code === 27) {
+                  // Inverse off
+                  this.currentInverse = false;
+                }
+              }
+            }
+
+            i = j;
+          } else if (data[i] >= " " || data[i] === "\t") {
+            // Printable character
+            if (this.cursorX < this.width && this.cursorY < this.height) {
+              this.cells[this.cursorY][this.cursorX] = {
+                char: data[i],
+                inverse: this.currentInverse,
+              };
+              this.cursorX++;
+            }
+            i++;
+          } else {
+            // Skip control characters
+            i++;
+          }
+        }
+      }
+
+      /**
+       * Get the character at a position.
+       */
+      getChar(x: number, y: number): string {
+        return this.cells[y]?.[x]?.char ?? " ";
+      }
+
+      /**
+       * Check if a cell has the INVERSE modifier (cursor).
+       */
+      isInverse(x: number, y: number): boolean {
+        return this.cells[y]?.[x]?.inverse ?? false;
+      }
+
+      /**
+       * Get the row as a string.
+       */
+      getRow(y: number): string {
+        return (
+          this.cells[y]
+            ?.map((c) => c.char)
+            .join("")
+            .trimEnd() ?? ""
+        );
+      }
+
+      /**
+       * Find all positions with INVERSE modifier on a given row.
+       */
+      getInversePositions(y: number): number[] {
+        const positions: number[] = [];
+        const row = this.cells[y];
+        if (row) {
+          for (let x = 0; x < row.length; x++) {
+            if (row[x].inverse) {
+              positions.push(x);
+            }
+          }
+        }
+        return positions;
+      }
+    }
+
+    function createMockStreamsWithModifiers() {
+      const stdin = Object.assign(new EventEmitter(), {
+        isTTY: true,
+        setRawMode: () => stdin,
+        read: () => null,
+        resume: () => {},
+        pause: () => {},
+      }) as unknown as NodeJS.ReadStream;
+
+      readline.emitKeypressEvents(stdin);
+
+      const screen = new VirtualScreenWithModifiers(80, 24);
+
+      const stdout = Object.assign(new EventEmitter(), {
+        isTTY: true,
+        columns: 80,
+        rows: 24,
+        write: (data: string) => {
+          screen.write(data);
+          return true;
+        },
+      }) as unknown as NodeJS.WriteStream;
+
+      return { stdin, stdout, screen };
+    }
+
+    it("shows typed character immediately, not on next keystroke", async () => {
+      const { stdin, stdout, screen } = createMockStreamsWithModifiers();
+      const [value, setValue] = createSignal("");
+
+      const app = mount(
+        () =>
+          Box({
+            children: [
+              Input({
+                value,
+                onChange: setValue,
+                width: 20,
+                autoFocus: true,
+              }),
+            ],
+          }),
+        { stdin, stdout, fpsLimit: 0 },
+      );
+
+      // Initial state: empty input with cursor at position 0
+      await nextTick();
+
+      // Type 'a'
+      emitKeypress(stdin, "a", { name: "a" });
+      await nextTick();
+
+      // The 'a' should be visible at position 0, cursor at position 1
+      assert.strictEqual(
+        screen.getChar(0, 0),
+        "a",
+        `After typing 'a': position 0 should be 'a', got '${screen.getChar(0, 0)}'`,
+      );
+
+      // Type 'b'
+      emitKeypress(stdin, "b", { name: "b" });
+      await nextTick();
+
+      // Both 'a' and 'b' should be visible
+      assert.strictEqual(
+        screen.getChar(0, 0),
+        "a",
+        `After typing 'b': position 0 should still be 'a', got '${screen.getChar(0, 0)}'`,
+      );
+      assert.strictEqual(
+        screen.getChar(1, 0),
+        "b",
+        `After typing 'b': position 1 should be 'b', got '${screen.getChar(1, 0)}'`,
+      );
+
+      // Type 'c'
+      emitKeypress(stdin, "c", { name: "c" });
+      await nextTick();
+
+      assert.strictEqual(
+        screen.getRow(0).substring(0, 3),
+        "abc",
+        "Should show 'abc'",
+      );
+
+      app.unmount();
+    });
+
+    it("cursor (INVERSE) moves to correct position after typing", async () => {
+      const { stdin, stdout, screen } = createMockStreamsWithModifiers();
+      const [value, setValue] = createSignal("");
+
+      const app = mount(
+        () =>
+          Box({
+            children: [
+              Input({
+                value,
+                onChange: setValue,
+                width: 20,
+                autoFocus: true,
+              }),
+            ],
+          }),
+        { stdin, stdout, fpsLimit: 0 },
+      );
+
+      await nextTick();
+
+      // Initial: cursor should be at position 0 (empty input)
+      let inversePositions = screen.getInversePositions(0);
+      assert.deepStrictEqual(
+        inversePositions,
+        [0],
+        `Initial: cursor should be at position 0, got ${JSON.stringify(inversePositions)}`,
+      );
+
+      // Type 'a' - cursor should move to position 1
+      emitKeypress(stdin, "a", { name: "a" });
+      await nextTick();
+
+      inversePositions = screen.getInversePositions(0);
+      assert.deepStrictEqual(
+        inversePositions,
+        [1],
+        `After 'a': cursor should be at position 1 only, got ${JSON.stringify(inversePositions)}`,
+      );
+
+      // Type 'b' - cursor should move to position 2
+      emitKeypress(stdin, "b", { name: "b" });
+      await nextTick();
+
+      inversePositions = screen.getInversePositions(0);
+      assert.deepStrictEqual(
+        inversePositions,
+        [2],
+        `After 'ab': cursor should be at position 2 only, got ${JSON.stringify(inversePositions)}`,
+      );
+
+      // Type 'c' - cursor should move to position 3
+      emitKeypress(stdin, "c", { name: "c" });
+      await nextTick();
+
+      inversePositions = screen.getInversePositions(0);
+      assert.deepStrictEqual(
+        inversePositions,
+        [3],
+        `After 'abc': cursor should be at position 3 only, got ${JSON.stringify(inversePositions)}`,
+      );
+
+      app.unmount();
+    });
+
+    it("no residual INVERSE when focus moves away", async () => {
+      const { stdin, stdout, screen } = createMockStreamsWithModifiers();
+      const [value1, setValue1] = createSignal("hello");
+      const [value2, setValue2] = createSignal("world");
+
+      const app = mount(
+        () =>
+          TabFocus({
+            children: [
+              Box({
+                flexDirection: "column",
+                children: [
+                  Input({
+                    value: value1,
+                    onChange: setValue1,
+                    width: 20,
+                    autoFocus: true,
+                  }),
+                  Input({
+                    value: value2,
+                    onChange: setValue2,
+                    width: 20,
+                  }),
+                ],
+              }),
+            ],
+          }),
+        { stdin, stdout, fpsLimit: 0 },
+      );
+
+      await nextTick();
+
+      // First input is focused, cursor at position 5 (end of "hello")
+      let row0Inverse = screen.getInversePositions(0);
+      assert.ok(
+        row0Inverse.length > 0,
+        "First input should have cursor (INVERSE)",
+      );
+
+      // Tab to second input
+      emitKeypress(stdin, "\t", { name: "tab" });
+      await nextTick();
+
+      // First input should have NO inverse cells anymore
+      row0Inverse = screen.getInversePositions(0);
+      assert.deepStrictEqual(
+        row0Inverse,
+        [],
+        `After Tab: first input should have no INVERSE, got positions ${JSON.stringify(row0Inverse)}`,
+      );
+
+      // Second input should have cursor
+      const row1Inverse = screen.getInversePositions(1);
+      assert.ok(
+        row1Inverse.length > 0,
+        `After Tab: second input should have cursor, got ${JSON.stringify(row1Inverse)}`,
       );
 
       app.unmount();

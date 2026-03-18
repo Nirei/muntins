@@ -81,7 +81,8 @@ export interface InputProps {
  * ```
  */
 export function Input(props: InputProps): Node {
-  const [cursorPos, setCursorPos] = createSignal(0);
+  const initialValue = resolve(props.value) ?? "";
+  const [cursorPos, setCursorPos] = createSignal(textLength(initialValue));
   const [scrollOffset, setScrollOffset] = createSignal(0);
 
   const getValue = () => resolve(props.value) ?? "";

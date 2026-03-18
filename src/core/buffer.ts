@@ -435,12 +435,6 @@ export class Buffer {
   private _width: number;
   private _height: number;
 
-  // Dirty region tracking
-  private _dirtyMinX: number;
-  private _dirtyMinY: number;
-  private _dirtyMaxX: number;
-  private _dirtyMaxY: number;
-
   // Style state (persists across flush calls)
   private _styleFg: number = COLOR_DEFAULT;
   private _styleBg: number = COLOR_DEFAULT;
@@ -455,12 +449,6 @@ export class Buffer {
     this._height = height;
     this.front = this.allocateCells(width * height);
     this.back = this.allocateCells(width * height);
-
-    // Initial dirty region is empty - set by first set() calls
-    this._dirtyMinX = width;
-    this._dirtyMinY = height;
-    this._dirtyMaxX = -1;
-    this._dirtyMaxY = -1;
   }
 
   get width(): number {
@@ -469,28 +457,6 @@ export class Buffer {
 
   get height(): number {
     return this._height;
-  }
-
-  get dirtyMinX(): number {
-    return this._dirtyMinX;
-  }
-
-  get dirtyMinY(): number {
-    return this._dirtyMinY;
-  }
-
-  get dirtyMaxX(): number {
-    return this._dirtyMaxX;
-  }
-
-  get dirtyMaxY(): number {
-    return this._dirtyMaxY;
-  }
-
-  hasDirtyRegion(): boolean {
-    return (
-      this._dirtyMaxX >= this._dirtyMinX && this._dirtyMaxY >= this._dirtyMinY
-    );
   }
 
   private allocateCells(size: number): InternalCell[] {
@@ -508,36 +474,6 @@ export class Buffer {
 
   private index(x: number, y: number): number {
     return y * this._width + x;
-  }
-
-  private markDirty(x: number, y: number): void {
-    if (x < this._dirtyMinX) this._dirtyMinX = x;
-    if (x > this._dirtyMaxX) this._dirtyMaxX = x;
-    if (y < this._dirtyMinY) this._dirtyMinY = y;
-    if (y > this._dirtyMaxY) this._dirtyMaxY = y;
-  }
-
-  private clearDirtyRegion(): void {
-    this._dirtyMinX = this._width;
-    this._dirtyMinY = this._height;
-    this._dirtyMaxX = -1;
-    this._dirtyMaxY = -1;
-  }
-
-  /**
-   * Mark a rectangular region as dirty without modifying cells.
-   * Used to ensure old positions are included in the diff when content moves.
-   */
-  markDirtyRect(x: number, y: number, width: number, height: number): void {
-    const x1 = Math.max(0, x);
-    const y1 = Math.max(0, y);
-    const x2 = Math.min(this._width, x + width);
-    const y2 = Math.min(this._height, y + height);
-
-    if (x1 >= x2 || y1 >= y2) return;
-
-    this.markDirty(x1, y1);
-    this.markDirty(x2 - 1, y2 - 1);
   }
 
   /**
@@ -576,7 +512,6 @@ export class Buffer {
     if (cell.symbol === "" && x > 0) {
       const baseCell = this.back[this.index(x - 1, y)];
       baseCell.symbol = " ";
-      this.markDirty(x - 1, y);
     }
 
     // Case 2: Overwriting a base character that has a continuation - clear the continuation
@@ -584,7 +519,6 @@ export class Buffer {
       const nextCell = this.back[this.index(x + 1, y)];
       if (nextCell.symbol === "") {
         nextCell.symbol = " ";
-        this.markDirty(x + 1, y);
       }
     }
 
@@ -592,7 +526,6 @@ export class Buffer {
     cell.fg = fg;
     cell.bg = bg;
     cell.modifiers = modifiers;
-    this.markDirty(x, y);
   }
 
   /**
@@ -637,8 +570,7 @@ export class Buffer {
   }
 
   /**
-   * Clear all cells in back buffer to defaults.
-   * Does NOT expand dirty region - the diff against front handles efficiency.
+   * Clear all cells in back buffer to defaults (spaces with default colors).
    */
   clear(): void {
     for (const cell of this.back) {
@@ -647,8 +579,6 @@ export class Buffer {
       cell.bg = COLOR_DEFAULT;
       cell.modifiers = 0;
     }
-    // NOTE: Do NOT mark dirty here. The diff against front handles efficiency.
-    // If a cell was already a space in front, no ANSI is emitted.
   }
 
   /**
@@ -685,11 +615,6 @@ export class Buffer {
         cell.modifiers = modifiers;
       }
     }
-
-    if (x1 < this._dirtyMinX) this._dirtyMinX = x1;
-    if (y1 < this._dirtyMinY) this._dirtyMinY = y1;
-    if (x2 - 1 > this._dirtyMaxX) this._dirtyMaxX = x2 - 1;
-    if (y2 - 1 > this._dirtyMaxY) this._dirtyMaxY = y2 - 1;
   }
 
   /**
@@ -740,7 +665,7 @@ export class Buffer {
 
   /**
    * Resize the buffer. Reinitializes all cells (no content preservation).
-   * Marks entire buffer dirty and resets cursor tracking.
+   * Resets cursor tracking.
    */
   resize(width: number, height: number): void {
     if (width === this._width && height === this._height) return;
@@ -751,11 +676,6 @@ export class Buffer {
     const size = width * height;
     this.front = this.allocateCells(size);
     this.back = this.allocateCells(size);
-
-    this._dirtyMinX = 0;
-    this._dirtyMinY = 0;
-    this._dirtyMaxX = width - 1;
-    this._dirtyMaxY = height - 1;
 
     // Reset cursor tracking (position unknown after resize)
     this._cursorX = -1;
@@ -769,12 +689,12 @@ export class Buffer {
   flush(): string {
     const output = this.render();
     this.syncBuffers();
-    this.clearDirtyRegion();
     return output;
   }
 
   /**
    * Reset for full redraw. Use when terminal state is unknown.
+   * Clears the front buffer so next flush will output everything.
    */
   forceFullRedraw(): void {
     for (const cell of this.front) {
@@ -788,20 +708,13 @@ export class Buffer {
     this._styleFg = COLOR_DEFAULT;
     this._styleBg = COLOR_DEFAULT;
     this._styleModifiers = 0;
-
-    this._dirtyMinX = 0;
-    this._dirtyMinY = 0;
-    this._dirtyMaxX = this._width - 1;
-    this._dirtyMaxY = this._height - 1;
   }
 
   private render(): string {
-    if (!this.hasDirtyRegion()) return "";
-
     const parts: string[] = [];
 
-    for (let y = this._dirtyMinY; y <= this._dirtyMaxY; y++) {
-      for (let x = this._dirtyMinX; x <= this._dirtyMaxX; x++) {
+    for (let y = 0; y < this._height; y++) {
+      for (let x = 0; x < this._width; x++) {
         const idx = this.index(x, y);
         const curr = this.back[idx];
         const prev = this.front[idx];
@@ -837,19 +750,14 @@ export class Buffer {
   }
 
   private syncBuffers(): void {
-    if (!this.hasDirtyRegion()) return;
-
-    // Only copy cells that were written this frame
-    for (let y = this._dirtyMinY; y <= this._dirtyMaxY; y++) {
-      for (let x = this._dirtyMinX; x <= this._dirtyMaxX; x++) {
-        const idx = this.index(x, y);
-        const src = this.back[idx];
-        const dst = this.front[idx];
-        dst.symbol = src.symbol;
-        dst.fg = src.fg;
-        dst.bg = src.bg;
-        dst.modifiers = src.modifiers;
-      }
+    // Copy entire back buffer to front
+    for (let i = 0; i < this.back.length; i++) {
+      const src = this.back[i];
+      const dst = this.front[i];
+      dst.symbol = src.symbol;
+      dst.fg = src.fg;
+      dst.bg = src.bg;
+      dst.modifiers = src.modifiers;
     }
   }
 

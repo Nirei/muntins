@@ -157,9 +157,6 @@ export interface Node {
 
   // Layout signals (set during binding phase)
   _layout?: LayoutSignals;
-
-  // Dispose function for the render effect (called on unmount or Show/For change)
-  _disposeRenderEffect?: () => void;
 }
 
 /**
@@ -330,6 +327,8 @@ export interface RuntimeContext {
   currentScope: FocusScope;
   /** Schedule a relayout for when Show/For create new children */
   scheduleRelayout: () => void;
+  /** Schedule a flush to repaint the screen */
+  scheduleFlush: () => void;
 }
 
 interface HoverState {
@@ -788,8 +787,6 @@ export function Box(props: BoxProps): Node {
     return parseBorderProp(borderValue);
   };
 
-  const needsRender = backgroundColor !== undefined || border !== undefined;
-
   const node: Node = {
     get style() {
       const resolved: Record<string, unknown> = {};
@@ -822,72 +819,77 @@ export function Box(props: BoxProps): Node {
       borderColor,
     },
 
-    render: needsRender
-      ? (x, y, width, height, buffer, inherited, clip) => {
-          if (
-            x >= clip.x + clip.width ||
-            x + width <= clip.x ||
-            y >= clip.y + clip.height ||
-            y + height <= clip.y
-          ) {
-            return;
-          }
+    render:
+      backgroundColor !== undefined || border !== undefined
+        ? (x, y, width, height, buffer, inherited, clip) => {
+            if (
+              x >= clip.x + clip.width ||
+              x + width <= clip.x ||
+              y >= clip.y + clip.height ||
+              y + height <= clip.y
+            ) {
+              return;
+            }
 
-          const bg = resolveInheritable(
-            backgroundColor,
-            inherited.backgroundColor,
-          );
+            const bg = resolveInheritable(
+              backgroundColor,
+              inherited.backgroundColor,
+            );
 
-          if (backgroundColor !== undefined) {
-            const fillX = Math.max(x, clip.x);
-            const fillY = Math.max(y, clip.y);
-            const fillRight = Math.min(x + width, clip.x + clip.width);
-            const fillBottom = Math.min(y + height, clip.y + clip.height);
-            const fillWidth = fillRight - fillX;
-            const fillHeight = fillBottom - fillY;
-            if (fillWidth > 0 && fillHeight > 0) {
-              buffer.fillRect(
-                fillX,
-                fillY,
-                fillWidth,
-                fillHeight,
-                " ",
-                DEFAULT_COLOR,
+            // Fill area with background color if specified
+            if (backgroundColor !== undefined) {
+              const fillX = Math.max(x, clip.x);
+              const fillY = Math.max(y, clip.y);
+              const fillRight = Math.min(x + width, clip.x + clip.width);
+              const fillBottom = Math.min(y + height, clip.y + clip.height);
+              const fillWidth = fillRight - fillX;
+              const fillHeight = fillBottom - fillY;
+              if (fillWidth > 0 && fillHeight > 0) {
+                buffer.fillRect(
+                  fillX,
+                  fillY,
+                  fillWidth,
+                  fillHeight,
+                  " ",
+                  DEFAULT_COLOR,
+                  bg,
+                  0,
+                );
+              }
+            }
+
+            const borderFlags = getBorderFlags();
+            const hasBorder =
+              borderFlags.top ||
+              borderFlags.end ||
+              borderFlags.bottom ||
+              borderFlags.start;
+
+            if (hasBorder) {
+              const fg = resolveInheritable(borderColor, inherited.borderColor);
+              const borderValue =
+                typeof border === "function" ? border() : border;
+              const borderStyleValue =
+                typeof borderStyle === "function" ? borderStyle() : borderStyle;
+              const styleName = getBorderStyleName(
+                borderValue,
+                borderStyleValue,
+              );
+              renderBorder(
+                buffer,
+                x,
+                y,
+                width,
+                height,
+                borderFlags,
+                styleName,
+                fg,
                 bg,
-                0,
+                clip,
               );
             }
           }
-
-          const borderFlags = getBorderFlags();
-          const hasBorder =
-            borderFlags.top ||
-            borderFlags.end ||
-            borderFlags.bottom ||
-            borderFlags.start;
-
-          if (hasBorder) {
-            const fg = resolveInheritable(borderColor, inherited.borderColor);
-            const borderValue =
-              typeof border === "function" ? border() : border;
-            const borderStyleValue =
-              typeof borderStyle === "function" ? borderStyle() : borderStyle;
-            const styleName = getBorderStyleName(borderValue, borderStyleValue);
-            renderBorder(
-              buffer,
-              x,
-              y,
-              width,
-              height,
-              borderFlags,
-              styleName,
-              fg,
-              bg,
-              clip,
-            );
-          }
-        }
-      : undefined,
+        : undefined,
   };
 
   if (ref) {
@@ -997,6 +999,17 @@ export function Text(props: TextProps): Node {
     ref.current = node;
   }
 
+  // If content is reactive, track it and schedule flush when it changes
+  if (typeof content === "function") {
+    const ctx = activeContext;
+    if (ctx) {
+      createEffect(() => {
+        getContent(); // Track the content signal
+        ctx.scheduleFlush(); // Schedule repaint when it changes
+      });
+    }
+  }
+
   return node;
 }
 
@@ -1075,7 +1088,7 @@ export function Show<T>(props: ShowProps<T>): Node {
         cleanupSubtreeState(ctx.state, currentChild);
       }
       if (currentChild) {
-        disposeSubtreeRenderEffects(currentChild);
+        clearSubtreeLayoutSignals(currentChild);
       }
       currentDispose();
       currentDispose = null;
@@ -1173,8 +1186,8 @@ export function For<T>(props: ForProps<T>): Node {
     if (ctx) {
       cleanupSubtreeState(ctx.state, entry.node);
     }
-    // Dispose render effects for the removed subtree
-    disposeSubtreeRenderEffects(entry.node);
+    // Clear layout signals for the removed subtree
+    clearSubtreeLayoutSignals(entry.node);
     entry.node._parent = undefined;
     entry.dispose();
   };
@@ -1310,6 +1323,7 @@ function createFocusScopeNode(
     state: ctx.state,
     currentScope: scope,
     scheduleRelayout: ctx.scheduleRelayout,
+    scheduleFlush: ctx.scheduleFlush,
   };
 
   const node = withContext(childCtx, () => boxFactory(props.children, scope));
@@ -1718,7 +1732,178 @@ function findScopeForNode(target: Node, defaultScope: FocusScope): FocusScope {
 }
 
 /**
+ * Paints a node and its children, returning the number of layout children consumed.
+ * Handles display:contents nodes by recursively painting their children without
+ * consuming a layout slot for the contents node itself.
+ */
+function paintNode(
+  node: Node,
+  layoutChildren: LayoutResult[],
+  startIndex: number,
+  buffer: Buffer,
+  inherited: InheritedStyle,
+  clip: ClipRect,
+  stdout: NodeJS.WriteStream,
+): number {
+  const style = resolveNodeStyle(node);
+
+  // Handle display: contents nodes - they don't have their own layout,
+  // their children use layouts from the parent's children array
+  if (style.display === "contents") {
+    const wrapperInherited = computeInheritedStyle(node, inherited);
+    let consumed = 0;
+
+    for (const child of resolveNodeChildren(node)) {
+      if (child._isPortal) {
+        // Paint portal children at root level (no layout consumed)
+        paintPortalChildren(child, buffer, wrapperInherited, stdout);
+        continue;
+      }
+      consumed += paintNode(
+        child,
+        layoutChildren,
+        startIndex + consumed,
+        buffer,
+        wrapperInherited,
+        clip,
+        stdout,
+      );
+    }
+    return consumed;
+  }
+
+  // Normal node - consume one layout slot
+  const layoutResult = layoutChildren[startIndex];
+  if (!layoutResult) return 0;
+
+  // Compute inherited style for this node
+  const nodeInherited = computeInheritedStyle(node, inherited);
+
+  // Call render if node has one
+  if (node.render) {
+    node.render(
+      layoutResult.screenX,
+      layoutResult.screenY,
+      layoutResult.width,
+      layoutResult.height,
+      buffer,
+      nodeInherited,
+      clip,
+    );
+  }
+
+  // Compute clip rect for children
+  const childClip =
+    style.overflow === "hidden"
+      ? intersectClipRect(clip, {
+          x: layoutResult.screenX,
+          y: layoutResult.screenY,
+          width: layoutResult.width,
+          height: layoutResult.height,
+        })
+      : clip;
+
+  // Recurse into children using this node's layout children
+  let childIndex = 0;
+  for (const child of resolveNodeChildren(node)) {
+    if (child._isPortal) {
+      paintPortalChildren(child, buffer, nodeInherited, stdout);
+      continue;
+    }
+    childIndex += paintNode(
+      child,
+      layoutResult.children,
+      childIndex,
+      buffer,
+      nodeInherited,
+      childClip,
+      stdout,
+    );
+  }
+
+  return 1; // This node consumed one layout slot
+}
+
+/**
+ * Paints portal children at root level with separate layout computation.
+ */
+function paintPortalChildren(
+  portal: Node,
+  buffer: Buffer,
+  inherited: InheritedStyle,
+  stdout: NodeJS.WriteStream,
+): void {
+  const rootClip: ClipRect = {
+    x: 0,
+    y: 0,
+    width: stdout.columns,
+    height: stdout.rows,
+  };
+
+  for (const portalChild of resolveNodeChildren(portal)) {
+    const portalLayoutNode = nodeToLayoutNode(portalChild);
+    const portalLayout = computeLayout(
+      portalLayoutNode,
+      stdout.columns,
+      stdout.rows,
+    );
+    paintNode(
+      portalChild,
+      [portalLayout],
+      0,
+      buffer,
+      inherited,
+      rootClip,
+      stdout,
+    );
+  }
+}
+
+/**
+ * Paints all nodes in the tree by calling their render() functions.
+ * Entry point for tree painting.
+ */
+function paintTree(
+  root: Node,
+  layoutResult: LayoutResult,
+  buffer: Buffer,
+  inherited: InheritedStyle,
+  clip: ClipRect,
+  stdout: NodeJS.WriteStream,
+): void {
+  const rootStyle = resolveNodeStyle(root);
+
+  // If root is a contents node, it doesn't render itself but its children
+  // use layouts from layoutResult.children
+  if (rootStyle.display === "contents") {
+    const wrapperInherited = computeInheritedStyle(root, inherited);
+    let childIndex = 0;
+
+    for (const child of resolveNodeChildren(root)) {
+      if (child._isPortal) {
+        paintPortalChildren(child, buffer, wrapperInherited, stdout);
+        continue;
+      }
+      childIndex += paintNode(
+        child,
+        layoutResult.children,
+        childIndex,
+        buffer,
+        wrapperInherited,
+        clip,
+        stdout,
+      );
+    }
+    return;
+  }
+
+  // Normal root - paint it using its own layout
+  paintNode(root, [layoutResult], 0, buffer, inherited, clip, stdout);
+}
+
+/**
  * Performs the actual buffer flush to terminal.
+ * Clears the back buffer, recomputes layout, paints the full tree, then flushes.
  */
 function doFlush(state: RuntimeState): void {
   const fs = state.flushState;
@@ -1730,6 +1915,38 @@ function doFlush(state: RuntimeState): void {
     fs.timeout = null;
   }
 
+  // Recompute layout - signal-driven content may have changed sizes
+  const layoutNode = nodeToLayoutNode(state.root);
+  const layoutResult = computeLayout(
+    layoutNode,
+    fs.stdout.columns,
+    fs.stdout.rows,
+  );
+  state.layoutResult = layoutResult;
+
+  // Update all layout signals for the new layout
+  updateAllLayoutSignals(state.root, layoutResult);
+
+  // Clear the back buffer before painting
+  fs.buffer.clear();
+
+  // Paint the entire tree
+  const rootClip: ClipRect = {
+    x: 0,
+    y: 0,
+    width: fs.stdout.columns,
+    height: fs.stdout.rows,
+  };
+  paintTree(
+    state.root,
+    layoutResult,
+    fs.buffer,
+    DEFAULT_INHERITED_STYLE,
+    rootClip,
+    fs.stdout,
+  );
+
+  // Diff against front buffer and output only changed cells
   const output = fs.buffer.flush();
   if (output.length > 0) {
     flushFrame(fs.stdout, output);
@@ -1769,10 +1986,7 @@ function doRelayout(
   state.relayoutScheduled = false;
 
   const { root, flushState } = state;
-  const { buffer, stdout } = flushState;
-
-  // Clear buffer to remove stale content from removed nodes
-  buffer.clear();
+  const { stdout } = flushState;
 
   // Recompute layout for full tree
   const layoutNode = nodeToLayoutNode(root);
@@ -1795,14 +2009,14 @@ function doRelayout(
   bindNodes(
     root,
     layoutResult,
-    buffer,
     rootInheritedAccessor,
     rootClipAccessor,
-    scheduleFlush,
-    scheduleRelayout,
     stdout,
     true, // onlyNew: only bind nodes created by Show/For since last bind
   );
+
+  // Schedule a flush to repaint with new layout
+  scheduleFlush();
 }
 
 /**
@@ -2000,38 +2214,20 @@ function flattenLayoutResults(
 
 /**
  * Binds a single node with its layout result.
- * Creates layout signals and render effect if needed.
+ * Creates layout signals if needed.
  */
-function bindSingleNode(
-  bindable: BindableNode,
-  layout: LayoutResult,
-  buffer: Buffer,
-  scheduleFlush: () => void,
-  scheduleRelayout: () => void,
-): void {
-  const { node, inheritedAccessor, clipAccessor } = bindable;
+function bindSingleNode(bindable: BindableNode, layout: LayoutResult): void {
+  const { node } = bindable;
 
   if (!node._layout) {
     node._layout = createLayoutSignals();
   }
   node._layout.setLayout(layout);
-
-  if (node.render && !node._disposeRenderEffect) {
-    createRenderEffect(
-      node,
-      layout,
-      buffer,
-      inheritedAccessor,
-      clipAccessor,
-      scheduleFlush,
-      scheduleRelayout,
-    );
-  }
 }
 
 /**
  * Binds nodes in the tree including portals.
- * Flattens both node tree and layout results, then iterates in parallel.
+ * Sets up layout signals for each node.
  * Portal children are collected during traversal and bound at root level.
  *
  * @param onlyNew - If true, only binds nodes that don't have layout signals yet.
@@ -2040,11 +2236,8 @@ function bindSingleNode(
 function bindNodes(
   root: Node,
   layoutResult: LayoutResult,
-  buffer: Buffer,
   rootInheritedAccessor: InheritedStyleAccessor,
   rootClipAccessor: Accessor<ClipRect>,
-  scheduleFlush: () => void,
-  scheduleRelayout: () => void,
   stdout: NodeJS.WriteStream,
   onlyNew = false,
 ): void {
@@ -2064,13 +2257,7 @@ function bindNodes(
   for (let i = 0; i < bindableNodes.length; i++) {
     const { node } = bindableNodes[i];
     if (onlyNew && node._layout) continue;
-    bindSingleNode(
-      bindableNodes[i],
-      layouts[i],
-      buffer,
-      scheduleFlush,
-      scheduleRelayout,
-    );
+    bindSingleNode(bindableNodes[i], layouts[i]);
   }
 
   for (const { node, inheritedAccessor } of portals) {
@@ -2093,11 +2280,8 @@ function bindNodes(
     bindNodes(
       node,
       portalLayout,
-      buffer,
       inheritedAccessor,
       portalClipAccessor,
-      scheduleFlush,
-      scheduleRelayout,
       stdout,
       onlyNew,
     );
@@ -2115,12 +2299,14 @@ function updateAllLayoutSignals(root: Node, layoutResult: LayoutResult): void {
   const layouts: LayoutResult[] = [];
   flattenLayoutResults(layoutResult, root, layouts);
 
-  for (let i = 0; i < nodes.length; i++) {
-    const node = nodes[i];
-    if (node._layout) {
-      node._layout.setLayout(layouts[i]);
+  batch(() => {
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      if (node._layout) {
+        node._layout.setLayout(layouts[i]);
+      }
     }
-  }
+  });
 }
 
 /**
@@ -2147,109 +2333,19 @@ function flattenNodes(node: Node, result: Node[]): void {
 }
 
 /**
- * Creates a render effect for a node that has a render function.
- * The effect re-runs when layout signals change, rendering the node to the buffer.
- * Also handles intrinsic size changes by triggering relayout.
+ * Clears layout signals for a subtree being removed.
  */
-function createRenderEffect(
-  node: Node,
-  layoutResult: LayoutResult,
-  buffer: Buffer,
-  inheritedAccessor: InheritedStyleAccessor,
-  clipAccessor: Accessor<ClipRect>,
-  scheduleFlush: () => void,
-  scheduleRelayout: () => void,
-): void {
-  const initialIntrinsic = node.measure
-    ? node.measure(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY)
-    : { width: layoutResult.width, height: layoutResult.height };
-  let prevIntrinsicW = initialIntrinsic.width;
-  let prevIntrinsicH = initialIntrinsic.height;
-  let prevX = layoutResult.screenX;
-  let prevY = layoutResult.screenY;
-  let prevW = layoutResult.width;
-  let prevH = layoutResult.height;
-
-  createRoot(
-    (dispose) => {
-      node._disposeRenderEffect = dispose;
-
-      createEffect(() => {
-        const layout = node._layout;
-        if (!layout || !node.render) return;
-
-        const w = layout.width();
-        const h = layout.height();
-
-        if (node.measure) {
-          const intrinsic = node.measure(
-            Number.POSITIVE_INFINITY,
-            Number.POSITIVE_INFINITY,
-          );
-          const intrinsicChanged =
-            intrinsic.width !== prevIntrinsicW ||
-            intrinsic.height !== prevIntrinsicH;
-          prevIntrinsicW = intrinsic.width;
-          prevIntrinsicH = intrinsic.height;
-
-          if (
-            intrinsicChanged &&
-            (intrinsic.width !== w || intrinsic.height !== h)
-          ) {
-            scheduleRelayout();
-            return;
-          }
-        }
-
-        const x = layout.screenX();
-        const y = layout.screenY();
-        const inherited = inheritedAccessor();
-        const clip = clipAccessor();
-
-        if (x !== prevX || y !== prevY || w !== prevW || h !== prevH) {
-          buffer.fillRect(
-            prevX,
-            prevY,
-            prevW,
-            prevH,
-            " ",
-            DEFAULT_COLOR,
-            inherited.backgroundColor,
-            0,
-          );
-        }
-        prevX = x;
-        prevY = y;
-        prevW = w;
-        prevH = h;
-
-        node.render(x, y, w, h, buffer, inherited, clip);
-        scheduleFlush();
-      });
-    },
-    { detached: true },
-  );
-}
-
-/**
- * Disposes render effects for a subtree being removed.
- */
-function disposeSubtreeRenderEffects(node: Node): void {
-  if (node._disposeRenderEffect) {
-    node._disposeRenderEffect();
-    node._disposeRenderEffect = undefined;
-  }
-
+function clearSubtreeLayoutSignals(node: Node): void {
   node._layout = undefined;
 
   for (const child of resolveNodeChildren(node)) {
-    disposeSubtreeRenderEffects(child);
+    clearSubtreeLayoutSignals(child);
   }
 }
 
 /**
  * Handle incoming input events.
- * Resize events trigger relayout; others route events (effects handle rendering).
+ * Resize events trigger relayout and repaint; others route events.
  */
 function handleEvent(
   state: RuntimeState,
@@ -2258,13 +2354,15 @@ function handleEvent(
 ): void {
   if (event.type === "resize") {
     state.flushState.buffer.resize(event.width, event.height);
-    state.flushState.buffer.clear();
 
     const layoutNode = nodeToLayoutNode(state.root);
     const layoutResult = computeLayout(layoutNode, event.width, event.height);
     state.layoutResult = layoutResult;
 
     updateAllLayoutSignals(state.root, layoutResult);
+
+    // Schedule repaint with new layout
+    scheduleFlush();
     return;
   }
 
@@ -2272,6 +2370,9 @@ function handleEvent(
   batch(() => {
     routeEvent(state, event);
   });
+
+  // After processing any event, schedule a repaint to reflect any signal changes
+  scheduleFlush();
 }
 
 /**
@@ -2291,7 +2392,7 @@ function unmountState(state: RuntimeState, cleanupHandlers?: () => void): void {
   }
 
   state.rootDispose();
-  disposeSubtreeRenderEffects(state.root);
+  clearSubtreeLayoutSignals(state.root);
   state.inputParser.destroy();
   exitTuiMode(stdout, { alternateScreen: options.alternateScreen });
 }
@@ -2359,6 +2460,7 @@ export function mount(component: () => Node, options?: MountOptions): App {
     state,
     currentScope: state.rootScope,
     scheduleRelayout,
+    scheduleFlush,
   };
 
   state.rootDispose = createRoot((dispose) => {
@@ -2383,11 +2485,8 @@ export function mount(component: () => Node, options?: MountOptions): App {
     bindNodes(
       state.root,
       layoutResult,
-      buffer,
       rootInheritedAccessor,
       rootClipAccessor,
-      scheduleFlush,
-      scheduleRelayout,
       stdout,
     );
 

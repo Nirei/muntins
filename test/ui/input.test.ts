@@ -224,7 +224,8 @@ describe("Input", () => {
 
       assert.ok(node.onKeyPress);
 
-      // Move cursor right once (to position 1)
+      // Move cursor to start, then right once (to position 1)
+      node.onKeyPress(keyEvent("home"));
       node.onKeyPress(keyEvent("right"));
 
       // Insert 'b' at position 1
@@ -265,7 +266,8 @@ describe("Input", () => {
 
       assert.ok(node.onKeyPress);
 
-      // Cursor is at start, backspace should do nothing
+      // Move cursor to start, backspace should do nothing
+      node.onKeyPress(keyEvent("home"));
       const result = node.onKeyPress(keyEvent("backspace"));
 
       assert.strictEqual(result, false);
@@ -283,7 +285,8 @@ describe("Input", () => {
 
       assert.ok(node.onKeyPress);
 
-      // Cursor at start, delete first char
+      // Move cursor to start, delete first char
+      node.onKeyPress(keyEvent("home"));
       const result = node.onKeyPress(keyEvent("delete"));
 
       assert.strictEqual(result, true);
@@ -345,7 +348,8 @@ describe("Input", () => {
 
       assert.ok(node.onKeyPress);
 
-      // Move right (cursor starts at 0)
+      // Move to start, then right
+      node.onKeyPress(keyEvent("home"));
       const result = node.onKeyPress(keyEvent("right"));
       assert.strictEqual(result, true);
 
@@ -451,7 +455,8 @@ describe("Input", () => {
 
       assert.ok(node.onKeyPress);
 
-      // Move right twice (cursor at position 2)
+      // Move to start, then right twice (cursor at position 2)
+      node.onKeyPress(keyEvent("home"));
       node.onKeyPress(keyEvent("right"));
       node.onKeyPress(keyEvent("right"));
 
@@ -472,7 +477,8 @@ describe("Input", () => {
 
       assert.ok(node.onKeyPress);
 
-      // Move right twice (cursor at position 2)
+      // Move to start, then right twice (cursor at position 2)
+      node.onKeyPress(keyEvent("home"));
       node.onKeyPress(keyEvent("right"));
       node.onKeyPress(keyEvent("right"));
 
@@ -572,6 +578,22 @@ describe("Input", () => {
   });
 
   describe("cursor position", () => {
+    it("cursor starts at end of initial value", () => {
+      let received = "";
+      const node = Input({
+        value: "hello",
+        onChange: (v) => {
+          received = v;
+        },
+      });
+
+      assert.ok(node.onKeyPress);
+
+      // Insert character without moving cursor - should append at end
+      node.onKeyPress(keyEvent("X", "X"));
+      assert.strictEqual(received, "helloX");
+    });
+
     it("cursor stays within bounds", () => {
       let received = "";
       const node = Input({
@@ -680,6 +702,75 @@ describe("Input", () => {
       const layout = computeLayout(layoutNode, 100, 100);
       assert.strictEqual(layout.width, 15);
       assert.strictEqual(layout.height, 1);
+    });
+  });
+
+  describe("controlled input rendering", () => {
+    it("renders newly typed character immediately", () => {
+      // This test verifies that when typing a character, the rendered output
+      // shows the new character immediately, not on the next keystroke.
+      // This catches a bug where cursor position updates before the controlled
+      // value propagates back, causing the new character to be invisible.
+      const [value, setValue] = createSignal("");
+      const node = Input({
+        value,
+        onChange: setValue,
+        width: 10,
+      });
+
+      assert.ok(node.onKeyPress);
+
+      // Type 'a'
+      node.onKeyPress(keyEvent("a", "a"));
+
+      // Render immediately after typing
+      let buffer = renderInput(node, 10, 1);
+
+      // The 'a' should be visible at position 0
+      assert.strictEqual(buffer.getSymbol(0, 0), "a");
+
+      // Type 'b'
+      node.onKeyPress(keyEvent("b", "b"));
+      buffer = renderInput(node, 10, 1);
+
+      // Both 'a' and 'b' should be visible
+      assert.strictEqual(buffer.getSymbol(0, 0), "a");
+      assert.strictEqual(buffer.getSymbol(1, 0), "b");
+
+      // Type 'c'
+      node.onKeyPress(keyEvent("c", "c"));
+      buffer = renderInput(node, 10, 1);
+
+      // All three should be visible
+      assert.strictEqual(buffer.getSymbol(0, 0), "a");
+      assert.strictEqual(buffer.getSymbol(1, 0), "b");
+      assert.strictEqual(buffer.getSymbol(2, 0), "c");
+    });
+
+    it("renders character inserted in middle immediately", () => {
+      const [value, setValue] = createSignal("ac");
+      const node = Input({
+        value,
+        onChange: setValue,
+        width: 10,
+      });
+
+      assert.ok(node.onKeyPress);
+
+      // Move cursor to position 1 (between 'a' and 'c')
+      node.onKeyPress(keyEvent("home"));
+      node.onKeyPress(keyEvent("right"));
+
+      // Type 'b' in the middle
+      node.onKeyPress(keyEvent("b", "b"));
+
+      // Render immediately
+      const buffer = renderInput(node, 10, 1);
+
+      // Should show "abc" with cursor after 'b'
+      assert.strictEqual(buffer.getSymbol(0, 0), "a");
+      assert.strictEqual(buffer.getSymbol(1, 0), "b");
+      assert.strictEqual(buffer.getSymbol(2, 0), "c");
     });
   });
 

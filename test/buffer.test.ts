@@ -183,21 +183,6 @@ describe("Buffer class", () => {
       assert.strictEqual(buf.getModifiers(3, 4), BOLD);
     });
 
-    it("set() marks dirty region", () => {
-      const buf = new Buffer(10, 10);
-      buf.flush(); // Clear initial dirty state
-
-      assert.strictEqual(buf.hasDirtyRegion(), false);
-
-      buf.set(5, 5, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
-
-      assert.strictEqual(buf.hasDirtyRegion(), true);
-      assert.strictEqual(buf.dirtyMinX, 5);
-      assert.strictEqual(buf.dirtyMinY, 5);
-      assert.strictEqual(buf.dirtyMaxX, 5);
-      assert.strictEqual(buf.dirtyMaxY, 5);
-    });
-
     it("set() out-of-bounds is silent no-op", () => {
       const buf = new Buffer(10, 10);
       buf.set(-1, 0, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
@@ -210,14 +195,6 @@ describe("Buffer class", () => {
       buf.set(5, 5, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
       buf.clear();
       assert.strictEqual(buf.getSymbol(5, 5), " ");
-    });
-
-    it("clear() does NOT expand dirty region", () => {
-      const buf = new Buffer(10, 10);
-      buf.flush(); // Clear dirty state
-      buf.clear();
-      // Dirty region should still be empty after clear()
-      assert.strictEqual(buf.hasDirtyRegion(), false);
     });
 
     it("fillRect() fills region with given style", () => {
@@ -599,17 +576,6 @@ describe("Buffer class", () => {
       assert.ok(output.includes("X"));
     });
 
-    it("marks entire buffer dirty", () => {
-      const buf = new Buffer(10, 10);
-      buf.flush();
-      buf.forceFullRedraw();
-
-      assert.strictEqual(buf.dirtyMinX, 0);
-      assert.strictEqual(buf.dirtyMinY, 0);
-      assert.strictEqual(buf.dirtyMaxX, 9);
-      assert.strictEqual(buf.dirtyMaxY, 9);
-    });
-
     it("next flush emits all non-default cells", () => {
       const buf = new Buffer(10, 10);
       buf.set(5, 5, "Y", DEFAULT_COLOR, DEFAULT_COLOR, 0);
@@ -641,63 +607,11 @@ describe("Buffer class", () => {
       assert.strictEqual(buf.getSymbol(2, 2), " ");
     });
 
-    it("resize marks entire buffer dirty", () => {
-      const buf = new Buffer(5, 5);
-      buf.flush();
-
-      buf.resize(10, 10);
-
-      assert.strictEqual(buf.dirtyMinX, 0);
-      assert.strictEqual(buf.dirtyMinY, 0);
-      assert.strictEqual(buf.dirtyMaxX, 9);
-      assert.strictEqual(buf.dirtyMaxY, 9);
-    });
-
     it("resize with same dimensions is no-op", () => {
       const buf = new Buffer(10, 10);
       buf.set(5, 5, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
       buf.resize(10, 10);
       assert.strictEqual(buf.getSymbol(5, 5), "X");
-    });
-  });
-
-  describe("dirty region optimization", () => {
-    it("flush() only scans dirty region", () => {
-      const buf = new Buffer(100, 100);
-      buf.flush();
-
-      // Set a single cell
-      buf.set(50, 50, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
-
-      assert.strictEqual(buf.dirtyMinX, 50);
-      assert.strictEqual(buf.dirtyMinY, 50);
-      assert.strictEqual(buf.dirtyMaxX, 50);
-      assert.strictEqual(buf.dirtyMaxY, 50);
-    });
-
-    it("small change in large buffer only scans that region", () => {
-      const buf = new Buffer(100, 100);
-      buf.flush();
-
-      buf.set(10, 10, "A", DEFAULT_COLOR, DEFAULT_COLOR, 0);
-      buf.set(20, 20, "B", DEFAULT_COLOR, DEFAULT_COLOR, 0);
-
-      assert.strictEqual(buf.dirtyMinX, 10);
-      assert.strictEqual(buf.dirtyMinY, 10);
-      assert.strictEqual(buf.dirtyMaxX, 20);
-      assert.strictEqual(buf.dirtyMaxY, 20);
-    });
-
-    it("clear() followed by set() has dirty region from set() only", () => {
-      const buf = new Buffer(10, 10);
-      buf.flush();
-      buf.clear();
-      buf.set(5, 5, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
-
-      assert.strictEqual(buf.dirtyMinX, 5);
-      assert.strictEqual(buf.dirtyMinY, 5);
-      assert.strictEqual(buf.dirtyMaxX, 5);
-      assert.strictEqual(buf.dirtyMaxY, 5);
     });
   });
 });

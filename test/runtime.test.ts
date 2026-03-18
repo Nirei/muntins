@@ -201,10 +201,22 @@ describe("Box", () => {
     assert.strictEqual(node.measure, undefined);
   });
 
-  it("no render function when backgroundColor not set", () => {
+  it("has no render function when no backgroundColor or border", () => {
     const node = Box({});
 
+    // Box without backgroundColor or border has no render function
+    // (nothing to render - it's a pure layout container)
     assert.strictEqual(node.render, undefined);
+  });
+
+  it("has render function when backgroundColor is provided", () => {
+    const node = Box({ backgroundColor: { type: "named", index: 1 } }); // red
+    assert.strictEqual(typeof node.render, "function");
+  });
+
+  it("has render function when border is provided", () => {
+    const node = Box({ border: true });
+    assert.strictEqual(typeof node.render, "function");
   });
 
   it("supports reactive style props", () => {
@@ -3152,6 +3164,7 @@ describe("useFocus", () => {
       state,
       currentScope: scope,
       scheduleRelayout: () => {},
+      scheduleFlush: () => {},
     });
 
     const controller = useFocus();
@@ -3173,6 +3186,7 @@ describe("withContext", () => {
       state,
       currentScope: scope,
       scheduleRelayout: () => {},
+      scheduleFlush: () => {},
     };
 
     let capturedContext: RuntimeContext | null = null;
@@ -3191,11 +3205,13 @@ describe("withContext", () => {
       state: state1,
       currentScope: createTestScope([]),
       scheduleRelayout: () => {},
+      scheduleFlush: () => {},
     };
     const ctx2: RuntimeContext = {
       state: state2,
       currentScope: createTestScope([]),
       scheduleRelayout: () => {},
+      scheduleFlush: () => {},
     };
 
     setActiveContext(ctx1);

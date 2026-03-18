@@ -8,23 +8,26 @@ What follows is a complete architectural blueprint, covering every subsystem's i
 
 ## The three-phase render pipeline
 
-The entire system flows through three phases: **build → layout → bind**. Signals make updates incremental rather than wholesale.
+The entire system flows through three phases: **build → layout → paint**. Each flush recomputes layout and repaints the entire tree, but only changed cells are sent to the terminal.
 
 **Phase 1, Build virtual tree.** Application code declares a tree of UI nodes using reactive primitives. Each node carries a `FlexStyle` (flexbox properties) and either child nodes or a text-measurement function. Signals wrap dynamic values. The tree is *not* rebuilt on every update; instead, structural changes (conditional rendering, list items) use `createRoot` scopes that can be individually disposed and recreated.
 
-**Phase 2, Layout.** The flexbox algorithm walks the tree top-down, resolving flex-basis/grow/shrink per line, then positions children along main and cross axes. Layout runs when content changes might affect sizing (via `scheduleRelayout`) or on terminal resize. Each node's layout result is stored in reactive signals (`x`, `y`, `width`, `height`, `screenX`, `screenY`).
+**Phase 2, Layout.** The flexbox algorithm walks the tree top-down, resolving flex-basis/grow/shrink per line, then positions children along main and cross axes. Layout is recomputed on every flush to handle signal-driven content changes that affect sizing. Each node's layout result is stored in reactive signals for external access via refs.
 
-**Phase 3, Bind.** After layout, each node that renders content gets its own `createEffect` that tracks layout signals, content, and inherited styles. When any tracked value changes, the effect re-runs and writes to the buffer. There is no central paint loop—each node is independently reactive.
+**Phase 3, Paint.** The runtime clears the back buffer to spaces, then walks the tree depth-first, calling each node's `render()` function with its computed layout coordinates. Parents paint before children, so backgrounds are laid down first. Text nodes fill their area before drawing text to prevent stale content when text shrinks.
 
 ```
-Signal update (timer, event, async)
-  → Render effect runs synchronously, writes to buffer
+Event or signal change
   → scheduleFlush() queues microtask
-  → [More effects may run from same signal change]
-  → Flush microtask: buffer.flush() → diff → ANSI output
+  → Flush microtask:
+      1. Recompute layout (content may have changed sizes)
+      2. Clear back buffer to spaces
+      3. Paint entire tree (parents before children)
+      4. Diff back vs front buffer
+      5. Output only changed cells to terminal
 ```
 
-The critical architectural difference from Ink is that **there is no virtual DOM reconciler**. Components are plain functions that run once (like SolidJS), creating signals and effects that persist. The critical difference from Ratatui is that **there is no central render loop**—effects only repaint the specific nodes whose tracked signals changed.
+The critical architectural difference from Ink is that **there is no virtual DOM reconciler**. Components are plain functions that run once (like SolidJS), creating signals and effects that persist. The difference from Ratatui is that **the buffer diff ensures only changed cells generate terminal output**, so full-tree painting is efficient.
 
 ---
 
@@ -115,7 +118,7 @@ buffer.writeText(x, y, "hello", fg, bg, modifiers);
 const ansiOutput = buffer.flush();  // diff + serialize + sync
 ```
 
-**Double-buffering with copy-on-flush.** The class maintains two cell arrays: `front` (what's on screen) and `back` (the render target). The runtime clears `back`, paints into it, then calls `flush()` which compares `back` vs `front`, emits ANSI sequences for differences, and copies changed cells from `back` to `front`. After flush, both buffers contain the same state, the next frame's `clear()` writes to `back`, and only cells that actually differ from `front` generate output.
+**Double-buffering with copy-on-flush.** The class maintains two cell arrays: `front` (what's on screen) and `back` (the render target). Each flush: clear `back` to spaces, paint the entire tree into it, then call `flush()` which compares every cell in `back` vs `front`, emits ANSI sequences for differences, and copies `back` to `front`. After flush, both buffers contain the same state.
 
 **Zero-allocation design.** Cells are allocated once at Buffer construction and mutated in place. The `set()` method takes primitive arguments (symbol, fg, bg, modifiers) rather than a Cell object, avoiding per-call object allocation. The diff/serialize step is merged into a single `flush()` method with no intermediate `CellChange[]` array.
 
@@ -131,11 +134,11 @@ const ansiOutput = buffer.flush();  // diff + serialize + sync
 
 This allows the internal `cellsEqual()` to compare colors with `a.fg === b.fg` rather than deep equality checks on discriminated unions.
 
-**Style state persists across frames.** Buffer tracks the terminal's current style (foreground, background, modifiers) and cursor position across `flush()` calls. This minimizes ANSI output, only emit SGR codes when the style actually changes from the previous cell. When removing modifiers, emit `SGR 0` followed by the remaining styles. Use `forceFullRedraw()` if the terminal gets desynchronized (e.g., external process wrote to stdout).
+**Style state persists across frames.** Buffer tracks the terminal's current style (foreground, background, modifiers) and cursor position across `flush()` calls. This minimizes ANSI output—only emit SGR codes when the style actually changes from the previous cell. When removing modifiers, emit `SGR 0` followed by the remaining styles. Use `forceFullRedraw()` if the terminal gets desynchronized (e.g., external process wrote to stdout).
 
 **Cursor positioning is the other major optimization.** When consecutive cells in a row all changed, the cursor naturally advances, no repositioning needed. Only emit `\x1b[row;colH` when there's a gap of unchanged cells.
 
-**Dirty region tracking limits the diff scan.** Buffer tracks a bounding rectangle of modified cells. On `flush()`, only cells within this dirty region are compared. The `clear()` method does NOT mark cells dirty, the dirty region comes from actual `set()` calls during painting. This means clearing then painting a small region only scans that region, not the entire buffer.
+**Full-buffer diff on every flush.** The buffer compares all cells on every flush. This is O(width × height) comparisons per frame (e.g., 1920 comparisons for an 80×24 terminal), which is negligible compared to actual terminal I/O. The simplicity of always clearing and repainting eliminates entire classes of stale-content bugs that plague incremental approaches.
 
 **All output goes into a single string, flushed with one `process.stdout.write()` call.** Multiple small writes cause syscall overhead and visual tearing. Bracket the entire output with cursor-hide (`\x1b[?25l`) and cursor-show (`\x1b[?25h`) to prevent flicker. On startup, enter the alternate screen buffer (`\x1b[?1049h`) to preserve the user's scrollback; on exit, restore it (`\x1b[?1049l`).
 
@@ -173,9 +176,9 @@ type InputEvent =
 
 ---
 
-## Reactive render binding: how signals connect to painting
+## The paint model: how signals connect to rendering
 
-This is where the architecture diverges most sharply from existing TUI libraries. Rather than Ink's React reconciler or Ratatui's full-redraw approach, **each node creates its own render effect that writes directly to the buffer when its signals change**. There is no central render loop traversing the tree.
+The architecture uses a **clear-paint-diff** model rather than per-node render effects. Every flush clears the back buffer, paints the entire tree, and diffs against the front buffer. This eliminates stale-content bugs while maintaining efficient terminal output.
 
 **Components are functions that run once.** Like SolidJS, a component function executes a single time to set up its reactive bindings. It creates signals for local state, memos for derived values, and returns a node descriptor (style + children or measure function) for the layout tree.
 
@@ -183,19 +186,18 @@ This is where the architecture diverges most sharply from existing TUI libraries
 function Counter() {
   const [count, setCount] = createSignal(0);
 
-  // This node participates in flexbox layout
   return Box({
     flexDirection: 'column',
     padding: [1, 1, 1, 1],
     children: [
-      Text({ content: () => `Count: ${count()}` }),   // render effect auto-created
+      Text({ content: () => `Count: ${count()}` }),
       Text({ content: () => `Double: ${count() * 2}` }),
     ],
   });
 }
 ```
 
-**Layout coordinates are signals.** After layout computes positions, each node stores its coordinates as reactive signals (`x`, `y`, `width`, `height`, `screenX`, `screenY`). This enables surgical updates: when layout changes, only the affected nodes' render effects re-run.
+**Layout coordinates are signals.** After layout computes positions, each node stores its coordinates as reactive signals (`x`, `y`, `width`, `height`, `screenX`, `screenY`). These are primarily for external access via refs—the paint pass reads layout results directly.
 
 ```typescript
 interface Node {
@@ -208,47 +210,40 @@ interface Node {
     screenY: Accessor<number>;
     setLayout: (result: LayoutResult) => void;
   };
-  _disposeRenderEffect?: () => void;
+  render?: (x, y, width, height, buffer, inherited, clip) => void;
 }
 ```
 
-**Each node has its own render effect.** After initial layout, the runtime "binds" each node by creating an effect that tracks layout signals, content, and inherited styles:
+**Nodes have render functions, not render effects.** Each node that produces visual output has a `render()` method that paints to the buffer given coordinates. The runtime calls these during the paint pass—there are no per-node effects tracking dependencies.
 
 ```typescript
-createEffect(() => {
-  const x = node._layout.screenX();     // Tracks layout signal
-  const y = node._layout.screenY();     // Tracks layout signal
-  const width = node._layout.width();   // Tracks layout signal
-  const height = node._layout.height(); // Tracks layout signal
-  const inherited = computeInheritedStyle(node, parentInheritedAccessor());
-  
-  renderTextToBuffer(buffer, x, y, width, height, text, inherited, clip);
-  scheduleFlush();
-});
+// Text node's render function (simplified)
+render(x, y, width, height, buffer, inherited, clip) {
+  // Fill area with background to clear any stale content
+  buffer.fillRect(x, y, width, height, ' ', fg, bg, modifiers);
+  // Then draw the text
+  renderText(buffer, x, y, width, height, getText(), props, inherited, clip);
+}
 ```
 
-When any tracked signal changes—from a timer, async callback, or event handler—the effect re-runs and updates the buffer. No explicit `scheduleRender()` call needed.
-
-**Flush is throttled and batched.** When render effects write to the buffer, they call `scheduleFlush()` which queues a microtask. Multiple signal changes in the same tick coalesce into one flush. FPS limiting ensures the terminal isn't overwhelmed by rapid updates.
+**Flush recomputes everything.** Each flush: recomputes layout (content may have changed sizes), clears the back buffer, paints the entire tree depth-first, diffs against the front buffer, and outputs only changed cells. This is simpler and more correct than tracking which nodes need repainting.
 
 ```
-Signal update (e.g., from timer)
-  → Effect runs synchronously, writes to buffer, calls scheduleFlush
-  → [More signals may update, more effects run]
-  → Microtask queue drains
-  → Flush: buffer.flush() → diff → ANSI output to terminal
+Event (keypress, timer, etc.)
+  → Signal updates in batched event handler
+  → scheduleFlush() queues microtask
+  → Flush microtask:
+      1. computeLayout() - O(n) tree walk
+      2. buffer.clear() - reset back buffer
+      3. paintTree() - depth-first, parents before children
+      4. buffer.flush() - diff all cells, output changes
 ```
 
-**Relayout is triggered by content changes.** When a Text node's content changes and might affect layout (e.g., different string length), a content-tracking effect schedules relayout via microtask. Relayout clears the buffer, recomputes layout, updates layout signals, and binds any new nodes. Render effects then re-run with new coordinates.
+**Text content changes schedule flushes.** When a Text node has reactive content (a function), an effect tracks it and calls `scheduleFlush()` when it changes. This ensures the next flush will repaint with the new content.
 
-**Conditional and list rendering use ownership scopes.** `Show` and `For` primitives create `createRoot` scopes for dynamic children. When conditions change:
-1. Old subtree's render effects are explicitly disposed via `disposeSubtreeRenderEffects()`
-2. New subtree is created in a fresh root
-3. `scheduleRelayout()` is called to bind the new nodes
+**Structural changes schedule relayout.** `Show` and `For` primitives call `scheduleRelayout()` when they add or remove children. Relayout binds new nodes (setting up their layout signals) and schedules a flush.
 
-Render effects are created in detached roots so they survive the component's `createRoot` disposal and can be explicitly controlled.
-
-**Resize updates layout signals.** On terminal resize, the runtime clears the buffer, recomputes layout, and updates each node's layout signals via `setLayout()`. Render effects automatically re-run with new coordinates—no disposal or rebinding needed.
+**Resize triggers relayout.** On terminal resize, the runtime resizes the buffer, recomputes layout, and schedules a flush. The next flush will repaint everything at the new dimensions.
 
 ---
 
