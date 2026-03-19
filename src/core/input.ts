@@ -258,9 +258,70 @@ const ParserState = {
   Escape: 1,
   Csi: 2,
   SgrMouse: 3,
+  Ss3: 4, // SS3 sequences (ESC O) for function keys
 } as const;
 
 type ParserState = (typeof ParserState)[keyof typeof ParserState];
+
+// CSI sequence terminators to key names
+const CSI_KEYS: Record<string, string> = {
+  A: "up",
+  B: "down",
+  C: "right",
+  D: "left",
+  H: "home",
+  F: "end",
+  Z: "tab", // Shift+Tab
+};
+
+// CSI sequences with numeric parameters: ESC [ n ~
+const CSI_TILDE_KEYS: Record<number, string> = {
+  1: "home",
+  2: "insert",
+  3: "delete",
+  4: "end",
+  5: "pageup",
+  6: "pagedown",
+  7: "home",
+  8: "end",
+  11: "f1",
+  12: "f2",
+  13: "f3",
+  14: "f4",
+  15: "f5",
+  17: "f6",
+  18: "f7",
+  19: "f8",
+  20: "f9",
+  21: "f10",
+  23: "f11",
+  24: "f12",
+};
+
+// SS3 sequences (ESC O): function keys on some terminals
+const SS3_KEYS: Record<string, string> = {
+  P: "f1",
+  Q: "f2",
+  R: "f3",
+  S: "f4",
+  A: "up",
+  B: "down",
+  C: "right",
+  D: "left",
+  H: "home",
+  F: "end",
+};
+
+// Control character names
+const CTRL_NAMES: Record<number, string> = {
+  0: "space", // Ctrl+Space / Ctrl+@
+  8: "backspace", // Ctrl+H
+  9: "tab",
+  10: "enter", // Ctrl+J (line feed)
+  13: "enter", // Ctrl+M (carriage return)
+  27: "escape",
+  127: "backspace",
+};
 
 /**
  * Parse SGR mouse protocol parameters into a MouseEvent or ScrollEvent.
@@ -330,6 +391,7 @@ export function parseMouseSequence(
  * State machine parser for escape sequences (mouse and focus events).
  *
  * Parses SGR mouse protocol sequences and focus events from raw input.
+ * Does NOT emit key events - use UnifiedParser for that.
  */
 export class SequenceParser {
   private state: ParserState = ParserState.Ground;
@@ -415,7 +477,271 @@ export class SequenceParser {
           this.buffer = "";
         }
         return null;
+
+      case ParserState.Ss3:
+        // SequenceParser doesn't handle SS3, just reset
+        this.state = ParserState.Ground;
+        return null;
     }
+  }
+}
+
+/**
+ * Unified input parser that handles all input from raw data.
+ *
+ * Parses keyboard, mouse, scroll, and focus events without using
+ * readline.emitKeypressEvents. This avoids the escape code leak bug
+ * where readline emits spurious key events for mouse sequences.
+ */
+export class UnifiedParser {
+  private state: ParserState = ParserState.Ground;
+  private buffer = "";
+  private sequenceStart = "";
+
+  /**
+   * Feed input data and return parsed events.
+   *
+   * @param data - Raw input string (may contain multiple sequences)
+   * @returns Array of parsed events
+   */
+  feed(data: string): (KeyEvent | MouseEvent | ScrollEvent | FocusEvent)[] {
+    const events: (KeyEvent | MouseEvent | ScrollEvent | FocusEvent)[] = [];
+
+    for (const char of data) {
+      const result = this.processChar(char);
+      if (result) {
+        if (Array.isArray(result)) {
+          events.push(...result);
+        } else {
+          events.push(result);
+        }
+      }
+    }
+
+    return events;
+  }
+
+  private processChar(
+    char: string,
+  ):
+    | KeyEvent
+    | MouseEvent
+    | ScrollEvent
+    | FocusEvent
+    | (KeyEvent | MouseEvent | ScrollEvent | FocusEvent)[]
+    | null {
+    const code = char.charCodeAt(0);
+
+    switch (this.state) {
+      case ParserState.Ground:
+        if (char === "\x1b") {
+          this.state = ParserState.Escape;
+          this.sequenceStart = char;
+          this.buffer = "";
+          return null;
+        }
+        // Control characters
+        if (code < 32 || code === 127) {
+          return this.makeControlKeyEvent(code, char);
+        }
+        // Printable characters
+        return this.makeKeyEvent(char, char, char, false, false, false);
+
+      case ParserState.Escape:
+        this.sequenceStart += char;
+        if (char === "[") {
+          this.state = ParserState.Csi;
+          this.buffer = "";
+          return null;
+        }
+        if (char === "O") {
+          this.state = ParserState.Ss3;
+          return null;
+        }
+        if (char === "\x1b") {
+          // Double ESC - emit first ESC and stay in Escape state
+          this.sequenceStart = char;
+          return this.makeKeyEvent("escape", "", "\x1b", false, false, false);
+        }
+        // ESC + char = Alt+char
+        this.state = ParserState.Ground;
+        {
+          const altCode = char.charCodeAt(0);
+          if (altCode < 32 || altCode === 127) {
+            // Alt + control character
+            const ctrlEvent = this.makeControlKeyEvent(altCode, char);
+            if (ctrlEvent) {
+              return { ...ctrlEvent, alt: true, sequence: this.sequenceStart };
+            }
+          }
+          const name = char.toLowerCase();
+          const printable = isPrintable(char) ? char : "";
+          return this.makeKeyEvent(
+            name,
+            printable,
+            this.sequenceStart,
+            false,
+            true,
+            char !== name,
+          );
+        }
+
+      case ParserState.Csi:
+        this.sequenceStart += char;
+        if (char === "<") {
+          this.state = ParserState.SgrMouse;
+          this.buffer = "";
+          return null;
+        }
+        if (char === "I") {
+          this.state = ParserState.Ground;
+          return { type: "focus", focused: true };
+        }
+        if (char === "O") {
+          this.state = ParserState.Ground;
+          return { type: "focus", focused: false };
+        }
+        // Collect parameters
+        if ((char >= "0" && char <= "9") || char === ";") {
+          this.buffer += char;
+          return null;
+        }
+        // Terminal character
+        if (char === "~") {
+          return this.handleCsiTilde();
+        }
+        if (CSI_KEYS[char]) {
+          return this.handleCsiKey(char);
+        }
+        if (char === "\x1b") {
+          // New escape sequence - emit what we have as unknown and restart
+          this.state = ParserState.Escape;
+          this.sequenceStart = char;
+          this.buffer = "";
+          return null;
+        }
+        // Unknown CSI sequence, ignore
+        this.state = ParserState.Ground;
+        return null;
+
+      case ParserState.SgrMouse:
+        this.sequenceStart += char;
+        if (char === "M" || char === "m") {
+          const isPress = char === "M";
+          const event = parseMouseSequence(this.buffer, isPress);
+          this.state = ParserState.Ground;
+          this.buffer = "";
+          if (event) {
+            event.sequence = this.sequenceStart;
+          }
+          return event;
+        }
+        if ((char >= "0" && char <= "9") || char === ";") {
+          this.buffer += char;
+          return null;
+        }
+        if (char === "\x1b") {
+          this.state = ParserState.Escape;
+          this.sequenceStart = char;
+          this.buffer = "";
+          return null;
+        }
+        // Invalid sequence
+        this.state = ParserState.Ground;
+        this.buffer = "";
+        return null;
+
+      case ParserState.Ss3:
+        this.sequenceStart += char;
+        this.state = ParserState.Ground;
+        if (SS3_KEYS[char]) {
+          return this.makeKeyEvent(
+            SS3_KEYS[char],
+            "",
+            this.sequenceStart,
+            false,
+            false,
+            false,
+          );
+        }
+        // Unknown SS3 sequence, ignore
+        return null;
+    }
+  }
+
+  private handleCsiKey(char: string): KeyEvent {
+    const name = CSI_KEYS[char];
+    const { ctrl, alt, shift } = this.parseModifiers();
+    this.state = ParserState.Ground;
+    // Shift+Tab special case
+    const isShiftTab = char === "Z";
+    return this.makeKeyEvent(
+      name,
+      "",
+      this.sequenceStart,
+      ctrl,
+      alt,
+      isShiftTab || shift,
+    );
+  }
+
+  private handleCsiTilde(): KeyEvent | null {
+    this.state = ParserState.Ground;
+    const parts = this.buffer.split(";");
+    const keyNum = Number.parseInt(parts[0], 10);
+    const name = CSI_TILDE_KEYS[keyNum];
+    if (!name) return null;
+    const { ctrl, alt, shift } = this.parseModifiers();
+    return this.makeKeyEvent(name, "", this.sequenceStart, ctrl, alt, shift);
+  }
+
+  private parseModifiers(): { ctrl: boolean; alt: boolean; shift: boolean } {
+    // Modifiers in CSI sequences: ESC [ params ; modifier char
+    // modifier = 1 + (shift ? 1 : 0) + (alt ? 2 : 0) + (ctrl ? 4 : 0)
+    const parts = this.buffer.split(";");
+    if (parts.length < 2) {
+      return { ctrl: false, alt: false, shift: false };
+    }
+    const mod = Number.parseInt(parts[parts.length - 1], 10) - 1;
+    return {
+      shift: (mod & 1) !== 0,
+      alt: (mod & 2) !== 0,
+      ctrl: (mod & 4) !== 0,
+    };
+  }
+
+  private makeControlKeyEvent(code: number, char: string): KeyEvent | null {
+    // Named control characters
+    if (CTRL_NAMES[code] !== undefined) {
+      const name = CTRL_NAMES[code];
+      return this.makeKeyEvent(name, "", char, false, false, false);
+    }
+    // Ctrl+A through Ctrl+Z (codes 1-26)
+    if (code >= 1 && code <= 26) {
+      const name = String.fromCharCode(code + 96); // 1 -> 'a', 2 -> 'b', etc.
+      return this.makeKeyEvent(name, "", char, true, false, false);
+    }
+    // Other control characters - emit as-is
+    return this.makeKeyEvent(char, "", char, false, false, false);
+  }
+
+  private makeKeyEvent(
+    name: string,
+    char: string,
+    sequence: string,
+    ctrl: boolean,
+    alt: boolean,
+    shift: boolean,
+  ): KeyEvent {
+    return {
+      type: "key",
+      name,
+      char,
+      ctrl,
+      alt,
+      shift,
+      sequence,
+    };
   }
 }
 
@@ -565,6 +891,10 @@ type InputHandler = (event: InputEvent) => void;
  * Combines keyboard, mouse, paste, focus, and resize event parsing
  * into a single interface. Manages terminal setup/teardown.
  *
+ * When mouse is enabled, uses UnifiedParser to parse all input from raw data,
+ * avoiding the escape code leak bug where readline.emitKeypressEvents emits
+ * spurious key events for mouse sequences.
+ *
  * @param stdin - Input stream
  * @param stdout - Output stream (for resize events)
  * @param onEvent - Callback for all input events
@@ -582,42 +912,79 @@ export function createInputParser(
   setupTerminal(stdin, stdout, options);
   cleanups.push(() => teardownTerminal(stdin, stdout));
 
-  const keyboardCleanup = setupKeyboardInput(stdin, (event) => {
-    onEvent(event);
-  });
-  cleanups.push(keyboardCleanup);
-
-  const sequenceParser = new SequenceParser();
   const pasteParser = new PasteParser();
 
-  const dataHandler = (data: Buffer) => {
-    let str = data.toString("utf8");
+  // When mouse is enabled, use UnifiedParser to avoid escape code leak.
+  // When mouse is disabled, use readline for keyboard (more compatible).
+  if (options.mouse) {
+    const unifiedParser = new UnifiedParser();
 
-    // Check for paste first (consumes entire paste content)
-    const pasteResult = pasteParser.feed(str);
+    const dataHandler = (data: Buffer) => {
+      let str = data.toString("utf8");
 
-    if (pasteResult.beforePaste) {
-      const events = sequenceParser.feed(pasteResult.beforePaste);
-      for (const event of events) {
-        onEvent(event);
+      // Check for paste first (consumes entire paste content)
+      const pasteResult = pasteParser.feed(str);
+
+      if (pasteResult.beforePaste) {
+        const events = unifiedParser.feed(pasteResult.beforePaste);
+        for (const event of events) {
+          onEvent(event);
+        }
       }
-    }
 
-    if (pasteResult.text !== null) {
-      onEvent({ type: "paste", text: pasteResult.text });
-    }
-
-    str = pasteResult.remaining;
-    if (str) {
-      const events = sequenceParser.feed(str);
-      for (const event of events) {
-        onEvent(event);
+      if (pasteResult.text !== null) {
+        onEvent({ type: "paste", text: pasteResult.text });
       }
-    }
-  };
 
-  stdin.on("data", dataHandler);
-  cleanups.push(() => stdin.off("data", dataHandler));
+      str = pasteResult.remaining;
+      if (str) {
+        const events = unifiedParser.feed(str);
+        for (const event of events) {
+          onEvent(event);
+        }
+      }
+    };
+
+    stdin.on("data", dataHandler);
+    cleanups.push(() => stdin.off("data", dataHandler));
+  } else {
+    // No mouse - use readline for keyboard, SequenceParser for focus only
+    const keyboardCleanup = setupKeyboardInput(stdin, (event) => {
+      onEvent(event);
+    });
+    cleanups.push(keyboardCleanup);
+
+    const sequenceParser = new SequenceParser();
+
+    const dataHandler = (data: Buffer) => {
+      let str = data.toString("utf8");
+
+      // Check for paste first (consumes entire paste content)
+      const pasteResult = pasteParser.feed(str);
+
+      if (pasteResult.beforePaste) {
+        const events = sequenceParser.feed(pasteResult.beforePaste);
+        for (const event of events) {
+          onEvent(event);
+        }
+      }
+
+      if (pasteResult.text !== null) {
+        onEvent({ type: "paste", text: pasteResult.text });
+      }
+
+      str = pasteResult.remaining;
+      if (str) {
+        const events = sequenceParser.feed(str);
+        for (const event of events) {
+          onEvent(event);
+        }
+      }
+    };
+
+    stdin.on("data", dataHandler);
+    cleanups.push(() => stdin.off("data", dataHandler));
+  }
 
   const resizeCleanup = setupResizeHandler(stdout, (event) => {
     onEvent(event);

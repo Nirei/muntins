@@ -907,4 +907,116 @@ describe("createInputParser", () => {
 
     parser.destroy();
   });
+
+  it("mouse sequence produces only mouse event, no spurious key events", () => {
+    // BUG: When mouse is enabled, clicking produces spurious key events
+    // because readline.emitKeypressEvents doesn't understand SGR mouse protocol
+    // and emits the sequence fragments as individual keypresses.
+    //
+    // A mouse click should produce exactly one mouse event.
+    const events: InputEvent[] = [];
+    const handlers: {
+      data?: (data: Buffer) => void;
+    } = {};
+
+    const mockStdin = {
+      isTTY: true,
+      setRawMode: () => {},
+      on: (event: string, handler: (data: Buffer) => void) => {
+        if (event === "data") {
+          handlers.data = handler;
+        }
+      },
+      off: () => {},
+      listenerCount: () => 0,
+    } as unknown as NodeJS.ReadStream;
+    const mockStdout = {
+      write: () => true,
+      columns: 80,
+      rows: 24,
+      on: () => {},
+      off: () => {},
+    } as unknown as NodeJS.WriteStream;
+
+    const parser = createInputParser(
+      mockStdin,
+      mockStdout,
+      (event) => {
+        events.push(event);
+      },
+      { mouse: true },
+    );
+
+    // Send a mouse click sequence via raw data
+    assert.ok(handlers.data);
+    handlers.data(Buffer.from("\x1b[<0;10;5M"));
+
+    // Should get exactly one mouse event, no key events
+    const mouseEvents = events.filter((e) => e.type === "mouse");
+    const keyEvents = events.filter((e) => e.type === "key");
+
+    assert.strictEqual(
+      mouseEvents.length,
+      1,
+      "Should emit exactly one mouse event",
+    );
+    assert.strictEqual(keyEvents.length, 0, "Should not emit any key events");
+
+    const mouseEvent = mouseEvents[0] as MouseEvent;
+    assert.strictEqual(mouseEvent.action, "press");
+    assert.strictEqual(mouseEvent.x, 9); // 0-indexed
+    assert.strictEqual(mouseEvent.y, 4); // 0-indexed
+
+    parser.destroy();
+  });
+
+  it("keyboard input after mouse click works correctly", () => {
+    // After a mouse click, typing should still produce key events
+    const events: InputEvent[] = [];
+    const handlers: {
+      data?: (data: Buffer) => void;
+    } = {};
+
+    const mockStdin = {
+      isTTY: true,
+      setRawMode: () => {},
+      on: (event: string, handler: (data: Buffer) => void) => {
+        if (event === "data") {
+          handlers.data = handler;
+        }
+      },
+      off: () => {},
+      listenerCount: () => 0,
+    } as unknown as NodeJS.ReadStream;
+    const mockStdout = {
+      write: () => true,
+      columns: 80,
+      rows: 24,
+      on: () => {},
+      off: () => {},
+    } as unknown as NodeJS.WriteStream;
+
+    const parser = createInputParser(
+      mockStdin,
+      mockStdout,
+      (event) => {
+        events.push(event);
+      },
+      { mouse: true },
+    );
+
+    assert.ok(handlers.data);
+
+    // Mouse click, then type 'a'
+    handlers.data(Buffer.from("\x1b[<0;10;5M"));
+    handlers.data(Buffer.from("a"));
+
+    assert.strictEqual(events.length, 2, "Should emit two events total");
+    assert.strictEqual(events[0].type, "mouse");
+    assert.strictEqual(events[1].type, "key");
+    assert.strictEqual((events[1] as KeyEvent).name, "a");
+    assert.strictEqual((events[1] as KeyEvent).char, "a");
+
+    parser.destroy();
+  });
 });
