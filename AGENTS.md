@@ -37,6 +37,7 @@ node --experimental-strip-types --test --test-name-pattern="createSignal" test/s
 - Public API exports **must have** JSDoc covering intent, edge cases, and any
   non-obvious behaviour. It should add information beyond what the types already
   express.
+- Don't ever use // ==== section separators comments.
 
 ### Commits
 
