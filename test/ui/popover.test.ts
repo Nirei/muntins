@@ -658,6 +658,170 @@ describe("Popover", () => {
     });
   });
 
+  describe("click outside behavior", () => {
+    it("clicking outside popover calls onClose", async () => {
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout(80, 24);
+      let closeCalled = false;
+
+      const app = mount(
+        () =>
+          Box({
+            children: [
+              Popover({
+                open: true,
+                onClose: () => {
+                  closeCalled = true;
+                },
+                placement: "bottom-start",
+                content: () =>
+                  Box({
+                    width: 10,
+                    height: 3,
+                    children: [Text({ content: "Content" })],
+                  }),
+                children: (props) =>
+                  Box({
+                    ref: props.ref,
+                    width: 10,
+                    height: 1,
+                    children: [Text({ content: "Trigger" })],
+                  }),
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          mouse: true,
+        },
+      );
+
+      // Popover trigger is at row 0, content at rows 1-3
+      // Click at row 10 (well outside the popover content)
+      // SGR mouse protocol: \x1b[<button;col;rowM (1-indexed)
+      mockStdin.emit("data", Buffer.from("\x1b[<0;50;11M"));
+
+      // Wait for event processing
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+      assert.strictEqual(
+        closeCalled,
+        true,
+        "onClose should be called when clicking outside",
+      );
+      app.unmount();
+    });
+
+    it("clicking inside popover content does not call onClose", async () => {
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout(80, 24);
+      let closeCalled = false;
+
+      const app = mount(
+        () =>
+          Box({
+            children: [
+              Popover({
+                open: true,
+                onClose: () => {
+                  closeCalled = true;
+                },
+                placement: "bottom-start",
+                content: () =>
+                  Box({
+                    width: 10,
+                    height: 3,
+                    children: [Text({ content: "Content" })],
+                  }),
+                children: (props) =>
+                  Box({
+                    ref: props.ref,
+                    width: 10,
+                    height: 1,
+                    children: [Text({ content: "Trigger" })],
+                  }),
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          mouse: true,
+        },
+      );
+
+      // Popover content is at rows 1-3 (below trigger at row 0)
+      // Click at row 2 (inside popover content)
+      // SGR mouse protocol: \x1b[<button;col;rowM (1-indexed)
+      mockStdin.emit("data", Buffer.from("\x1b[<0;5;2M"));
+
+      // Wait for event processing
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+      assert.strictEqual(
+        closeCalled,
+        false,
+        "onClose should NOT be called when clicking inside",
+      );
+      app.unmount();
+    });
+
+    it("clicking on trigger area calls onClose (toggle behavior)", async () => {
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout(80, 24);
+      let closeCalled = false;
+
+      const app = mount(
+        () =>
+          Box({
+            children: [
+              Popover({
+                open: true,
+                onClose: () => {
+                  closeCalled = true;
+                },
+                placement: "bottom-start",
+                content: () =>
+                  Box({
+                    width: 10,
+                    height: 3,
+                    children: [Text({ content: "Content" })],
+                  }),
+                children: (props) =>
+                  Box({
+                    ref: props.ref,
+                    width: 10,
+                    height: 1,
+                    children: [Text({ content: "Trigger" })],
+                  }),
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          mouse: true,
+        },
+      );
+
+      // Trigger is at row 0
+      // Click at row 1 (SGR is 1-indexed, so this is screen row 0)
+      // When popover is open, clicking trigger area closes it (toggle)
+      mockStdin.emit("data", Buffer.from("\x1b[<0;5;1M"));
+
+      // Wait for event processing
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+      assert.strictEqual(
+        closeCalled,
+        true,
+        "onClose should be called when clicking trigger (toggle behavior)",
+      );
+      app.unmount();
+    });
+  });
+
   describe("with Button trigger", () => {
     it("works with Button component as trigger", () => {
       const mockStdin = createMockStdin();

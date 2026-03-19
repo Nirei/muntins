@@ -373,12 +373,14 @@ export function Popover(props: PopoverProps): Node {
                 start: 0,
                 bottom: 0,
                 end: 0,
+                onMousePress: () => props.onClose?.(),
                 children: [
                   Box({
                     position: "absolute",
                     top: () => getPositionStyle().top,
                     start: () => getPositionStyle().start,
                     onKeyPress: handleKeyPress,
+                    onMousePress: () => {},
                     focusable: true,
                     ...props.style,
                     children: props.content(),
