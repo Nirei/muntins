@@ -1,23 +1,9 @@
-// Input component - single-line text input with cursor and editing support
+// Input component - single-line text input (thin wrapper around Textarea)
 
-import { type KeyEvent, isPrintable } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
-import { Box, Text, createRef, getActiveContext } from "../core/runtime.ts";
-import {
-  type Accessor,
-  type MaybeAccessor,
-  createEffect,
-  createSignal,
-  resolve,
-} from "../core/signals.ts";
-import {
-  displayWidthToPosition,
-  textDelete,
-  textInsert,
-  textLength,
-  textSlice,
-} from "../core/text.ts";
+import type { MaybeAccessor } from "../core/signals.ts";
+import { Textarea } from "./textarea.ts";
 
 /**
  * Props for the Input component.
@@ -38,9 +24,6 @@ export interface InputProps {
   /** Disable the input */
   disabled?: MaybeAccessor<boolean>;
 
-  /** Called on Enter key */
-  onSubmit?: (value: string) => void;
-
   /** Focus control */
   focusable?: boolean;
   autoFocus?: boolean;
@@ -56,6 +39,9 @@ export interface InputProps {
  * The input is intentionally unstyled - it renders text with no default
  * border, padding, or colors. Use composition or style overrides to add
  * visual styling.
+ *
+ * Input is a thin wrapper around Textarea with multiline disabled.
+ * Enter key is not handled - use onKeyPress to handle submission.
  *
  * @example
  * ```typescript
@@ -81,140 +67,16 @@ export interface InputProps {
  * ```
  */
 export function Input(props: InputProps): Node {
-  const initialValue = resolve(props.value) ?? "";
-  const [cursorPos, setCursorPos] = createSignal(textLength(initialValue));
-  const [scrollOffset, setScrollOffset] = createSignal(0);
-
-  const getValue = () => resolve(props.value) ?? "";
-  const isDisabled = () => resolve(props.disabled) ?? false;
-  const getWidth = () => resolve(props.width) ?? 20;
-  const getPlaceholder = () => resolve(props.placeholder) ?? "";
-
-  const internalRef = createRef();
-
-  const ctx = getActiveContext();
-  const focusedNodeAccessor: Accessor<Node | null> | null =
-    ctx?.state.focusedNode ?? null;
-
-  createEffect(() => {
-    const val = getValue();
-    const len = textLength(val);
-    if (cursorPos() > len) {
-      setCursorPos(len);
-    }
-  });
-
-  createEffect(() => {
-    const pos = cursorPos();
-    const width = getWidth();
-    const val = getValue();
-    const cursorDisplayPos = displayWidthToPosition(val, pos);
-    const offset = scrollOffset();
-
-    if (cursorDisplayPos >= offset + width) {
-      setScrollOffset(cursorDisplayPos - width + 1);
-    } else if (cursorDisplayPos < offset) {
-      setScrollOffset(cursorDisplayPos);
-    }
-  });
-
-  const handleKeyPress = (key: KeyEvent): boolean | undefined => {
-    if (isDisabled()) return false;
-
-    const val = getValue();
-    const pos = cursorPos();
-    const len = textLength(val);
-
-    if (key.name === "left") {
-      setCursorPos(Math.max(0, pos - 1));
-      return true;
-    }
-    if (key.name === "right") {
-      setCursorPos(Math.min(len, pos + 1));
-      return true;
-    }
-    if (key.name === "home" || (key.ctrl && key.name === "a")) {
-      setCursorPos(0);
-      return true;
-    }
-    if (key.name === "end" || (key.ctrl && key.name === "e")) {
-      setCursorPos(len);
-      return true;
-    }
-    if (key.name === "backspace" && pos > 0) {
-      props.onChange?.(textDelete(val, pos - 1, pos));
-      setCursorPos(pos - 1);
-      return true;
-    }
-    if (key.name === "delete" && pos < len) {
-      props.onChange?.(textDelete(val, pos, pos + 1));
-      return true;
-    }
-    if (key.ctrl && key.name === "k") {
-      const newVal = textSlice(val, 0, pos);
-      props.onChange?.(newVal);
-      return true;
-    }
-    if (key.ctrl && key.name === "u") {
-      const newVal = textSlice(val, pos);
-      props.onChange?.(newVal);
-      setCursorPos(0);
-      return true;
-    }
-    if (key.name === "enter") {
-      props.onSubmit?.(val);
-      return true;
-    }
-    if (isPrintable(key.char)) {
-      props.onChange?.(textInsert(val, pos, key.char));
-      setCursorPos(pos + 1);
-      return true;
-    }
-
-    return false;
-  };
-
-  const isFocused = (): boolean => {
-    if (!focusedNodeAccessor) return false;
-    return focusedNodeAccessor() === internalRef.current;
-  };
-
-  const beforeCursor = () => textSlice(getValue(), 0, cursorPos());
-  const cursorChar = () => {
-    const char = textSlice(getValue(), cursorPos(), cursorPos() + 1);
-    return char || " "; // Space at end of text
-  };
-  const afterCursor = () => textSlice(getValue(), cursorPos() + 1);
-  const showCursor = () => !isDisabled() && isFocused();
-  const showPlaceholder = () =>
-    getValue().length === 0 && getPlaceholder().length > 0;
-  const boundRef = props.ref ?? internalRef;
-
-  return Box({
-    ref: boundRef,
-    overflow: "hidden" as const,
-    width: getWidth(),
-    height: 1,
-    focusable: props.focusable ?? true,
+  return Textarea({
+    value: props.value,
+    onChange: props.onChange,
+    placeholder: props.placeholder,
+    width: props.width ?? 20,
+    disabled: props.disabled,
+    focusable: props.focusable,
     autoFocus: props.autoFocus,
-    onKeyPress: handleKeyPress,
-    ...props.style,
-    children: [
-      Box({
-        flexDirection: "row",
-        marginStart: -scrollOffset(),
-        children: showPlaceholder()
-          ? [Text({ content: getPlaceholder, dim: true })]
-          : [
-              Text({ content: beforeCursor, dim: isDisabled }),
-              Text({
-                content: cursorChar,
-                inverse: showCursor,
-                dim: isDisabled,
-              }),
-              Text({ content: afterCursor, dim: isDisabled }),
-            ],
-      }),
-    ],
+    ref: props.ref,
+    style: props.style,
+    multiline: false,
   });
 }

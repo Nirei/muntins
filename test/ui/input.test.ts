@@ -488,20 +488,16 @@ describe("Input", () => {
       assert.strictEqual(received, "cdef");
     });
 
-    it("Enter calls onSubmit", () => {
-      let submitted = "";
+    it("Enter is not handled (returns false)", () => {
       const node = Input({
         value: "test value",
-        onSubmit: (v) => {
-          submitted = v;
-        },
       });
 
       assert.ok(node.onKeyPress);
 
+      // Enter should not be handled in single-line input
       const result = node.onKeyPress(keyEvent("enter"));
-      assert.strictEqual(result, true);
-      assert.strictEqual(submitted, "test value");
+      assert.strictEqual(result, false);
     });
 
     it("onChange fires on edits", () => {

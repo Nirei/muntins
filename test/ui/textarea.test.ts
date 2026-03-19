@@ -184,7 +184,8 @@ describe("Textarea", () => {
 
       assert.ok(node.onKeyPress);
 
-      // Move cursor between a and b
+      // Move cursor to start, then between a and b
+      node.onKeyPress(keyEvent("home"));
       node.onKeyPress(keyEvent("right"));
 
       // Insert newline
@@ -205,18 +206,16 @@ describe("Textarea", () => {
 
       assert.ok(node.onKeyPress);
 
-      // Move to second line
-      for (let i = 0; i < 7; i++) {
-        node.onKeyPress(keyEvent("right"));
-      }
+      // Start at end, move to start of second line
+      node.onKeyPress(keyEvent("home"));
 
       // Move up
       const result = node.onKeyPress(keyEvent("up"));
       assert.strictEqual(result, true);
 
-      // Insert character - should be on first line
+      // Insert character - should be at start of first line
       node.onKeyPress(keyEvent("X", "X"));
-      assert.ok(received.startsWith("X") || received.includes("\nLine 2"));
+      assert.strictEqual(received, "XLine 1\nLine 2");
     });
 
     it("Down arrow moves cursor to next line", () => {
@@ -230,11 +229,15 @@ describe("Textarea", () => {
 
       assert.ok(node.onKeyPress);
 
+      // Move to start of first line
+      node.onKeyPress(keyEvent("home"));
+      node.onKeyPress(keyEvent("up"));
+
       // Move down from first line
       const result = node.onKeyPress(keyEvent("down"));
       assert.strictEqual(result, true);
 
-      // Insert character - should be on second line
+      // Insert character - should be at start of second line
       node.onKeyPress(keyEvent("X", "X"));
       assert.strictEqual(received, "Line 1\nXLine 2");
     });
@@ -250,10 +253,8 @@ describe("Textarea", () => {
 
       assert.ok(node.onKeyPress);
 
-      // Move to start of second line (position 4, after newline)
-      for (let i = 0; i < 4; i++) {
-        node.onKeyPress(keyEvent("right"));
-      }
+      // Move to start of second line
+      node.onKeyPress(keyEvent("home"));
 
       // Move left - should go to end of first line (position 3)
       node.onKeyPress(keyEvent("left"));
@@ -274,10 +275,10 @@ describe("Textarea", () => {
 
       assert.ok(node.onKeyPress);
 
-      // Move to end of first line (position 3)
-      for (let i = 0; i < 3; i++) {
-        node.onKeyPress(keyEvent("right"));
-      }
+      // Move to start of first line, then to end
+      node.onKeyPress(keyEvent("home"));
+      node.onKeyPress(keyEvent("up"));
+      node.onKeyPress(keyEvent("end"));
 
       // Move right - should cross newline
       node.onKeyPress(keyEvent("right"));
@@ -320,9 +321,7 @@ describe("Textarea", () => {
       assert.ok(node.onKeyPress);
 
       // Move to start of second line
-      for (let i = 0; i < 4; i++) {
-        node.onKeyPress(keyEvent("right"));
-      }
+      node.onKeyPress(keyEvent("home"));
 
       // Backspace - should remove newline
       const result = node.onKeyPress(keyEvent("backspace"));
@@ -342,7 +341,8 @@ describe("Textarea", () => {
 
       assert.ok(node.onKeyPress);
 
-      // Cursor at start, delete first char
+      // Move cursor to start, delete first char
+      node.onKeyPress(keyEvent("home"));
       const result = node.onKeyPress(keyEvent("delete"));
 
       assert.strictEqual(result, true);
@@ -360,10 +360,10 @@ describe("Textarea", () => {
 
       assert.ok(node.onKeyPress);
 
-      // Move to end of first line
-      for (let i = 0; i < 3; i++) {
-        node.onKeyPress(keyEvent("right"));
-      }
+      // Move to start of first line, then to end
+      node.onKeyPress(keyEvent("home"));
+      node.onKeyPress(keyEvent("up"));
+      node.onKeyPress(keyEvent("end"));
 
       // Delete - should remove newline
       const result = node.onKeyPress(keyEvent("delete"));
@@ -383,7 +383,9 @@ describe("Textarea", () => {
 
       assert.ok(node.onKeyPress);
 
-      // Move right twice (cursor at position 2)
+      // Move to start of first line, then right twice (cursor at position 2)
+      node.onKeyPress(keyEvent("home"));
+      node.onKeyPress(keyEvent("up"));
       node.onKeyPress(keyEvent("right"));
       node.onKeyPress(keyEvent("right"));
 
@@ -404,7 +406,9 @@ describe("Textarea", () => {
 
       assert.ok(node.onKeyPress);
 
-      // Move right twice (cursor at position 2)
+      // Move to start of first line, then right twice (cursor at position 2)
+      node.onKeyPress(keyEvent("home"));
+      node.onKeyPress(keyEvent("up"));
       node.onKeyPress(keyEvent("right"));
       node.onKeyPress(keyEvent("right"));
 
@@ -425,11 +429,7 @@ describe("Textarea", () => {
 
       assert.ok(node.onKeyPress);
 
-      // Move to middle of second line
-      for (let i = 0; i < 6; i++) {
-        node.onKeyPress(keyEvent("right"));
-      }
-
+      // Cursor starts at end of second line ("def|")
       // Home
       const result = node.onKeyPress(keyEvent("home"));
       assert.strictEqual(result, true);
@@ -450,7 +450,9 @@ describe("Textarea", () => {
 
       assert.ok(node.onKeyPress);
 
-      // Cursor at start of first line
+      // Move cursor to first line
+      node.onKeyPress(keyEvent("up"));
+
       // End
       const result = node.onKeyPress(keyEvent("end"));
       assert.strictEqual(result, true);
@@ -478,6 +480,85 @@ describe("Textarea", () => {
       node.onKeyPress(keyEvent("c", "c"));
 
       assert.deepStrictEqual(changes, ["a", "ab", "abc"]);
+    });
+  });
+
+  describe("single-line mode (multiline: false)", () => {
+    it("Enter does not insert newline", () => {
+      let received: string | undefined;
+      const node = Textarea({
+        value: "ab",
+        multiline: false,
+        onChange: (v) => {
+          received = v;
+        },
+      });
+
+      assert.ok(node.onKeyPress);
+
+      // Move cursor between a and b
+      node.onKeyPress(keyEvent("home"));
+      node.onKeyPress(keyEvent("right"));
+
+      // Enter should not insert newline
+      const result = node.onKeyPress(keyEvent("enter"));
+
+      assert.strictEqual(result, false);
+      assert.strictEqual(received, undefined);
+    });
+
+    it("Up/Down arrows do nothing in single-line mode", () => {
+      const node = Textarea({
+        value: "hello",
+        multiline: false,
+      });
+
+      assert.ok(node.onKeyPress);
+
+      // Up and Down should return false (not handled)
+      assert.strictEqual(node.onKeyPress(keyEvent("up")), false);
+      assert.strictEqual(node.onKeyPress(keyEvent("down")), false);
+    });
+
+    it("Home goes to start of text", () => {
+      let received = "";
+      const node = Textarea({
+        value: "hello",
+        multiline: false,
+        onChange: (v) => {
+          received = v;
+        },
+      });
+
+      assert.ok(node.onKeyPress);
+
+      // Home should go to absolute start
+      node.onKeyPress(keyEvent("home"));
+      node.onKeyPress(keyEvent("X", "X"));
+
+      assert.strictEqual(received, "Xhello");
+    });
+
+    it("End goes to end of text", () => {
+      let received = "";
+      const node = Textarea({
+        value: "hello",
+        multiline: false,
+        onChange: (v) => {
+          received = v;
+        },
+      });
+
+      assert.ok(node.onKeyPress);
+
+      // Move to start first
+      node.onKeyPress(keyEvent("home"));
+
+      // End should go to absolute end
+      node.onKeyPress(keyEvent("end"));
+      node.onKeyPress(keyEvent("X", "X"));
+
+      assert.strictEqual(received, "helloX");
     });
   });
 
@@ -556,6 +637,24 @@ describe("Textarea", () => {
     });
   });
 
+  describe("cursor position", () => {
+    it("cursor starts at end of initial value", () => {
+      let received = "";
+      const node = Textarea({
+        value: "hello",
+        onChange: (v) => {
+          received = v;
+        },
+      });
+
+      assert.ok(node.onKeyPress);
+
+      // Insert character without moving cursor - should append at end
+      node.onKeyPress(keyEvent("X", "X"));
+      assert.strictEqual(received, "helloX");
+    });
+  });
+
   describe("style overrides", () => {
     it("applies style overrides", () => {
       const node = Textarea({
@@ -622,7 +721,7 @@ describe("Textarea", () => {
     // Helper to mount textarea and return utilities for testing
     function mountTextarea(
       initialValue: string,
-      options: { width?: number; maxHeight?: number } = {},
+      options: { width?: number; maxHeight?: number; multiline?: boolean } = {},
     ) {
       const [value, setValue] = createSignal(initialValue);
       const mockStdin = createMockStdin();
@@ -638,6 +737,7 @@ describe("Textarea", () => {
                 onChange: setValue,
                 width: options.width ?? 10,
                 maxHeight: options.maxHeight,
+                multiline: options.multiline,
                 ref,
               }),
             ],
@@ -693,41 +793,18 @@ describe("Textarea", () => {
       app.unmount();
     });
 
-    it("shows first lines initially", () => {
+    it("shows last lines initially when cursor starts at end", () => {
       const { app, outputContains } = mountTextarea(
         "AAA\nBBB\nCCC\nDDD\nEEE\nFFF",
         { width: 10, maxHeight: 3 },
       );
 
-      // First three lines should be visible
-      assert.ok(outputContains("AAA"), "First line should be visible");
-      assert.ok(outputContains("BBB"), "Second line should be visible");
-      assert.ok(outputContains("CCC"), "Third line should be visible");
-      // Line 4 should not be visible initially
-      assert.ok(!outputContains("DDD"), "Fourth line should NOT be visible");
-
-      app.unmount();
-    });
-
-    it("scrolls down when cursor moves past visible area", async () => {
-      const { app, sendKey, outputContains } = mountTextarea(
-        "AAA\nBBB\nCCC\nDDD\nEEE\nFFF",
-        { width: 10, maxHeight: 3 },
-      );
-
-      // Initially DDD should not be visible
-      assert.ok(
-        !outputContains("DDD"),
-        "Line 4 should NOT be visible initially",
-      );
-
-      // Move cursor down 3 times (to line 4, which is past visible area)
-      await sendKey("down"); // line 2
-      await sendKey("down"); // line 3
-      await sendKey("down"); // line 4 - should trigger scroll
-
-      // Now line 4 (DDD) should be visible in cumulative output
-      assert.ok(outputContains("DDD"), "Line 4 should be visible after scroll");
+      // Cursor starts at end, so last three lines should be visible
+      assert.ok(outputContains("DDD"), "Fourth line should be visible");
+      assert.ok(outputContains("EEE"), "Fifth line should be visible");
+      assert.ok(outputContains("FFF"), "Sixth line should be visible");
+      // Line 1 should not be visible initially
+      assert.ok(!outputContains("AAA"), "First line should NOT be visible");
 
       app.unmount();
     });
@@ -738,52 +815,72 @@ describe("Textarea", () => {
         { width: 10, maxHeight: 3 },
       );
 
-      // Move down to line 5
-      for (let i = 0; i < 4; i++) {
-        await sendKey("down");
-      }
-
-      // At this point, EEE should be visible (line 5)
+      // Initially AAA should not be visible (cursor starts at end)
       assert.ok(
-        outputContains("EEE"),
-        "Line 5 should be visible after scrolling down",
+        !outputContains("AAA"),
+        "Line 1 should NOT be visible initially",
       );
 
-      // Move back up - BBB should become visible when we reach line 2
+      // Move cursor up to line 1 (should trigger scroll)
+      await sendKey("up"); // line 5
       await sendKey("up"); // line 4
       await sendKey("up"); // line 3
-      await sendKey("up"); // line 2 - should trigger scroll up
+      await sendKey("up"); // line 2
+      await sendKey("up"); // line 1 - should trigger scroll
 
-      // Line 2 (BBB) should be visible again (was scrolled out of view then back)
+      // Now line 1 (AAA) should be visible in cumulative output
+      assert.ok(outputContains("AAA"), "Line 1 should be visible after scroll");
+
+      app.unmount();
+    });
+
+    it("scrolls down when cursor moves past visible area", async () => {
+      const { app, sendKey, outputContains } = mountTextarea(
+        "AAA\nBBB\nCCC\nDDD\nEEE\nFFF",
+        { width: 10, maxHeight: 3 },
+      );
+
+      // Move cursor to start first (cursor starts at end)
+      for (let i = 0; i < 5; i++) {
+        await sendKey("up");
+      }
+
+      // At this point, AAA should be visible (line 1)
       assert.ok(
-        outputContains("BBB"),
-        "Line 2 should be visible after scroll up",
+        outputContains("AAA"),
+        "Line 1 should be visible after moving to start",
+      );
+
+      // Move down past visible area - DDD should become visible
+      await sendKey("down"); // line 2
+      await sendKey("down"); // line 3
+      await sendKey("down"); // line 4 - should trigger scroll down
+
+      // Line 4 (DDD) should be visible in cumulative output
+      assert.ok(
+        outputContains("DDD"),
+        "Line 4 should be visible after scroll down",
       );
 
       app.unmount();
     });
 
     it("cursor stays visible at bottom of content", async () => {
-      const { app, sendKey, outputContains } = mountTextarea(
-        "AAA\nBBB\nCCC\nDDD\nEEE",
-        { width: 10, maxHeight: 3 },
-      );
+      const { app, outputContains } = mountTextarea("AAA\nBBB\nCCC\nDDD\nEEE", {
+        width: 10,
+        maxHeight: 3,
+      });
 
-      // Initially EEE should not be visible
-      assert.ok(
-        !outputContains("EEE"),
-        "Last line should NOT be visible initially",
-      );
-
-      // Move to last line
-      for (let i = 0; i < 4; i++) {
-        await sendKey("down");
-      }
-
-      // Last line (EEE) should be visible after scrolling
+      // Cursor starts at end, so EEE should already be visible
       assert.ok(
         outputContains("EEE"),
-        "Last line should be visible when cursor is there",
+        "Last line should be visible when cursor starts there",
+      );
+
+      // First line should not be visible
+      assert.ok(
+        !outputContains("AAA"),
+        "First line should NOT be visible initially",
       );
 
       app.unmount();
@@ -831,6 +928,91 @@ describe("Textarea", () => {
       );
 
       app.unmount();
+    });
+
+    it("scrolls horizontally in single-line mode", async () => {
+      const longText = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      const { app, sendKey, outputContains } = mountTextarea(longText, {
+        width: 10,
+        multiline: false,
+      });
+
+      // Cursor starts at end, so we should see the last part
+      assert.ok(
+        outputContains("Z"),
+        "Last character should be visible initially",
+      );
+      assert.ok(
+        !outputContains("A"),
+        "First character should NOT be visible initially",
+      );
+
+      // Move to start
+      await sendKey("home");
+
+      // Now first character should be visible
+      assert.ok(
+        outputContains("A"),
+        "First character should be visible after Home",
+      );
+
+      app.unmount();
+    });
+  });
+
+  describe("clipping", () => {
+    it("respects clip bounds when rendering", () => {
+      // Textarea content should be clipped to the provided clip rect
+      // This is critical for ScrollArea to work properly
+      const node = Textarea({ value: "Line1\nLine2\nLine3\nLine4\nLine5" });
+
+      const buffer = new RenderBuffer(20, 10);
+
+      // Clip to only show rows 1-2 (Line2 and Line3)
+      const clip = { x: 0, y: 1, width: 20, height: 2 };
+
+      assert.ok(node.render);
+      node.render(0, 0, 20, 5, buffer, DEFAULT_INHERITED_STYLE, clip);
+
+      // Row 0 should be empty (clipped out - Line1)
+      assert.strictEqual(buffer.getSymbol(0, 0), " ");
+
+      // Rows 1-2 should have content (Line2, Line3)
+      assert.strictEqual(buffer.getSymbol(0, 1), "L");
+      assert.strictEqual(buffer.getSymbol(4, 1), "2");
+      assert.strictEqual(buffer.getSymbol(0, 2), "L");
+      assert.strictEqual(buffer.getSymbol(4, 2), "3");
+
+      // Row 3 should be empty (clipped out - Line4)
+      assert.strictEqual(buffer.getSymbol(0, 3), " ");
+
+      // Row 4 should be empty (clipped out - Line5)
+      assert.strictEqual(buffer.getSymbol(0, 4), " ");
+    });
+
+    it("clips horizontally as well", () => {
+      const node = Textarea({ value: "ABCDEFGHIJ" });
+
+      const buffer = new RenderBuffer(20, 5);
+
+      // Clip to only show columns 2-5
+      const clip = { x: 2, y: 0, width: 4, height: 1 };
+
+      assert.ok(node.render);
+      node.render(0, 0, 20, 1, buffer, DEFAULT_INHERITED_STYLE, clip);
+
+      // Columns 0-1 should be empty (clipped)
+      assert.strictEqual(buffer.getSymbol(0, 0), " ");
+      assert.strictEqual(buffer.getSymbol(1, 0), " ");
+
+      // Columns 2-5 should have content (CDEF)
+      assert.strictEqual(buffer.getSymbol(2, 0), "C");
+      assert.strictEqual(buffer.getSymbol(3, 0), "D");
+      assert.strictEqual(buffer.getSymbol(4, 0), "E");
+      assert.strictEqual(buffer.getSymbol(5, 0), "F");
+
+      // Columns 6+ should be empty (clipped)
+      assert.strictEqual(buffer.getSymbol(6, 0), " ");
     });
   });
 

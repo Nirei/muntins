@@ -9,6 +9,7 @@ import {
 } from "../core/buffer.ts";
 import { type KeyEvent, isPrintable } from "../core/input.ts";
 import { DEFAULT_FLEX_STYLE, type FlexStyle } from "../core/layout.ts";
+import { isInClipRect } from "../core/render.ts";
 import type { ClipRect, InheritedStyle, Node, Ref } from "../core/runtime.ts";
 import { Box, getActiveContext } from "../core/runtime.ts";
 import {
@@ -43,6 +44,12 @@ export interface TextareaProps {
    * and a scrollbar appears. When undefined, textarea grows with content.
    */
   maxHeight?: number | (() => number);
+
+  /**
+   * Allow multiple lines. When false, Enter key is not handled and
+   * Up/Down arrows do nothing. Default: true
+   */
+  multiline?: boolean;
 
   /** Disable the textarea */
   disabled?: MaybeAccessor<boolean>;
@@ -159,14 +166,17 @@ function posToCharIndex(text: string, graphemePos: number): number {
  * ```
  */
 export function Textarea(props: TextareaProps): Node {
-  const [cursorPos, setCursorPos] = createSignal(0);
+  const initialValue = resolve(props.value) ?? "";
+  const [cursorPos, setCursorPos] = createSignal(textLength(initialValue));
   const [scrollTop, setScrollTop] = createSignal(0);
+  const [scrollLeft, setScrollLeft] = createSignal(0);
 
   const getValue = () => resolve(props.value) ?? "";
   const isDisabled = () => resolve(props.disabled) ?? false;
   const getWidth = () => resolve(props.width) ?? 40;
   const getMaxHeight = () => resolve(props.maxHeight);
   const getPlaceholder = () => resolve(props.placeholder) ?? "";
+  const isMultiline = props.multiline ?? true;
 
   const ctx = getActiveContext();
   const focusedNodeAccessor: Accessor<Node | null> | null =
@@ -195,6 +205,23 @@ export function Textarea(props: TextareaProps): Node {
       setScrollTop(cursorLine);
     } else if (cursorLine >= currentScrollTop + maxHeight) {
       setScrollTop(cursorLine - maxHeight + 1);
+    }
+  });
+
+  // Horizontal scrolling for single-line mode
+  createEffect(() => {
+    if (isMultiline) return;
+
+    const pos = cursorPos();
+    const width = getWidth();
+    const val = getValue();
+    const cursorDisplayPos = displayWidthToPosition(val, pos);
+    const offset = untrack(scrollLeft);
+
+    if (cursorDisplayPos >= offset + width) {
+      setScrollLeft(cursorDisplayPos - width + 1);
+    } else if (cursorDisplayPos < offset) {
+      setScrollLeft(cursorDisplayPos);
     }
   });
 
@@ -235,6 +262,7 @@ export function Textarea(props: TextareaProps): Node {
     }
 
     if (key.name === "up") {
+      if (!isMultiline) return false;
       if (cursorLineCol.line > 0) {
         const prevLineLen = textLength(lines[cursorLineCol.line - 1]);
         const newCol = Math.min(cursorLineCol.column, prevLineLen);
@@ -246,6 +274,7 @@ export function Textarea(props: TextareaProps): Node {
     }
 
     if (key.name === "down") {
+      if (!isMultiline) return false;
       if (cursorLineCol.line < lines.length - 1) {
         const nextLineLen = textLength(lines[cursorLineCol.line + 1]);
         const newCol = Math.min(cursorLineCol.column, nextLineLen);
@@ -318,6 +347,7 @@ export function Textarea(props: TextareaProps): Node {
     }
 
     if (key.name === "enter") {
+      if (!isMultiline) return false;
       const beforeCursor = val.slice(0, posToCharIndex(val, pos));
       const afterCursor = val.slice(posToCharIndex(val, pos));
       const newVal = `${beforeCursor}\n${afterCursor}`;
@@ -369,7 +399,7 @@ export function Textarea(props: TextareaProps): Node {
       height: number,
       buffer: Buffer,
       inherited: InheritedStyle,
-      _clip: ClipRect,
+      clip: ClipRect,
     ) {
       const val = getValue();
       const placeholder = getPlaceholder();
@@ -378,6 +408,8 @@ export function Textarea(props: TextareaProps): Node {
 
       const fg = inherited.color;
       const bg = inherited.backgroundColor;
+
+      const hScroll = isMultiline ? 0 : scrollLeft();
 
       if (val.length === 0 && placeholder.length > 0) {
         renderTextareaContent(
@@ -392,6 +424,8 @@ export function Textarea(props: TextareaProps): Node {
           true, // dim
           false, // no cursor
           -1,
+          hScroll,
+          clip,
         );
         return;
       }
@@ -410,6 +444,8 @@ export function Textarea(props: TextareaProps): Node {
         disabled,
         showCursor,
         pos,
+        hScroll,
+        clip,
       );
     },
   };
@@ -467,41 +503,71 @@ function renderTextareaContent(
   dim: boolean,
   showCursor: boolean,
   cursorPos: number,
+  scrollLeft = 0,
+  clip?: ClipRect,
 ): void {
   const lines = text.split("\n");
   let globalGraphemeIndex = 0;
 
+  // Helper to check if a position is within the clip bounds
+  const inClip = (cx: number, cy: number): boolean =>
+    !clip || isInClipRect(cx, cy, clip);
+
   for (let row = 0; row < Math.min(lines.length, height); row++) {
     const line = lines[row];
-    let col = 0;
+    let displayCol = 0; // Position in display coordinates
+    let graphemeIdx = 0; // Index of grapheme in this line
+    const screenY = y + row;
 
     for (const grapheme of graphemes(line)) {
-      if (col >= width) break;
-
       const graphemeWidth = graphemeDisplayWidth(grapheme);
 
-      let modifiers = dim ? DIM : 0;
-      if (showCursor && globalGraphemeIndex === cursorPos) {
-        modifiers |= INVERSE;
+      // Check if this grapheme is visible (after scrollLeft, before width)
+      const visibleStart = displayCol - scrollLeft;
+      const isVisible =
+        visibleStart + graphemeWidth > 0 && visibleStart < width;
+
+      if (isVisible) {
+        let modifiers = dim ? DIM : 0;
+        if (showCursor && globalGraphemeIndex === cursorPos) {
+          modifiers |= INVERSE;
+        }
+
+        const renderCol = Math.max(0, visibleStart);
+        const screenX = x + renderCol;
+        if (renderCol < width && inClip(screenX, screenY)) {
+          buffer.set(screenX, screenY, grapheme, fg, bg, modifiers);
+
+          if (
+            graphemeWidth === 2 &&
+            renderCol + 1 < width &&
+            inClip(screenX + 1, screenY)
+          ) {
+            buffer.set(screenX + 1, screenY, "", fg, bg, modifiers);
+          }
+        }
       }
 
-      buffer.set(x + col, y + row, grapheme, fg, bg, modifiers);
-
-      if (graphemeWidth === 2 && col + 1 < width) {
-        buffer.set(x + col + 1, y + row, "", fg, bg, modifiers);
-      }
-
-      col += graphemeWidth;
+      displayCol += graphemeWidth;
+      graphemeIdx++;
       globalGraphemeIndex++;
+
+      // Stop if we've gone past the visible area
+      if (displayCol - scrollLeft >= width) break;
     }
 
+    // Cursor at end of line (before newline)
     if (
       showCursor &&
       globalGraphemeIndex === cursorPos &&
-      col < width &&
+      displayCol - scrollLeft < width &&
       row < lines.length - 1
     ) {
-      buffer.set(x + col, y + row, " ", fg, bg, INVERSE);
+      const renderCol = displayCol - scrollLeft;
+      const screenX = x + renderCol;
+      if (renderCol >= 0 && inClip(screenX, screenY)) {
+        buffer.set(screenX, screenY, " ", fg, bg, INVERSE);
+      }
     }
 
     if (row < lines.length - 1) {
@@ -509,14 +575,18 @@ function renderTextareaContent(
     }
   }
 
+  // Cursor at end of text
   if (showCursor && cursorPos === textLength(text)) {
     const cursorLineCol = posToLineCol(text, cursorPos);
 
     if (cursorLineCol.line < height) {
       const line = lines[cursorLineCol.line] ?? "";
-      const cursorCol = displayWidthToPosition(line, cursorLineCol.column);
-      if (cursorCol < width) {
-        buffer.set(x + cursorCol, y + cursorLineCol.line, " ", fg, bg, INVERSE);
+      const cursorCol =
+        displayWidthToPosition(line, cursorLineCol.column) - scrollLeft;
+      const screenX = x + cursorCol;
+      const screenY = y + cursorLineCol.line;
+      if (cursorCol >= 0 && cursorCol < width && inClip(screenX, screenY)) {
+        buffer.set(screenX, screenY, " ", fg, bg, INVERSE);
       }
     }
   }
