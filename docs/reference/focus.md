@@ -39,25 +39,24 @@ mount(() =>
 
 Now Tab moves focus forward and Shift+Tab moves backward through focusable nodes.
 
+By default, `TabFocus` traps focus within its scope (`trap: true`), so Tab/Shift+Tab wrap around at boundaries. This is the expected behavior for forms and most UIs.
+
 ### trap
 
-Use `trap: true` for modals or dialogs that should contain focus:
+To allow focus to escape to parent scopes at boundaries, set `trap: false`:
 
 ```typescript
-function Modal({ children }) {
-  return TabFocus({
-    trap: true,
-    children: [
-      Box({
-        border: true,
-        children,
-      }),
-    ],
-  });
-}
+// Nested TabFocus that allows escape to parent
+TabFocus({
+  trap: false,
+  children: [
+    Text({ content: 'Item 1', focusable: true }),
+    Text({ content: 'Item 2', focusable: true }),
+  ],
+});
 ```
 
-With `trap`, Tab/Shift+Tab wrap around within the scope instead of escaping to nodes outside.
+With `trap: false`, when focus reaches the last item and Tab is pressed, focus escapes to the parent scope (if one exists with focusable nodes).
 
 ## Event bubbling
 

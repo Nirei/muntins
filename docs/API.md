@@ -265,7 +265,7 @@ function TabFocus(props: { children: Node[] }) {
 
 You can write your own variant, arrow keys, vi-style `j`/`k`, anything, and plug it in the same way.
 
-Use `TabFocus({ trap: true, ... })` to trap focus within a scope (useful for modals).
+By default, `TabFocus` traps focus within its scope (`trap: true`), so Tab wraps around at boundaries. Use `TabFocus({ trap: false, ... })` to allow focus to escape to parent scopes.
 
 ### Event bubbling
 
