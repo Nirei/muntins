@@ -56,6 +56,29 @@ export const DEFAULT_INHERITED_STYLE: InheritedStyle = {
 /** Inheritable boolean value for text modifiers. */
 export type InheritableBool = boolean | "inherit";
 
+/**
+ * Text styling properties (unresolved - may include "inherit").
+ * Analogous to FlexStyle for layout, this defines the shape of text styling.
+ */
+export interface TextStyle {
+  color: InheritableColor;
+  backgroundColor: InheritableColor;
+  bold: InheritableBool;
+  dim: InheritableBool;
+  italic: InheritableBool;
+  underline: InheritableBool;
+  strikethrough: InheritableBool;
+  inverse: InheritableBool;
+}
+
+/**
+ * TextStyle with reactive (getter function) support for all properties.
+ * Analogous to ReactiveFlexStyle for layout.
+ */
+export type ReactiveTextStyle = {
+  [K in keyof TextStyle]: TextStyle[K] | (() => TextStyle[K]);
+};
+
 /** A value that can be inherited from a parent. */
 type Inheritable<T> = T | "inherit";
 

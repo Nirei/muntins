@@ -35,6 +35,7 @@ import {
   TabFocus,
   Text,
   Textarea,
+  createRef,
   createSignal,
   mount,
 } from "../src/index.ts";
@@ -179,37 +180,50 @@ function SettingsPanel() {
 
               FormRow({
                 label: "Notifications",
-                children: Box({
-                  flexDirection: "row",
-                  gap: 1,
-                  alignItems: "center",
-                  children: [
-                    Checkbox({
-                      checked: notifications,
-                      onChange: setNotifications,
-                    }),
-                    Text({ content: "Enable notifications", dim: true }),
-                  ],
-                }),
+                children: (() => {
+                  const checkboxRef = createRef();
+                  return Box({
+                    flexDirection: "row",
+                    gap: 1,
+                    alignItems: "center",
+                    children: [
+                      Checkbox({
+                        ref: checkboxRef,
+                        checked: notifications,
+                        onChange: setNotifications,
+                      }),
+                      Label({
+                        children: "Enable notifications",
+                        for: checkboxRef,
+                        style: { dim: true },
+                      }),
+                    ],
+                  });
+                })(),
               }),
 
               FormRow({
                 label: "Sound",
-                children: Box({
-                  flexDirection: "row",
-                  gap: 1,
-                  alignItems: "center",
-                  children: [
-                    Switch({
-                      checked: sound,
-                      onChange: setSound,
-                    }),
-                    Text({
-                      content: () => (sound() ? "On" : "Off"),
-                      dim: true,
-                    }),
-                  ],
-                }),
+                children: (() => {
+                  const switchRef = createRef();
+                  return Box({
+                    flexDirection: "row",
+                    gap: 1,
+                    alignItems: "center",
+                    children: [
+                      Switch({
+                        ref: switchRef,
+                        checked: sound,
+                        onChange: setSound,
+                      }),
+                      Label({
+                        children: () => (sound() ? "On" : "Off"),
+                        for: switchRef,
+                        style: { dim: true },
+                      }),
+                    ],
+                  });
+                })(),
               }),
 
               // Region section

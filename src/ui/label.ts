@@ -1,9 +1,8 @@
 // Label component - text label for form elements
 
 import type { MouseEvent } from "../core/input.ts";
-import type { FlexStyle } from "../core/layout.ts";
-import type { Node, Ref } from "../core/runtime.ts";
-import { Box, Text, getActiveContext, useFocus } from "../core/runtime.ts";
+import type { Node, ReactiveTextStyle, Ref } from "../core/runtime.ts";
+import { Text, getActiveContext, useFocus } from "../core/runtime.ts";
 
 /**
  * Props for the Label component.
@@ -15,8 +14,8 @@ export interface LabelProps {
   /** Associated element ref - clicking label focuses and activates this element */
   for?: Ref;
 
-  /** Style overrides for layout */
-  style?: Partial<FlexStyle>;
+  /** Text style overrides */
+  style?: Partial<ReactiveTextStyle>;
 }
 
 /**
@@ -56,18 +55,9 @@ export function Label(props: LabelProps): Node {
       }
     : undefined;
 
-  // Wrap in Box if style overrides provided, otherwise just Text
-  // Handler goes on the outermost element only to avoid double-firing
-  if (style) {
-    return Box({
-      ...style,
-      children: [Text({ content: children })],
-      onMousePress: handleMousePress,
-    });
-  }
-
   return Text({
     content: children,
+    ...style,
     onMousePress: handleMousePress,
   });
 }

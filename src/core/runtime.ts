@@ -35,6 +35,7 @@ import {
   DEFAULT_INHERITED_STYLE,
   type InheritableBool,
   type InheritedStyle,
+  type ReactiveTextStyle,
   enterTuiMode,
   exitTuiMode,
   flushFrame,
@@ -669,7 +670,13 @@ export function useFocus(): FocusController {
 }
 
 // Re-export from render.ts and text.ts for public API
-export type { ClipRect, InheritableBool, InheritedStyle } from "./render.ts";
+export type {
+  ClipRect,
+  InheritableBool,
+  InheritedStyle,
+  ReactiveTextStyle,
+  TextStyle,
+} from "./render.ts";
 export {
   BORDER_CHARS,
   DEFAULT_CLIP,
@@ -744,16 +751,8 @@ export interface BoxProps extends Partial<ReactiveFlexStyle> {
 }
 
 /** Props for Text component. */
-export interface TextProps {
+export interface TextProps extends Partial<ReactiveTextStyle> {
   content: string | (() => string);
-  color?: InheritableColor | (() => InheritableColor);
-  backgroundColor?: InheritableColor | (() => InheritableColor);
-  bold?: InheritableBool | (() => InheritableBool);
-  italic?: InheritableBool | (() => InheritableBool);
-  underline?: InheritableBool | (() => InheritableBool);
-  dim?: InheritableBool | (() => InheritableBool);
-  strikethrough?: InheritableBool | (() => InheritableBool);
-  inverse?: InheritableBool | (() => InheritableBool);
   wrap?: WrapMode | (() => WrapMode);
   focusable?: boolean;
   autoFocus?: boolean;

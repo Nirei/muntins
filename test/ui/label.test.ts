@@ -136,23 +136,23 @@ describe("Label", () => {
   });
 
   describe("style overrides", () => {
-    it("applies layout style overrides via Box wrapper", () => {
+    it("applies text style overrides to Text node", () => {
       const node = Label({
         children: "Label",
-        style: { marginTop: 2, paddingStart: 1 },
+        style: { bold: true, dim: true },
       });
 
-      // When style is provided, Label wraps in a Box
-      const style =
-        typeof node.style === "function" ? node.style() : node.style;
-      assert.strictEqual(style.marginTop, 2);
-      assert.strictEqual(style.paddingStart, 1);
+      // Label always returns a Text node with style props applied
+      assert.ok(node.measure, "should have measure function (Text node)");
+      // Check that inheritable props are set
+      assert.strictEqual(node._inheritableProps?.bold, true);
+      assert.strictEqual(node._inheritableProps?.dim, true);
     });
 
     it("returns Text node when no style provided", () => {
       const node = Label({ children: "Label" });
 
-      // Without style, Label returns Text directly (has measure)
+      // Label always returns Text directly (has measure)
       assert.ok(node.measure, "should have measure function (Text node)");
     });
   });

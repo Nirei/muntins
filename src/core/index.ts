@@ -96,4 +96,6 @@ export {
   type BorderProp,
   type InheritedStyle,
   type InheritableBool,
+  type TextStyle,
+  type ReactiveTextStyle,
 } from "./runtime.ts";
