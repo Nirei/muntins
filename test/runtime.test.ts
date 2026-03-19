@@ -2769,6 +2769,155 @@ describe("mouse events", () => {
     assert.strictEqual(pressed, true);
     app.unmount();
   });
+
+  it("clicking a focusable node focuses it", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout(40, 10);
+    const firstRef = createRef();
+    const secondRef = createRef();
+    let focusController!: FocusController;
+
+    const app = mount(
+      () => {
+        focusController = useFocus();
+        return Box({
+          flexDirection: "row",
+          children: [
+            // First focusable at x=0, width=10
+            Text({
+              content: "first.....",
+              focusable: true,
+              autoFocus: true,
+              ref: firstRef,
+            }),
+            // Second focusable at x=10, width=10
+            Text({
+              content: "second....",
+              focusable: true,
+              ref: secondRef,
+            }),
+          ],
+        });
+      },
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+        mouse: true,
+      },
+    );
+
+    // Initially first is focused via autoFocus
+    assert.strictEqual(focusController.current(), firstRef.current);
+
+    // Click on second (x=11 is within second's bounds)
+    // SGR mouse press: button 0 (left), at (11,1) - 1-indexed coords
+    mockStdin.emit("data", Buffer.from("\x1b[<0;12;1M"));
+
+    // Second should now be focused
+    assert.strictEqual(
+      focusController.current(),
+      secondRef.current,
+      "Clicking second should focus it",
+    );
+
+    app.unmount();
+  });
+
+  it("clicking a non-focusable node focuses nearest focusable ancestor", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout(40, 10);
+    const firstRef = createRef();
+    const secondBoxRef = createRef();
+    let focusController!: FocusController;
+
+    const app = mount(
+      () => {
+        focusController = useFocus();
+        return Box({
+          flexDirection: "row",
+          children: [
+            // First focusable gets initial focus
+            Text({
+              content: "first",
+              focusable: true,
+              autoFocus: true,
+              ref: firstRef,
+            }),
+            // Second is a focusable box with non-focusable text inside
+            Box({
+              focusable: true,
+              ref: secondBoxRef,
+              width: 20,
+              height: 3,
+              children: [
+                // Non-focusable text inside focusable box
+                Text({ content: "click me" }),
+              ],
+            }),
+          ],
+        });
+      },
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+        mouse: true,
+      },
+    );
+
+    // Initially first is focused via autoFocus
+    assert.strictEqual(focusController.current(), firstRef.current);
+
+    // Click on the text inside the second box (x=10 should be inside the second box)
+    // The text "first" is 5 chars wide, then secondBox starts
+    mockStdin.emit("data", Buffer.from("\x1b[<0;8;1M"));
+
+    // The focusable box should now be focused (not the text inside it)
+    assert.strictEqual(
+      focusController.current(),
+      secondBoxRef.current,
+      "Clicking non-focusable child should focus the nearest focusable ancestor",
+    );
+
+    app.unmount();
+  });
+
+  it("clicking does not focus when no focusable ancestor exists", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout(40, 10);
+    let focusController!: FocusController;
+
+    const app = mount(
+      () => {
+        focusController = useFocus();
+        return Box({
+          children: [
+            // Non-focusable text with no focusable ancestor
+            Text({ content: "not focusable" }),
+          ],
+        });
+      },
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+        mouse: true,
+      },
+    );
+
+    // Initially nothing focused
+    assert.strictEqual(focusController.current(), null);
+
+    // Click on the text
+    mockStdin.emit("data", Buffer.from("\x1b[<0;2;1M"));
+
+    // Should still be null - no focusable to focus
+    assert.strictEqual(
+      focusController.current(),
+      null,
+      "Should not focus anything when no focusable ancestor exists",
+    );
+
+    app.unmount();
+  });
 });
 
 describe("scroll events", () => {
@@ -3017,6 +3166,55 @@ describe("focus scope nesting", () => {
 
     assert.strictEqual(state.focusedNode(), node);
     assert.strictEqual(scope.focusedIndex, 0);
+  });
+
+  it("wraps within scope when trap is true (even with parent focusables)", () => {
+    // This tests the scenario from the settings app:
+    // - Parent scope has one focusable (e.g., root container)
+    // - Child scope has multiple focusables (e.g., form controls)
+    // With trap: true, Tab should cycle within the child scope
+    const parentNode = Text({ content: "parent", focusable: true });
+    const child1 = Text({ content: "child1", focusable: true });
+    const child2 = Text({ content: "child2", focusable: true });
+    const child3 = Text({ content: "child3", focusable: true });
+
+    const state = createTestState(Box({}));
+    const parentScope = createTestScope([parentNode]);
+    const childScope = createTestScope([child1, child2, child3], true); // trap = true
+    childScope.parent = parentScope;
+
+    // Start at first child
+    childScope.focusedIndex = 0;
+    state.setFocusedNode(child1);
+
+    // Tab to second child
+    focusNext(state, childScope);
+    assert.strictEqual(state.focusedNode(), child2, "Should move to child2");
+
+    // Tab to third child
+    focusNext(state, childScope);
+    assert.strictEqual(state.focusedNode(), child3, "Should move to child3");
+
+    // Tab again - should wrap since trap is true
+    focusNext(state, childScope);
+    assert.strictEqual(
+      state.focusedNode(),
+      child1,
+      "Should wrap back to child1 with trap: true",
+    );
+    assert.strictEqual(
+      childScope.focusedIndex,
+      0,
+      "Child scope index should wrap to 0",
+    );
+
+    // Continue cycling - should stay in child scope
+    focusNext(state, childScope);
+    assert.strictEqual(
+      state.focusedNode(),
+      child2,
+      "Should continue to child2",
+    );
   });
 });
 
@@ -3386,6 +3584,82 @@ describe("TabFocus component", () => {
     focusedNodes.length = 0;
     mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
     assert.deepStrictEqual(focusedNodes, ["first"]);
+
+    app.unmount();
+  });
+
+  it("wraps Tab cycling by default (trap: true)", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+    const focusedNodes: string[] = [];
+
+    const app = mount(
+      () =>
+        Box({
+          focusable: true, // Parent with focusable (like settings app root)
+          children: [
+            TabFocus({
+              children: [
+                Text({
+                  content: "first",
+                  focusable: true,
+                  autoFocus: true,
+                  onKeyPress: () => {
+                    focusedNodes.push("first");
+                    return false;
+                  },
+                }),
+                Text({
+                  content: "second",
+                  focusable: true,
+                  onKeyPress: () => {
+                    focusedNodes.push("second");
+                    return false;
+                  },
+                }),
+                Text({
+                  content: "third",
+                  focusable: true,
+                  onKeyPress: () => {
+                    focusedNodes.push("third");
+                    return false;
+                  },
+                }),
+              ],
+            }),
+          ],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+      },
+    );
+
+    // First item should be focused initially
+    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    assert.deepStrictEqual(focusedNodes, ["first"]);
+
+    // Tab to second
+    mockStdin.emit("keypress", "\t", { name: "tab", sequence: "\t" });
+    focusedNodes.length = 0;
+    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    assert.deepStrictEqual(focusedNodes, ["second"]);
+
+    // Tab to third
+    mockStdin.emit("keypress", "\t", { name: "tab", sequence: "\t" });
+    focusedNodes.length = 0;
+    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    assert.deepStrictEqual(focusedNodes, ["third"]);
+
+    // Tab again - should wrap back to first (not escape to parent)
+    mockStdin.emit("keypress", "\t", { name: "tab", sequence: "\t" });
+    focusedNodes.length = 0;
+    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    assert.deepStrictEqual(
+      focusedNodes,
+      ["first"],
+      "Should wrap back to first, not escape to parent",
+    );
 
     app.unmount();
   });

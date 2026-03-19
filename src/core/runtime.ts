@@ -614,6 +614,23 @@ function focusSet(state: RuntimeState, scope: FocusScope, ref: Ref): void {
 }
 
 /**
+ * Focus a node directly (used for click-to-focus).
+ * Finds the node's containing scope and updates focus state.
+ */
+function focusNode(state: RuntimeState, node: Node): void {
+  if (!node.focusable) return;
+
+  const targetScope = findScopeContaining(state.rootScope, state.root, node);
+  if (!targetScope) return;
+
+  const index = targetScope.focusableNodes.indexOf(node);
+  if (index !== -1) {
+    targetScope.focusedIndex = index;
+    state.setFocusedNode(node);
+  }
+}
+
+/**
  * Create a focus controller for a scope.
  */
 function createFocusController(
@@ -1353,7 +1370,12 @@ export function FocusScopeComponent(props: FocusScopeProps): Node {
 export function TabFocus(props: TabFocusProps): Node {
   const ctx = getContext();
 
-  return createFocusScopeNode(props, (children, scope) => {
+  // TabFocus defaults to trap: true for intuitive Tab cycling behavior.
+  // Without trapping, Tab would escape to parent scopes when at boundaries,
+  // breaking the expected cycle-through-all-items behavior for forms.
+  const propsWithTrap = { ...props, trap: props.trap ?? true };
+
+  return createFocusScopeNode(propsWithTrap, (children, scope) => {
     const focus = createFocusController(ctx.state, scope);
 
     return Box({
@@ -1509,6 +1531,7 @@ export function hitTest(
   const childLayouts = layout.children ?? [];
 
   // Check children in reverse order (later = on top)
+  // Note: childLayouts already excludes portal children since they're laid out separately
   for (let i = children.length - 1; i >= 0; i--) {
     const childLayout = childLayouts[i];
     if (!childLayout) continue;
@@ -1523,16 +1546,81 @@ export function hitTest(
 }
 
 /**
+ * Collect all portal nodes from a tree.
+ * Returns them in order they appear (later portals render on top).
+ */
+function collectPortals(node: Node): Node[] {
+  const portals: Node[] = [];
+
+  const visit = (n: Node) => {
+    for (const child of resolveNodeChildren(n)) {
+      if (child._isPortal) {
+        portals.push(child);
+      }
+      visit(child);
+    }
+  };
+
+  visit(node);
+  return portals;
+}
+
+/**
+ * Hit test all portal nodes, checking in reverse order (later portals are on top).
+ * Computes fresh layout for each portal child since portals use position: absolute.
+ */
+function hitTestPortals(
+  portals: Node[],
+  x: number,
+  y: number,
+  screenWidth: number,
+  screenHeight: number,
+): Node | null {
+  // Check portals in reverse order (later = on top)
+  for (let i = portals.length - 1; i >= 0; i--) {
+    const portal = portals[i];
+    for (const portalChild of resolveNodeChildren(portal)) {
+      const portalLayoutNode = nodeToLayoutNode(portalChild);
+      const portalLayout = computeLayout(
+        portalLayoutNode,
+        screenWidth,
+        screenHeight,
+      );
+      const hit = hitTest(portalChild, portalLayout, x, y);
+      if (hit) {
+        return hit;
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Route mouse event to node under cursor, with hover tracking.
  *
  * Updates hover state and dispatches press/release/move events
- * to the target node.
+ * to the target node. Checks portal nodes first since they render on top.
  */
 function routeMouseEvent(state: RuntimeState, event: MouseEvent): void {
-  const { root, layoutResult, hoverState } = state;
+  const { root, layoutResult, hoverState, flushState } = state;
   if (!layoutResult) return;
 
-  const target = hitTest(root, layoutResult, event.x, event.y);
+  // Collect and hit test portals first (they render on top)
+  const portals = collectPortals(root);
+  const screenWidth = flushState.stdout.columns;
+  const screenHeight = flushState.stdout.rows;
+  let target = hitTestPortals(
+    portals,
+    event.x,
+    event.y,
+    screenWidth,
+    screenHeight,
+  );
+
+  // Fall back to main tree if no portal hit
+  if (!target) {
+    target = hitTest(root, layoutResult, event.x, event.y);
+  }
 
   if (target !== hoverState.currentNode) {
     if (hoverState.currentNode?.onHover) {
@@ -1546,20 +1634,46 @@ function routeMouseEvent(state: RuntimeState, event: MouseEvent): void {
 
   if (!target) return;
 
+  // Mouse events bubble up until a handler is found
+  const path = buildPathToRoot(target);
+
   switch (event.action) {
-    case "press":
-      if (target.onMousePress) {
-        target.onMousePress(event);
+    case "press": {
+      // Focus the nearest focusable node (like browser click-to-focus)
+      // Skip focusing if the click target is inside a portal - portal content
+      // is temporary UI that may dispose on click, causing circular dependencies
+      const isInsidePortal = path.some((n) => n._isPortal);
+      if (!isInsidePortal) {
+        for (const node of path) {
+          if (node.focusable) {
+            focusNode(state, node);
+            break;
+          }
+        }
+      }
+      // Then dispatch the press event
+      for (const node of path) {
+        if (node.onMousePress) {
+          node.onMousePress(event);
+          return;
+        }
       }
       break;
+    }
     case "release":
-      if (target.onMouseRelease) {
-        target.onMouseRelease(event);
+      for (const node of path) {
+        if (node.onMouseRelease) {
+          node.onMouseRelease(event);
+          return;
+        }
       }
       break;
     case "move":
-      if (target.onMouseMove) {
-        target.onMouseMove(event);
+      for (const node of path) {
+        if (node.onMouseMove) {
+          node.onMouseMove(event);
+          return;
+        }
       }
       break;
   }
@@ -1570,13 +1684,28 @@ function routeMouseEvent(state: RuntimeState, event: MouseEvent): void {
  *
  * Scroll events bubble up the tree until a handler is found.
  * This matches browser behavior where scroll events propagate
- * to scrollable ancestors.
+ * to scrollable ancestors. Checks portal nodes first since they render on top.
  */
 function routeScrollEvent(state: RuntimeState, event: ScrollEvent): void {
-  const { root, layoutResult } = state;
+  const { root, layoutResult, flushState } = state;
   if (!layoutResult) return;
 
-  const target = hitTest(root, layoutResult, event.x, event.y);
+  // Collect and hit test portals first (they render on top)
+  const portals = collectPortals(root);
+  const screenWidth = flushState.stdout.columns;
+  const screenHeight = flushState.stdout.rows;
+  let target = hitTestPortals(
+    portals,
+    event.x,
+    event.y,
+    screenWidth,
+    screenHeight,
+  );
+
+  // Fall back to main tree if no portal hit
+  if (!target) {
+    target = hitTest(root, layoutResult, event.x, event.y);
+  }
   if (!target) return;
 
   const path = buildPathToRoot(target);
