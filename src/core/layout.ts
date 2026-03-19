@@ -813,6 +813,54 @@ function positionAbsoluteChildren(
 
   for (const child of absoluteChildren) {
     const childStyle = child.style;
+    let sizeChanged = false;
+
+    // CSS behavior: when both start AND end are specified, compute width from constraints
+    if (
+      childStyle.width === "auto" &&
+      typeof childStyle.start === "number" &&
+      typeof childStyle.end === "number"
+    ) {
+      const newWidth = Math.max(
+        0,
+        contentWidth - childStyle.start - childStyle.end,
+      );
+      if (child.width !== newWidth) {
+        child.width = newWidth;
+        sizeChanged = true;
+      }
+    }
+    // CSS behavior: when both top AND bottom are specified, compute height from constraints
+    if (
+      childStyle.height === "auto" &&
+      typeof childStyle.top === "number" &&
+      typeof childStyle.bottom === "number"
+    ) {
+      const newHeight = Math.max(
+        0,
+        contentHeight - childStyle.top - childStyle.bottom,
+      );
+      if (child.height !== newHeight) {
+        child.height = newHeight;
+        sizeChanged = true;
+      }
+    }
+
+    // If size changed due to stretch constraints, re-compute intrinsic sizes
+    // and re-layout the child's descendants
+    if (sizeChanged) {
+      // Build bottom-up queue for this subtree and re-run intrinsic sizing
+      const queue: LayoutBox[] = [];
+      const buildQueue = (b: LayoutBox) => {
+        for (const c of b.children) buildQueue(c);
+        queue.push(b);
+      };
+      for (const c of child.children) buildQueue(c);
+      for (const b of queue) {
+        resolveIntrinsicSize(b);
+      }
+      resolveFlexAndPosition(child);
+    }
 
     // Resolve horizontal position
     // Priority: start > end (if both set, start wins)
