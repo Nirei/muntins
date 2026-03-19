@@ -12,6 +12,7 @@ import {
   useFocus,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
+import { Checkbox } from "../../src/ui/checkbox.ts";
 import { Label } from "../../src/ui/label.ts";
 
 // Helper to create mock stdin/stdout for mount tests
@@ -205,11 +206,12 @@ describe("Label", () => {
       const inputRef = createRef();
       const otherRef = createRef();
       let focusController!: FocusController;
+      let labelNode!: ReturnType<typeof Label>;
 
       const app = mount(
         () => {
           focusController = useFocus();
-          const label = Label({ children: "Username", for: inputRef });
+          labelNode = Label({ children: "Username", for: inputRef });
           return Box({
             children: [
               // Start with focus on another element
@@ -219,7 +221,7 @@ describe("Label", () => {
                 autoFocus: true,
                 ref: otherRef,
               }),
-              label,
+              labelNode,
               Text({
                 content: "Input",
                 focusable: true,
@@ -238,14 +240,79 @@ describe("Label", () => {
       assert.strictEqual(focusController.current(), otherRef.current);
 
       // Simulate clicking label by calling its onMousePress handler
-      // The Label's onMousePress calls focus.set(for)
-      focusController.set(inputRef);
+      assert.ok(labelNode.onMousePress);
+      labelNode.onMousePress({
+        type: "mouse",
+        action: "press",
+        button: 0,
+        x: 0,
+        y: 0,
+        ctrl: false,
+        alt: false,
+        shift: false,
+        target: labelNode,
+      });
 
       // Input should now be focused
       assert.strictEqual(
         focusController.current(),
         inputRef.current,
         "Input should be focused after label click",
+      );
+
+      app.unmount();
+    });
+
+    it("clicking label activates associated checkbox", () => {
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout();
+
+      const checkboxRef = createRef();
+      let labelNode!: ReturnType<typeof Label>;
+      let activated = false;
+
+      const app = mount(
+        () => {
+          labelNode = Label({ children: "Enable feature", for: checkboxRef });
+          return Box({
+            children: [
+              Checkbox({
+                checked: false,
+                ref: checkboxRef,
+                onChange: () => {
+                  activated = true;
+                },
+              }),
+              labelNode,
+            ],
+          });
+        },
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+        },
+      );
+
+      assert.strictEqual(activated, false, "should not be activated initially");
+
+      // Click the label
+      assert.ok(labelNode.onMousePress);
+      labelNode.onMousePress({
+        type: "mouse",
+        action: "press",
+        button: 0,
+        x: 0,
+        y: 0,
+        ctrl: false,
+        alt: false,
+        shift: false,
+        target: labelNode,
+      });
+
+      assert.strictEqual(
+        activated,
+        true,
+        "checkbox should be activated when label is clicked",
       );
 
       app.unmount();

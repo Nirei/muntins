@@ -14,8 +14,14 @@ interface Modifiers {
 
 const NO_MODIFIERS: Modifiers = { ctrl: false, alt: false, shift: false };
 
-/** Keyboard input event */
-export interface KeyEvent {
+/** Minimal node interface for event targets (avoids circular dependency with runtime.ts) */
+export interface EventTarget {
+  /** Programmatically activate this node */
+  activate?: () => void;
+}
+
+/** Raw keyboard input from terminal */
+export interface KeyInput {
   type: "key";
   /** Key name: "a", "enter", "up", "f1", etc. Always lowercase. */
   name: string;
@@ -28,8 +34,8 @@ export interface KeyEvent {
   sequence: string;
 }
 
-/** Mouse input event */
-export interface MouseEvent {
+/** Raw mouse input from terminal */
+export interface MouseInput {
   type: "mouse";
   action: "press" | "release" | "move";
   /** 0=left, 1=middle, 2=right */
@@ -45,8 +51,8 @@ export interface MouseEvent {
   sequence?: string;
 }
 
-/** Scroll wheel event */
-export interface ScrollEvent {
+/** Raw scroll input from terminal */
+export interface ScrollInput {
   type: "scroll";
   direction: "up" | "down" | "left" | "right";
   /** 0-indexed column */
@@ -59,6 +65,40 @@ export interface ScrollEvent {
   /** Raw escape sequence for debugging (optional) */
   sequence?: string;
 }
+
+/** Base interface for all dispatched events */
+export interface Event {
+  readonly target: EventTarget;
+}
+
+/** Keyboard event dispatched to a node */
+export interface KeyEvent extends KeyInput, Event {
+  readonly target: EventTarget;
+}
+
+/** Mouse event dispatched to a node */
+export interface MouseEvent extends MouseInput, Event {
+  readonly target: EventTarget;
+}
+
+/** Scroll event dispatched to a node */
+export interface ScrollEvent extends ScrollInput, Event {
+  readonly target: EventTarget;
+}
+
+/** Activation event - triggered by keyboard, mouse, or programmatically */
+export interface ActivateEvent extends Event {
+  readonly type: "activate";
+  readonly target: EventTarget;
+}
+
+// Type aliases for backwards compatibility (input parsing returns Input types)
+/** @deprecated Use KeyInput for parsing, KeyEvent for dispatch */
+export type KeyEventLegacy = KeyInput;
+/** @deprecated Use MouseInput for parsing, MouseEvent for dispatch */
+export type MouseEventLegacy = MouseInput;
+/** @deprecated Use ScrollInput for parsing, ScrollEvent for dispatch */
+export type ScrollEventLegacy = ScrollInput;
 
 /** Terminal resize event */
 export interface ResizeEvent {
@@ -83,11 +123,11 @@ export interface FocusEvent {
   focused: boolean;
 }
 
-/** Union of all input event types */
+/** Union of all raw input types (from terminal parsing, no target) */
 export type InputEvent =
-  | KeyEvent
-  | MouseEvent
-  | ScrollEvent
+  | KeyInput
+  | MouseInput
+  | ScrollInput
   | ResizeEvent
   | PasteEvent
   | FocusEvent;
@@ -130,12 +170,12 @@ function normalizeKeyName(name: string): string {
 }
 
 /**
- * Map readline keypress event to our KeyEvent type.
+ * Map readline keypress event to our KeyInput type.
  */
 export function mapKeypressToEvent(
   char: string | undefined,
   key: ReadlineKey | undefined,
-): KeyEvent | null {
+): KeyInput | null {
   if (!key && !char) {
     return null;
   }
@@ -159,15 +199,15 @@ export function mapKeypressToEvent(
 /**
  * Setup keyboard input handling using Node's readline.
  *
- * Converts readline keypress events into our KeyEvent type.
+ * Converts readline keypress events into our KeyInput type.
  *
  * @param stdin - Input stream (must have emitKeypressEvents called)
- * @param onKey - Callback for each key event
+ * @param onKey - Callback for each key input
  * @returns Cleanup function to remove the listener
  */
 export function setupKeyboardInput(
   stdin: NodeJS.ReadStream,
-  onKey: (event: KeyEvent) => void,
+  onKey: (event: KeyInput) => void,
 ): () => void {
   // Enable keypress events on stdin
   // NOTE: This is a one-way operation in Node.js, there's no way to "disable" it.
@@ -324,16 +364,16 @@ const CTRL_NAMES: Record<number, string> = {
 };
 
 /**
- * Parse SGR mouse protocol parameters into a MouseEvent or ScrollEvent.
+ * Parse SGR mouse protocol parameters into a MouseInput or ScrollInput.
  *
  * @param params - The "button;col;row" parameters from the SGR sequence
  * @param isPress - true for press (M terminator), false for release (m terminator)
- * @returns Parsed mouse or scroll event, or null if invalid
+ * @returns Parsed mouse or scroll input, or null if invalid
  */
 export function parseMouseSequence(
   params: string,
   isPress: boolean,
-): MouseEvent | ScrollEvent | null {
+): MouseInput | ScrollInput | null {
   // Parse "button;col;row"
   const parts = params.split(";");
   if (parts.length !== 3) return null;
@@ -398,13 +438,13 @@ export class SequenceParser {
   private buffer = "";
 
   /**
-   * Feed input data and return any parsed events.
+   * Feed input data and return any parsed inputs.
    *
    * @param data - Raw input string (may contain multiple sequences)
-   * @returns Array of parsed events (may be empty)
+   * @returns Array of parsed inputs (may be empty)
    */
-  feed(data: string): (MouseEvent | ScrollEvent | FocusEvent)[] {
-    const events: (MouseEvent | ScrollEvent | FocusEvent)[] = [];
+  feed(data: string): (MouseInput | ScrollInput | FocusEvent)[] {
+    const events: (MouseInput | ScrollInput | FocusEvent)[] = [];
 
     for (const char of data) {
       const event = this.processChar(char);
@@ -416,7 +456,7 @@ export class SequenceParser {
 
   private processChar(
     char: string,
-  ): MouseEvent | ScrollEvent | FocusEvent | null {
+  ): MouseInput | ScrollInput | FocusEvent | null {
     switch (this.state) {
       case ParserState.Ground:
         if (char === "\x1b") {
@@ -499,13 +539,13 @@ export class UnifiedParser {
   private sequenceStart = "";
 
   /**
-   * Feed input data and return parsed events.
+   * Feed input data and return parsed inputs.
    *
    * @param data - Raw input string (may contain multiple sequences)
-   * @returns Array of parsed events
+   * @returns Array of parsed inputs
    */
-  feed(data: string): (KeyEvent | MouseEvent | ScrollEvent | FocusEvent)[] {
-    const events: (KeyEvent | MouseEvent | ScrollEvent | FocusEvent)[] = [];
+  feed(data: string): (KeyInput | MouseInput | ScrollInput | FocusEvent)[] {
+    const events: (KeyInput | MouseInput | ScrollInput | FocusEvent)[] = [];
 
     for (const char of data) {
       const result = this.processChar(char);
@@ -524,11 +564,11 @@ export class UnifiedParser {
   private processChar(
     char: string,
   ):
-    | KeyEvent
-    | MouseEvent
-    | ScrollEvent
+    | KeyInput
+    | MouseInput
+    | ScrollInput
     | FocusEvent
-    | (KeyEvent | MouseEvent | ScrollEvent | FocusEvent)[]
+    | (KeyInput | MouseInput | ScrollInput | FocusEvent)[]
     | null {
     const code = char.charCodeAt(0);
 
@@ -545,7 +585,7 @@ export class UnifiedParser {
           return this.makeControlKeyEvent(code, char);
         }
         // Printable characters
-        return this.makeKeyEvent(char, char, char, false, false, false);
+        return this.makeKeyInput(char, char, char, false, false, false);
 
       case ParserState.Escape:
         this.sequenceStart += char;
@@ -561,7 +601,7 @@ export class UnifiedParser {
         if (char === "\x1b") {
           // Double ESC - emit first ESC and stay in Escape state
           this.sequenceStart = char;
-          return this.makeKeyEvent("escape", "", "\x1b", false, false, false);
+          return this.makeKeyInput("escape", "", "\x1b", false, false, false);
         }
         // ESC + char = Alt+char
         this.state = ParserState.Ground;
@@ -576,7 +616,7 @@ export class UnifiedParser {
           }
           const name = char.toLowerCase();
           const printable = isPrintable(char) ? char : "";
-          return this.makeKeyEvent(
+          return this.makeKeyInput(
             name,
             printable,
             this.sequenceStart,
@@ -655,7 +695,7 @@ export class UnifiedParser {
         this.sequenceStart += char;
         this.state = ParserState.Ground;
         if (SS3_KEYS[char]) {
-          return this.makeKeyEvent(
+          return this.makeKeyInput(
             SS3_KEYS[char],
             "",
             this.sequenceStart,
@@ -669,13 +709,13 @@ export class UnifiedParser {
     }
   }
 
-  private handleCsiKey(char: string): KeyEvent {
+  private handleCsiKey(char: string): KeyInput {
     const name = CSI_KEYS[char];
     const { ctrl, alt, shift } = this.parseModifiers();
     this.state = ParserState.Ground;
     // Shift+Tab special case
     const isShiftTab = char === "Z";
-    return this.makeKeyEvent(
+    return this.makeKeyInput(
       name,
       "",
       this.sequenceStart,
@@ -685,14 +725,14 @@ export class UnifiedParser {
     );
   }
 
-  private handleCsiTilde(): KeyEvent | null {
+  private handleCsiTilde(): KeyInput | null {
     this.state = ParserState.Ground;
     const parts = this.buffer.split(";");
     const keyNum = Number.parseInt(parts[0], 10);
     const name = CSI_TILDE_KEYS[keyNum];
     if (!name) return null;
     const { ctrl, alt, shift } = this.parseModifiers();
-    return this.makeKeyEvent(name, "", this.sequenceStart, ctrl, alt, shift);
+    return this.makeKeyInput(name, "", this.sequenceStart, ctrl, alt, shift);
   }
 
   private parseModifiers(): { ctrl: boolean; alt: boolean; shift: boolean } {
@@ -710,29 +750,29 @@ export class UnifiedParser {
     };
   }
 
-  private makeControlKeyEvent(code: number, char: string): KeyEvent | null {
+  private makeControlKeyEvent(code: number, char: string): KeyInput | null {
     // Named control characters
     if (CTRL_NAMES[code] !== undefined) {
       const name = CTRL_NAMES[code];
-      return this.makeKeyEvent(name, "", char, false, false, false);
+      return this.makeKeyInput(name, "", char, false, false, false);
     }
     // Ctrl+A through Ctrl+Z (codes 1-26)
     if (code >= 1 && code <= 26) {
       const name = String.fromCharCode(code + 96); // 1 -> 'a', 2 -> 'b', etc.
-      return this.makeKeyEvent(name, "", char, true, false, false);
+      return this.makeKeyInput(name, "", char, true, false, false);
     }
     // Other control characters - emit as-is
-    return this.makeKeyEvent(char, "", char, false, false, false);
+    return this.makeKeyInput(char, "", char, false, false, false);
   }
 
-  private makeKeyEvent(
+  private makeKeyInput(
     name: string,
     char: string,
     sequence: string,
     ctrl: boolean,
     alt: boolean,
     shift: boolean,
-  ): KeyEvent {
+  ): KeyInput {
     return {
       type: "key",
       name,

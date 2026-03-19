@@ -195,6 +195,7 @@ describe("Button", () => {
         alt: false,
         shift: false,
         sequence: "\r",
+        target: node,
       });
 
       assert.strictEqual(result, true);
@@ -219,6 +220,7 @@ describe("Button", () => {
         alt: false,
         shift: false,
         sequence: " ",
+        target: node,
       });
 
       assert.strictEqual(result, true);
@@ -243,6 +245,7 @@ describe("Button", () => {
         alt: false,
         shift: false,
         sequence: "a",
+        target: node,
       });
 
       assert.strictEqual(result, false);
@@ -270,6 +273,7 @@ describe("Button", () => {
         ctrl: false,
         alt: false,
         shift: false,
+        target: node,
       });
 
       assert.strictEqual(clicked, true);
@@ -296,6 +300,7 @@ describe("Button", () => {
         alt: false,
         shift: false,
         sequence: "\r",
+        target: node,
       });
 
       assert.strictEqual(result, false);
@@ -321,6 +326,7 @@ describe("Button", () => {
         alt: false,
         shift: false,
         sequence: " ",
+        target: node,
       });
 
       assert.strictEqual(result, false);
@@ -347,6 +353,7 @@ describe("Button", () => {
         ctrl: false,
         alt: false,
         shift: false,
+        target: node,
       });
 
       assert.strictEqual(clicked, false);
@@ -387,6 +394,7 @@ describe("Button", () => {
         alt: false,
         shift: false,
         sequence: "\r",
+        target: node,
       });
       assert.strictEqual(clickCount, 1);
 
@@ -400,6 +408,7 @@ describe("Button", () => {
         alt: false,
         shift: false,
         sequence: "\r",
+        target: node,
       });
       assert.strictEqual(clickCount, 1); // Should not have increased
     });

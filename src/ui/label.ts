@@ -12,7 +12,7 @@ export interface LabelProps {
   /** Label text content */
   children: string | (() => string);
 
-  /** Associated element ref - clicking label focuses this element */
+  /** Associated element ref - clicking label focuses and activates this element */
   for?: Ref;
 
   /** Style overrides for layout */
@@ -23,18 +23,20 @@ export interface LabelProps {
  * A text label for form elements, optionally associated with a focusable target.
  *
  * When `for` is provided and the label receives a mouse press, focus moves
- * to the referenced element. The label itself is not focusable.
+ * to the referenced element and the element is activated (triggering its
+ * onActivate handler). This enables labels to toggle checkboxes, switches,
+ * and other activatable components. The label itself is not focusable.
  *
  * @example
  * ```typescript
- * const inputRef = createRef();
+ * const checkboxRef = createRef();
  *
  * Box({
- *   flexDirection: "column",
+ *   flexDirection: "row",
  *   gap: 1,
  *   children: [
- *     Label({ children: "Username", for: inputRef }),
- *     Input({ ref: inputRef, value, onChange }),
+ *     Checkbox({ ref: checkboxRef, checked, onChange }),
+ *     Label({ children: "I agree", for: checkboxRef }),
  *   ],
  * });
  * ```
@@ -50,6 +52,7 @@ export function Label(props: LabelProps): Node {
   const handleMousePress = forRef
     ? (_event: MouseEvent) => {
         focus?.set(forRef);
+        forRef.current?.activate?.();
       }
     : undefined;
 

@@ -107,6 +107,7 @@ describe("Checkbox", () => {
         alt: false,
         shift: false,
         sequence: "\r",
+        target: node,
       });
 
       assert.strictEqual(result, true);
@@ -131,6 +132,7 @@ describe("Checkbox", () => {
         alt: false,
         shift: false,
         sequence: " ",
+        target: node,
       });
 
       assert.strictEqual(result, true);
@@ -155,6 +157,7 @@ describe("Checkbox", () => {
         alt: false,
         shift: false,
         sequence: "a",
+        target: node,
       });
 
       assert.strictEqual(result, false);
@@ -182,6 +185,7 @@ describe("Checkbox", () => {
         ctrl: false,
         alt: false,
         shift: false,
+        target: node,
       });
 
       assert.strictEqual(receivedValue, true);
@@ -206,6 +210,7 @@ describe("Checkbox", () => {
         ctrl: false,
         alt: false,
         shift: false,
+        target: node,
       });
 
       assert.strictEqual(receivedValue, false);
@@ -231,6 +236,7 @@ describe("Checkbox", () => {
         ctrl: false,
         alt: false,
         shift: false,
+        target: node,
       });
 
       assert.strictEqual(called, false);
@@ -257,6 +263,7 @@ describe("Checkbox", () => {
         alt: false,
         shift: false,
         sequence: "\r",
+        target: node,
       });
 
       assert.strictEqual(result, false);
@@ -299,6 +306,7 @@ describe("Checkbox", () => {
         alt: false,
         shift: false,
         sequence: "\r",
+        target: node,
       });
       assert.strictEqual(callCount, 1);
 
@@ -312,6 +320,7 @@ describe("Checkbox", () => {
         alt: false,
         shift: false,
         sequence: "\r",
+        target: node,
       });
       assert.strictEqual(callCount, 1); // Should not have increased
     });

@@ -8,10 +8,14 @@ import {
 } from "./buffer.ts";
 import type { FocusEvent, PasteEvent } from "./input.ts";
 import {
+  type ActivateEvent,
   type InputEvent,
   type KeyEvent,
+  type KeyInput,
   type MouseEvent,
+  type MouseInput,
   type ScrollEvent,
+  type ScrollInput,
   createInputParser,
 } from "./input.ts";
 import {
@@ -151,6 +155,10 @@ export interface Node {
   onMouseMove?: (event: MouseEvent) => void;
   onScroll?: (event: ScrollEvent) => void;
   onHover?: (hovering: boolean) => void;
+  onActivate?: (event: ActivateEvent) => void;
+
+  /** Programmatically activate this node (creates and dispatches ActivateEvent) */
+  activate?: () => void;
 
   // Portal marker (for root-level rendering)
   _isPortal?: boolean;
@@ -732,6 +740,7 @@ export interface BoxProps extends Partial<ReactiveFlexStyle> {
   onMouseMove?: (event: MouseEvent) => void;
   onScroll?: (event: ScrollEvent) => void;
   onHover?: (hovering: boolean) => void;
+  onActivate?: (event: ActivateEvent) => void;
 }
 
 /** Props for Text component. */
@@ -755,6 +764,7 @@ export interface TextProps {
   onMouseMove?: (event: MouseEvent) => void;
   onScroll?: (event: ScrollEvent) => void;
   onHover?: (hovering: boolean) => void;
+  onActivate?: (event: ActivateEvent) => void;
 }
 
 /**
@@ -780,6 +790,7 @@ export function Box(props: BoxProps): Node {
     onMouseMove,
     onScroll,
     onHover,
+    onActivate,
     ...styleProps
   } = props;
 
@@ -830,6 +841,13 @@ export function Box(props: BoxProps): Node {
     onMouseMove,
     onScroll,
     onHover,
+    onActivate,
+    activate: onActivate
+      ? function (this: Node) {
+          const event: ActivateEvent = { type: "activate", target: this };
+          onActivate(event);
+        }
+      : undefined,
 
     _inheritableProps: {
       backgroundColor,
@@ -946,6 +964,7 @@ export function Text(props: TextProps): Node {
     onMouseMove,
     onScroll,
     onHover,
+    onActivate,
     wrap,
   } = props;
 
@@ -963,6 +982,13 @@ export function Text(props: TextProps): Node {
     onMouseMove,
     onScroll,
     onHover,
+    onActivate,
+    activate: onActivate
+      ? function (this: Node) {
+          const event: ActivateEvent = { type: "activate", target: this };
+          onActivate(event);
+        }
+      : undefined,
 
     _inheritableProps: {
       color,
@@ -1476,12 +1502,12 @@ export function cleanupSubtreeState(
 }
 
 /**
- * Route keyboard event to focused node with bubbling.
+ * Route keyboard input to focused node with bubbling.
  *
  * Events start at the focused node and bubble up to the root.
  * Handlers return true to consume the event and stop bubbling.
  */
-function routeKeyEvent(state: RuntimeState, event: KeyEvent): void {
+function routeKeyEvent(state: RuntimeState, input: KeyInput): void {
   const focused = state.focusedNode();
   if (!focused) return;
 
@@ -1489,6 +1515,7 @@ function routeKeyEvent(state: RuntimeState, event: KeyEvent): void {
 
   for (const node of path) {
     if (node.onKeyPress) {
+      const event: KeyEvent = { ...input, target: node };
       const consumed = node.onKeyPress(event);
       if (consumed === true) {
         return;
@@ -1596,12 +1623,12 @@ function hitTestPortals(
 }
 
 /**
- * Route mouse event to node under cursor, with hover tracking.
+ * Route mouse input to node under cursor, with hover tracking.
  *
  * Updates hover state and dispatches press/release/move events
  * to the target node. Checks portal nodes first since they render on top.
  */
-function routeMouseEvent(state: RuntimeState, event: MouseEvent): void {
+function routeMouseEvent(state: RuntimeState, input: MouseInput): void {
   const { root, layoutResult, hoverState, flushState } = state;
   if (!layoutResult) return;
 
@@ -1611,15 +1638,15 @@ function routeMouseEvent(state: RuntimeState, event: MouseEvent): void {
   const screenHeight = flushState.stdout.rows;
   let target = hitTestPortals(
     portals,
-    event.x,
-    event.y,
+    input.x,
+    input.y,
     screenWidth,
     screenHeight,
   );
 
   // Fall back to main tree if no portal hit
   if (!target) {
-    target = hitTest(root, layoutResult, event.x, event.y);
+    target = hitTest(root, layoutResult, input.x, input.y);
   }
 
   if (target !== hoverState.currentNode) {
@@ -1637,7 +1664,7 @@ function routeMouseEvent(state: RuntimeState, event: MouseEvent): void {
   // Mouse events bubble up until a handler is found
   const path = buildPathToRoot(target);
 
-  switch (event.action) {
+  switch (input.action) {
     case "press": {
       // Focus the nearest focusable node (like browser click-to-focus)
       // Skip focusing if the click target is inside a portal - portal content
@@ -1654,6 +1681,7 @@ function routeMouseEvent(state: RuntimeState, event: MouseEvent): void {
       // Then dispatch the press event
       for (const node of path) {
         if (node.onMousePress) {
+          const event: MouseEvent = { ...input, target: node };
           node.onMousePress(event);
           return;
         }
@@ -1663,6 +1691,7 @@ function routeMouseEvent(state: RuntimeState, event: MouseEvent): void {
     case "release":
       for (const node of path) {
         if (node.onMouseRelease) {
+          const event: MouseEvent = { ...input, target: node };
           node.onMouseRelease(event);
           return;
         }
@@ -1671,6 +1700,7 @@ function routeMouseEvent(state: RuntimeState, event: MouseEvent): void {
     case "move":
       for (const node of path) {
         if (node.onMouseMove) {
+          const event: MouseEvent = { ...input, target: node };
           node.onMouseMove(event);
           return;
         }
@@ -1680,13 +1710,13 @@ function routeMouseEvent(state: RuntimeState, event: MouseEvent): void {
 }
 
 /**
- * Route scroll event to node under cursor with bubbling.
+ * Route scroll input to node under cursor with bubbling.
  *
  * Scroll events bubble up the tree until a handler is found.
  * This matches browser behavior where scroll events propagate
  * to scrollable ancestors. Checks portal nodes first since they render on top.
  */
-function routeScrollEvent(state: RuntimeState, event: ScrollEvent): void {
+function routeScrollEvent(state: RuntimeState, input: ScrollInput): void {
   const { root, layoutResult, flushState } = state;
   if (!layoutResult) return;
 
@@ -1696,15 +1726,15 @@ function routeScrollEvent(state: RuntimeState, event: ScrollEvent): void {
   const screenHeight = flushState.stdout.rows;
   let target = hitTestPortals(
     portals,
-    event.x,
-    event.y,
+    input.x,
+    input.y,
     screenWidth,
     screenHeight,
   );
 
   // Fall back to main tree if no portal hit
   if (!target) {
-    target = hitTest(root, layoutResult, event.x, event.y);
+    target = hitTest(root, layoutResult, input.x, input.y);
   }
   if (!target) return;
 
@@ -1712,6 +1742,7 @@ function routeScrollEvent(state: RuntimeState, event: ScrollEvent): void {
 
   for (const node of path) {
     if (node.onScroll) {
+      const event: ScrollEvent = { ...input, target: node };
       node.onScroll(event);
       return; // Scroll events stop at first handler
     }
@@ -1732,7 +1763,7 @@ function routePasteEvent(state: RuntimeState, event: PasteEvent): void {
   const path = buildPathToRoot(focused);
 
   for (const char of graphemes(event.text)) {
-    const keyEvent: KeyEvent = {
+    const keyInput: KeyInput = {
       type: "key",
       name: char === "\n" ? "enter" : char,
       char: char,
@@ -1745,6 +1776,7 @@ function routePasteEvent(state: RuntimeState, event: PasteEvent): void {
     let consumed = false;
     for (const node of path) {
       if (node.onKeyPress) {
+        const keyEvent: KeyEvent = { ...keyInput, target: node };
         const result = node.onKeyPress(keyEvent);
         if (result === true) {
           consumed = true;

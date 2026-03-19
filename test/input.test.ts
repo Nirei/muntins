@@ -3,15 +3,15 @@ import { describe, it } from "node:test";
 import {
   type FocusEvent,
   type InputEvent,
-  type KeyEvent,
+  type KeyInput,
   MOUSE_LEFT,
   type Modifiers,
-  type MouseEvent,
+  type MouseInput,
   NO_MODIFIERS,
   type PasteEvent,
   PasteParser,
   type ResizeEvent,
-  type ScrollEvent,
+  type ScrollInput,
   SequenceParser,
   createInputParser,
   isPrintable,
@@ -25,8 +25,8 @@ import {
 } from "../src/core/input.ts";
 
 describe("input event types", () => {
-  it("KeyEvent has required fields", () => {
-    const event: KeyEvent = {
+  it("KeyInput has required fields", () => {
+    const event: KeyInput = {
       type: "key",
       name: "a",
       char: "a",
@@ -39,8 +39,8 @@ describe("input event types", () => {
     assert.strictEqual(event.name, "a");
   });
 
-  it("MouseEvent has required fields", () => {
-    const event: MouseEvent = {
+  it("MouseInput has required fields", () => {
+    const event: MouseInput = {
       type: "mouse",
       action: "press",
       button: MOUSE_LEFT,
@@ -54,8 +54,8 @@ describe("input event types", () => {
     assert.strictEqual(event.action, "press");
   });
 
-  it("ScrollEvent has required fields", () => {
-    const event: ScrollEvent = {
+  it("ScrollInput has required fields", () => {
+    const event: ScrollInput = {
       type: "scroll",
       direction: "up",
       x: 10,
@@ -428,8 +428,8 @@ describe("mouse parser", () => {
     const event = parseMouseSequence("0;10;5", true);
 
     assert.strictEqual(event?.type, "mouse");
-    assert.strictEqual((event as MouseEvent).action, "press");
-    assert.strictEqual((event as MouseEvent).button, 0);
+    assert.strictEqual((event as MouseInput).action, "press");
+    assert.strictEqual((event as MouseInput).button, 0);
     assert.strictEqual(event?.x, 9); // 0-indexed
     assert.strictEqual(event?.y, 4); // 0-indexed
   });
@@ -437,61 +437,61 @@ describe("mouse parser", () => {
   it("parses left button release", () => {
     const event = parseMouseSequence("0;10;5", false);
 
-    assert.strictEqual((event as MouseEvent).action, "release");
+    assert.strictEqual((event as MouseInput).action, "release");
   });
 
   it("parses middle button", () => {
     const event = parseMouseSequence("1;10;5", true);
 
-    assert.strictEqual((event as MouseEvent).button, 1);
+    assert.strictEqual((event as MouseInput).button, 1);
   });
 
   it("parses right button", () => {
     const event = parseMouseSequence("2;10;5", true);
 
-    assert.strictEqual((event as MouseEvent).button, 2);
+    assert.strictEqual((event as MouseInput).button, 2);
   });
 
   it("parses motion event", () => {
     const event = parseMouseSequence("32;10;5", true); // 32 = motion flag
 
-    assert.strictEqual((event as MouseEvent).action, "move");
-    assert.strictEqual((event as MouseEvent).button, 0);
+    assert.strictEqual((event as MouseInput).action, "move");
+    assert.strictEqual((event as MouseInput).button, 0);
   });
 
   it("parses motion with button", () => {
     const event = parseMouseSequence("33;10;5", true); // 32 + 1 = motion + middle
 
-    assert.strictEqual((event as MouseEvent).action, "move");
-    assert.strictEqual((event as MouseEvent).button, 1);
+    assert.strictEqual((event as MouseInput).action, "move");
+    assert.strictEqual((event as MouseInput).button, 1);
   });
 
   it("parses scroll up", () => {
     const event = parseMouseSequence("64;10;5", true);
 
     assert.strictEqual(event?.type, "scroll");
-    assert.strictEqual((event as ScrollEvent).direction, "up");
+    assert.strictEqual((event as ScrollInput).direction, "up");
   });
 
   it("parses scroll down", () => {
     const event = parseMouseSequence("65;10;5", true);
 
     assert.strictEqual(event?.type, "scroll");
-    assert.strictEqual((event as ScrollEvent).direction, "down");
+    assert.strictEqual((event as ScrollInput).direction, "down");
   });
 
   it("parses scroll left", () => {
     const event = parseMouseSequence("66;10;5", true);
 
     assert.strictEqual(event?.type, "scroll");
-    assert.strictEqual((event as ScrollEvent).direction, "left");
+    assert.strictEqual((event as ScrollInput).direction, "left");
   });
 
   it("parses scroll right", () => {
     const event = parseMouseSequence("67;10;5", true);
 
     assert.strictEqual(event?.type, "scroll");
-    assert.strictEqual((event as ScrollEvent).direction, "right");
+    assert.strictEqual((event as ScrollInput).direction, "right");
   });
 
   it("parses shift modifier", () => {
@@ -594,8 +594,8 @@ describe("SequenceParser state machine", () => {
 
     assert.strictEqual(events.length, 1);
     assert.strictEqual(events[0].type, "mouse");
-    assert.strictEqual((events[0] as MouseEvent).x, 4); // 5-1 = 4
-    assert.strictEqual((events[0] as MouseEvent).y, 2); // 3-1 = 2
+    assert.strictEqual((events[0] as MouseInput).x, 4); // 5-1 = 4
+    assert.strictEqual((events[0] as MouseInput).y, 2); // 3-1 = 2
   });
 
   it("does not lose ESC in CSI state", () => {
@@ -962,7 +962,7 @@ describe("createInputParser", () => {
     );
     assert.strictEqual(keyEvents.length, 0, "Should not emit any key events");
 
-    const mouseEvent = mouseEvents[0] as MouseEvent;
+    const mouseEvent = mouseEvents[0] as MouseInput;
     assert.strictEqual(mouseEvent.action, "press");
     assert.strictEqual(mouseEvent.x, 9); // 0-indexed
     assert.strictEqual(mouseEvent.y, 4); // 0-indexed
@@ -1014,8 +1014,8 @@ describe("createInputParser", () => {
     assert.strictEqual(events.length, 2, "Should emit two events total");
     assert.strictEqual(events[0].type, "mouse");
     assert.strictEqual(events[1].type, "key");
-    assert.strictEqual((events[1] as KeyEvent).name, "a");
-    assert.strictEqual((events[1] as KeyEvent).char, "a");
+    assert.strictEqual((events[1] as KeyInput).name, "a");
+    assert.strictEqual((events[1] as KeyInput).char, "a");
 
     parser.destroy();
   });

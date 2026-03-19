@@ -188,6 +188,7 @@ describe("Switch", () => {
         alt: false,
         shift: false,
         sequence: "\r",
+        target: node,
       });
 
       assert.strictEqual(result, true);
@@ -212,6 +213,7 @@ describe("Switch", () => {
         alt: false,
         shift: false,
         sequence: " ",
+        target: node,
       });
 
       assert.strictEqual(result, true);
@@ -236,6 +238,7 @@ describe("Switch", () => {
         alt: false,
         shift: false,
         sequence: "a",
+        target: node,
       });
 
       assert.strictEqual(result, false);
@@ -263,6 +266,7 @@ describe("Switch", () => {
         ctrl: false,
         alt: false,
         shift: false,
+        target: node,
       });
 
       assert.strictEqual(receivedValue, true);
@@ -287,6 +291,7 @@ describe("Switch", () => {
         ctrl: false,
         alt: false,
         shift: false,
+        target: node,
       });
 
       assert.strictEqual(receivedValue, false);
@@ -312,6 +317,7 @@ describe("Switch", () => {
         ctrl: false,
         alt: false,
         shift: false,
+        target: node,
       });
 
       assert.strictEqual(called, false);
@@ -338,6 +344,7 @@ describe("Switch", () => {
         alt: false,
         shift: false,
         sequence: "\r",
+        target: node,
       });
 
       assert.strictEqual(result, false);
@@ -380,6 +387,7 @@ describe("Switch", () => {
         alt: false,
         shift: false,
         sequence: "\r",
+        target: node,
       });
       assert.strictEqual(callCount, 1);
 
@@ -393,6 +401,7 @@ describe("Switch", () => {
         alt: false,
         shift: false,
         sequence: "\r",
+        target: node,
       });
       assert.strictEqual(callCount, 1); // Should not have increased
     });

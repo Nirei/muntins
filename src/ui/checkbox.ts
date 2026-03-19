@@ -1,6 +1,6 @@
 // Checkbox component - boolean toggle control
 
-import type { KeyEvent, MouseEvent } from "../core/input.ts";
+import type { ActivateEvent, KeyEvent, MouseEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
@@ -61,24 +61,30 @@ export function Checkbox(props: CheckboxProps): Node {
   const isChecked = () => resolve(props.checked) ?? false;
   const isDisabled = () => resolve(props.disabled) ?? false;
 
-  const handleKeyPress = (key: KeyEvent): boolean | undefined => {
+  const handleActivate = (_event: ActivateEvent): void => {
+    if (isDisabled()) return;
+    props.onChange?.(!isChecked());
+  };
+
+  const handleKeyPress = (event: KeyEvent): boolean | undefined => {
     if (isDisabled()) return false;
-    if (key.name === "enter" || key.name === "space") {
-      props.onChange?.(!isChecked());
+    if (event.name === "enter" || event.name === "space") {
+      event.target.activate?.();
       return true;
     }
     return false;
   };
 
-  const handleMousePress = (_event: MouseEvent): void => {
+  const handleMousePress = (event: MouseEvent): void => {
     if (isDisabled()) return;
-    props.onChange?.(!isChecked());
+    event.target.activate?.();
   };
 
   return Box({
     focusable: props.focusable ?? true,
     autoFocus: props.autoFocus,
     ref: props.ref,
+    onActivate: handleActivate,
     onKeyPress: handleKeyPress,
     onMousePress: handleMousePress,
     ...props.style,
