@@ -243,6 +243,81 @@ describe("Switch", () => {
     });
   });
 
+  describe("mouse handling", () => {
+    it("onChange fires on mouse click when off", () => {
+      let receivedValue: boolean | undefined;
+      const node = Switch({
+        checked: false,
+        onChange: (v) => {
+          receivedValue = v;
+        },
+      });
+
+      assert.ok(node.onMousePress, "Switch should have onMousePress handler");
+      node.onMousePress({
+        type: "mouse",
+        action: "press",
+        button: 0,
+        x: 0,
+        y: 0,
+        ctrl: false,
+        alt: false,
+        shift: false,
+      });
+
+      assert.strictEqual(receivedValue, true);
+    });
+
+    it("onChange fires on mouse click when on", () => {
+      let receivedValue: boolean | undefined;
+      const node = Switch({
+        checked: true,
+        onChange: (v) => {
+          receivedValue = v;
+        },
+      });
+
+      assert.ok(node.onMousePress);
+      node.onMousePress({
+        type: "mouse",
+        action: "press",
+        button: 0,
+        x: 0,
+        y: 0,
+        ctrl: false,
+        alt: false,
+        shift: false,
+      });
+
+      assert.strictEqual(receivedValue, false);
+    });
+
+    it("disabled switch does not fire onChange on click", () => {
+      let called = false;
+      const node = Switch({
+        checked: false,
+        disabled: true,
+        onChange: () => {
+          called = true;
+        },
+      });
+
+      assert.ok(node.onMousePress);
+      node.onMousePress({
+        type: "mouse",
+        action: "press",
+        button: 0,
+        x: 0,
+        y: 0,
+        ctrl: false,
+        alt: false,
+        shift: false,
+      });
+
+      assert.strictEqual(called, false);
+    });
+  });
+
   describe("disabled state", () => {
     it("disabled switch does not fire onChange", () => {
       let called = false;

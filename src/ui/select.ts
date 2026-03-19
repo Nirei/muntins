@@ -1,6 +1,6 @@
 // Select component - dropdown selection control
 
-import type { KeyEvent } from "../core/input.ts";
+import type { KeyEvent, MouseEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
@@ -190,6 +190,25 @@ export function Select<T>(props: SelectProps<T>): Node {
     return false;
   };
 
+  const handleTriggerMousePress = (_event: MouseEvent): void => {
+    if (isDisabled()) return;
+    if (!isOpen()) {
+      setIsOpen(true);
+      const val = getValue();
+      const idx = props.options.findIndex((o) => o.value === val);
+      setHighlightedIndex(idx >= 0 ? idx : 0);
+    }
+  };
+
+  const handleOptionMousePress = (index: number) => (_event: MouseEvent) => {
+    if (isDisabled()) return;
+    const opt = props.options[index];
+    if (opt) {
+      props.onChange?.(opt.value);
+    }
+    setIsOpen(false);
+  };
+
   return Popover({
     open: isOpen,
     onClose: () => setIsOpen(false),
@@ -199,10 +218,15 @@ export function Select<T>(props: SelectProps<T>): Node {
         flexDirection: "column",
         focusable: false,
         children: props.options.map((opt, index) =>
-          renderOption({
-            option: opt,
-            highlighted: () => highlightedIndex() === index,
-            selected: () => getValue() === opt.value,
+          Box({
+            onMousePress: handleOptionMousePress(index),
+            children: [
+              renderOption({
+                option: opt,
+                highlighted: () => highlightedIndex() === index,
+                selected: () => getValue() === opt.value,
+              }),
+            ],
           }),
         ),
       }),
@@ -212,6 +236,7 @@ export function Select<T>(props: SelectProps<T>): Node {
         focusable: props.focusable ?? true,
         autoFocus: props.autoFocus,
         onKeyPress: handleKeyPress,
+        onMousePress: handleTriggerMousePress,
         ...props.style,
         children: [
           renderTrigger({

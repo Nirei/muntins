@@ -1,6 +1,6 @@
 // Switch component - on/off toggle control
 
-import type { KeyEvent } from "../core/input.ts";
+import type { KeyEvent, MouseEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
@@ -68,11 +68,17 @@ export function Switch(props: SwitchProps): Node {
     return false;
   };
 
+  const handleMousePress = (_event: MouseEvent): void => {
+    if (isDisabled()) return;
+    props.onChange?.(!isChecked());
+  };
+
   return Box({
     focusable: props.focusable ?? true,
     autoFocus: props.autoFocus,
     ref: props.ref,
     onKeyPress: handleKeyPress,
+    onMousePress: handleMousePress,
     ...props.style,
     children: [
       Text({

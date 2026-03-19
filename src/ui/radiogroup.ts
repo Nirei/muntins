@@ -1,6 +1,6 @@
 // RadioGroup component - exclusive selection from a list of options
 
-import type { KeyEvent } from "../core/input.ts";
+import type { KeyEvent, MouseEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
@@ -162,6 +162,11 @@ export function RadioGroup<T>(props: RadioGroupProps<T>): Node {
     return false;
   };
 
+  const handleOptionMousePress = (index: number) => (_event: MouseEvent) => {
+    if (isDisabled()) return;
+    selectIndex(index);
+  };
+
   return Box({
     flexDirection: () => resolve(props.direction) ?? "column",
     focusable: props.focusable ?? true,
@@ -170,11 +175,16 @@ export function RadioGroup<T>(props: RadioGroupProps<T>): Node {
     onKeyPress: handleKeyPress,
     ...props.style,
     children: props.options.map((opt, index) =>
-      renderOption({
-        option: opt,
-        selected: () => getValue() === opt.value,
-        focused: () => focusedIndex() === index,
-        disabled: isDisabled,
+      Box({
+        onMousePress: handleOptionMousePress(index),
+        children: [
+          renderOption({
+            option: opt,
+            selected: () => getValue() === opt.value,
+            focused: () => focusedIndex() === index,
+            disabled: isDisabled,
+          }),
+        ],
       }),
     ),
   });

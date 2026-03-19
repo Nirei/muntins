@@ -66,9 +66,12 @@ describe("RadioGroup", () => {
 
       const children = getNodeChildren(node);
 
-      // Each option is a Box with two Text children: glyph and label
+      // Each option is wrapped in a Box (for mouse handling) containing the rendered option
+      // Structure: RadioGroup > wrapper Box > option Box > [glyph Text, label Text]
       // Check first option (unselected)
-      const opt0 = children[0];
+      const wrapper0 = children[0];
+      const wrapper0Children = getNodeChildren(wrapper0);
+      const opt0 = wrapper0Children[0];
       const opt0Children = getNodeChildren(opt0);
       const glyph0 = opt0Children[0];
       assert.ok(glyph0?.render);
@@ -78,7 +81,9 @@ describe("RadioGroup", () => {
       assert.strictEqual(buffer0.getSymbol(0, 0), "○");
 
       // Check second option (selected)
-      const opt1 = children[1];
+      const wrapper1 = children[1];
+      const wrapper1Children = getNodeChildren(wrapper1);
+      const opt1 = wrapper1Children[0];
       const opt1Children = getNodeChildren(opt1);
       const glyph1 = opt1Children[0];
       assert.ok(glyph1?.render);
@@ -94,7 +99,9 @@ describe("RadioGroup", () => {
 
       const getGlyphBuffer = (optIndex: number) => {
         const children = getNodeChildren(node);
-        const opt = children[optIndex];
+        const wrapper = children[optIndex];
+        const wrapperChildren = getNodeChildren(wrapper);
+        const opt = wrapperChildren[0];
         const optChildren = getNodeChildren(opt);
         const glyph = optChildren[0];
         const buffer = new RenderBuffer(1, 1);
@@ -287,6 +294,92 @@ describe("RadioGroup", () => {
     });
   });
 
+  describe("mouse handling", () => {
+    it("clicking option selects it", () => {
+      let receivedValue: string | undefined;
+      const node = RadioGroup({
+        value: "a",
+        options,
+        onChange: (v) => {
+          receivedValue = v;
+        },
+      });
+
+      // Get the second option (Option B)
+      const children = getNodeChildren(node);
+      const opt1 = children[1];
+      assert.ok(opt1.onMousePress, "Option should have onMousePress handler");
+      opt1.onMousePress({
+        type: "mouse",
+        action: "press",
+        button: 0,
+        x: 0,
+        y: 0,
+        ctrl: false,
+        alt: false,
+        shift: false,
+      });
+
+      assert.strictEqual(receivedValue, "b");
+    });
+
+    it("clicking already selected option does nothing (no duplicate callback)", () => {
+      let callCount = 0;
+      const node = RadioGroup({
+        value: "a",
+        options,
+        onChange: () => {
+          callCount++;
+        },
+      });
+
+      const children = getNodeChildren(node);
+      const opt0 = children[0]; // already selected
+      assert.ok(opt0.onMousePress);
+      opt0.onMousePress({
+        type: "mouse",
+        action: "press",
+        button: 0,
+        x: 0,
+        y: 0,
+        ctrl: false,
+        alt: false,
+        shift: false,
+      });
+
+      // Should still fire (consistent with keyboard behavior)
+      assert.strictEqual(callCount, 1);
+    });
+
+    it("disabled group ignores mouse clicks", () => {
+      let called = false;
+      const node = RadioGroup({
+        value: "a",
+        options,
+        disabled: true,
+        onChange: () => {
+          called = true;
+        },
+      });
+
+      const children = getNodeChildren(node);
+      const opt1 = children[1];
+      assert.ok(opt1.onMousePress);
+      opt1.onMousePress({
+        type: "mouse",
+        action: "press",
+        button: 0,
+        x: 0,
+        y: 0,
+        ctrl: false,
+        alt: false,
+        shift: false,
+      });
+
+      assert.strictEqual(called, false);
+    });
+  });
+
   describe("disabled state", () => {
     it("disabled group ignores all input", () => {
       let called = false;
@@ -310,7 +403,9 @@ describe("RadioGroup", () => {
       const node = RadioGroup({ value: "a", options, disabled: true });
 
       const children = getNodeChildren(node);
-      const opt0 = children[0];
+      const wrapper0 = children[0];
+      const wrapper0Children = getNodeChildren(wrapper0);
+      const opt0 = wrapper0Children[0];
       const opt0Children = getNodeChildren(opt0);
       const glyph = opt0Children[0];
 
@@ -392,14 +487,19 @@ describe("RadioGroup", () => {
       });
 
       const children = getNodeChildren(node);
-      const opt0 = children[0];
+      // Each option is wrapped in a Box for mouse handling
+      const wrapper0 = children[0];
+      const wrapper0Children = getNodeChildren(wrapper0);
+      const opt0 = wrapper0Children[0];
       assert.ok(opt0?.render);
 
       const buffer = new RenderBuffer(1, 1);
       opt0.render(0, 0, 1, 1, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
       assert.strictEqual(buffer.getSymbol(0, 0), "X"); // selected
 
-      const opt1 = children[1];
+      const wrapper1 = children[1];
+      const wrapper1Children = getNodeChildren(wrapper1);
+      const opt1 = wrapper1Children[0];
       assert.ok(opt1?.render);
 
       const buffer1 = new RenderBuffer(1, 1);

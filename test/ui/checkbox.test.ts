@@ -162,6 +162,81 @@ describe("Checkbox", () => {
     });
   });
 
+  describe("mouse handling", () => {
+    it("onChange fires on mouse click when unchecked", () => {
+      let receivedValue: boolean | undefined;
+      const node = Checkbox({
+        checked: false,
+        onChange: (v) => {
+          receivedValue = v;
+        },
+      });
+
+      assert.ok(node.onMousePress, "Checkbox should have onMousePress handler");
+      node.onMousePress({
+        type: "mouse",
+        action: "press",
+        button: 0,
+        x: 0,
+        y: 0,
+        ctrl: false,
+        alt: false,
+        shift: false,
+      });
+
+      assert.strictEqual(receivedValue, true);
+    });
+
+    it("onChange fires on mouse click when checked", () => {
+      let receivedValue: boolean | undefined;
+      const node = Checkbox({
+        checked: true,
+        onChange: (v) => {
+          receivedValue = v;
+        },
+      });
+
+      assert.ok(node.onMousePress);
+      node.onMousePress({
+        type: "mouse",
+        action: "press",
+        button: 0,
+        x: 0,
+        y: 0,
+        ctrl: false,
+        alt: false,
+        shift: false,
+      });
+
+      assert.strictEqual(receivedValue, false);
+    });
+
+    it("disabled checkbox does not fire onChange on click", () => {
+      let called = false;
+      const node = Checkbox({
+        checked: false,
+        disabled: true,
+        onChange: () => {
+          called = true;
+        },
+      });
+
+      assert.ok(node.onMousePress);
+      node.onMousePress({
+        type: "mouse",
+        action: "press",
+        button: 0,
+        x: 0,
+        y: 0,
+        ctrl: false,
+        alt: false,
+        shift: false,
+      });
+
+      assert.strictEqual(called, false);
+    });
+  });
+
   describe("disabled state", () => {
     it("disabled checkbox does not fire onChange", () => {
       let called = false;

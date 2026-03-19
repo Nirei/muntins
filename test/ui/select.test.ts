@@ -977,6 +977,127 @@ describe("Select", () => {
     });
   });
 
+  describe("mouse handling", () => {
+    it("clicking trigger opens dropdown", async () => {
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout();
+
+      const app = mount(
+        () =>
+          Box({
+            height: 10,
+            children: [
+              Select({
+                value: "us",
+                options: testOptions,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          mouse: true,
+          fpsLimit: 0,
+        },
+      );
+
+      // Click on trigger (at position 0,0)
+      mockStdin.emit("data", Buffer.from("\x1b[<0;1;1M"));
+      await nextRender();
+
+      // Options should now be visible
+      assert.ok(
+        mockStdout.written.includes("UK"),
+        "Dropdown should open on click",
+      );
+      app.unmount();
+    });
+
+    it("clicking option selects it", async () => {
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout(80, 24);
+      let selectedValue: string | undefined;
+
+      const app = mount(
+        () =>
+          Box({
+            height: 10,
+            children: [
+              Select({
+                value: "us",
+                options: testOptions,
+                onChange: (v) => {
+                  selectedValue = v;
+                },
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          mouse: true,
+          fpsLimit: 0,
+        },
+      );
+
+      // Open dropdown with keyboard (raw data for UnifiedParser)
+      mockStdin.emit("data", Buffer.from("\r"));
+      await nextRender();
+
+      // The trigger is at row 0, dropdown starts at row 1
+      // Options are: USA (y=1), UK (y=2), Canada (y=3)
+      // SGR protocol is 1-indexed, so UK is at SGR row 3
+      mockStdin.emit("data", Buffer.from("\x1b[<0;1;3M"));
+      await nextRender();
+
+      assert.strictEqual(
+        selectedValue,
+        "uk",
+        "Clicking option should select it",
+      );
+      app.unmount();
+    });
+
+    it("disabled select does not open on click", async () => {
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout();
+
+      const app = mount(
+        () =>
+          Box({
+            height: 10,
+            children: [
+              Select({
+                value: "us",
+                options: testOptions,
+                disabled: true,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          mouse: true,
+          fpsLimit: 0,
+        },
+      );
+
+      // Clear initial output
+      mockStdout.written = "";
+
+      // Click on trigger
+      mockStdin.emit("data", Buffer.from("\x1b[<0;1;1M"));
+      await nextRender();
+
+      // Options should not appear
+      assert.ok(
+        !mockStdout.written.includes("UK"),
+        "Disabled select should not open",
+      );
+      app.unmount();
+    });
+  });
+
   describe("Portal rendering", () => {
     it("dropdown renders via Popover/Portal", async () => {
       const mockStdin = createMockStdin();
@@ -1009,6 +1130,58 @@ describe("Select", () => {
       // Both background and dropdown content should be visible
       assert.ok(mockStdout.written.includes("Background"));
       assert.ok(mockStdout.written.includes("UK"));
+      app.unmount();
+    });
+  });
+
+  describe("click outside behavior", () => {
+    it("clicking outside dropdown closes it", async () => {
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout(80, 24);
+
+      const app = mount(
+        () =>
+          Box({
+            height: 10,
+            children: [
+              Select({
+                value: "us",
+                options: testOptions,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          mouse: true,
+          fpsLimit: 0,
+        },
+      );
+
+      // Open dropdown with keyboard
+      mockStdin.emit("data", Buffer.from("\r"));
+      await nextRender();
+
+      // Verify dropdown is open
+      assert.ok(mockStdout.written.includes("UK"), "Dropdown should be open");
+
+      // Clear written output to check for re-render
+      mockStdout.written = "";
+
+      // Click outside (at row 20, well below the dropdown)
+      mockStdin.emit("data", Buffer.from("\x1b[<0;50;20M"));
+      await nextRender();
+
+      // Open dropdown again to check if it was closed
+      mockStdin.emit("data", Buffer.from("\r"));
+      await nextRender();
+
+      // If click-outside worked, dropdown would have closed,
+      // and this Enter would reopen it showing UK again
+      assert.ok(
+        mockStdout.written.includes("UK"),
+        "Dropdown should reopen after click-outside close",
+      );
       app.unmount();
     });
   });
