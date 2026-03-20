@@ -101,6 +101,7 @@ function keyEvent(
     alt: opts.alt ?? false,
     shift: opts.shift ?? false,
     sequence: name,
+    target: {},
   };
 }
 
@@ -114,6 +115,7 @@ function scrollEvent(direction: "up" | "down", x = 0, y = 0) {
     ctrl: false,
     alt: false,
     shift: false,
+    target: {},
   };
 }
 

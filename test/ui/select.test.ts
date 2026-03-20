@@ -1168,8 +1168,9 @@ describe("Select", () => {
       // Clear written output to check for re-render
       mockStdout.written = "";
 
-      // Click outside (at row 20, well below the dropdown)
-      mockStdin.emit("data", Buffer.from("\x1b[<0;50;20M"));
+      // Click outside the dropdown content but within the backdrop
+      // (content is at rows 1-2; click at row 8 which is inside the 10-row root)
+      mockStdin.emit("data", Buffer.from("\x1b[<0;50;8M"));
       await nextRender();
 
       // Open dropdown again to check if it was closed

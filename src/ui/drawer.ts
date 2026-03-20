@@ -105,17 +105,23 @@ export function Drawer(props: DrawerProps): Node {
     children: () =>
       Portal({
         children: [
-          TabFocus({
-            trap: true,
+          Box({
+            position: "absolute",
+            flexDirection: "column",
+            ...positionStyle(),
             children: [
-              Box({
-                position: "absolute",
-                flexDirection: "column",
-                focusable: true,
-                onKeyPress: handleKeyPress,
-                ...positionStyle(),
-                ...props.style,
-                children: props.children,
+              TabFocus({
+                trap: true,
+                children: [
+                  Box({
+                    focusable: true,
+                    onKeyPress: handleKeyPress,
+                    flexGrow: 1,
+                    flexDirection: "column",
+                    ...props.style,
+                    children: props.children,
+                  }),
+                ],
               }),
             ],
           }),

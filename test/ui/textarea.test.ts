@@ -97,6 +97,7 @@ function keyEvent(
     alt: modifiers.alt ?? false,
     shift: modifiers.shift ?? false,
     sequence: char || name,
+    target: {},
   };
 }
 

@@ -58,44 +58,57 @@ export {
   teardownTerminal,
 } from "./input.ts";
 
-// Runtime (components and mount)
+// Runtime - Components
+export { Box, type BoxProps, type BoxChild } from "./runtime/Box.ts";
+export { Text, type TextProps } from "./runtime/Text.ts";
+export { Portal, type PortalProps } from "./runtime/Portal.ts";
+export { Show, type ShowProps } from "./runtime/Show.ts";
+export { For, type ForProps } from "./runtime/For.ts";
+
+// Runtime - Node
+export { type Node, type Ref, createRef } from "./runtime/Node.ts";
+
+// Runtime - App / Context
 export {
-  Box,
-  Text,
-  Portal,
-  Show,
-  For,
-  TabFocus,
+  type App,
+  type MountOptions,
+  DEFAULT_MOUNT_OPTIONS,
+} from "./runtime/App.ts";
+
+// Runtime - Focus
+export {
+  type FocusController,
+  type FocusScopeProps,
+  type TabFocusProps,
   FocusScopeComponent,
-  mount,
-  createRef,
+  TabFocus,
   useFocus,
+} from "./runtime/focus.ts";
+
+// Runtime - Mount
+export { mount } from "./runtime/mount.ts";
+
+// Render (pass-through)
+export {
+  BORDER_CHARS,
+  DEFAULT_INHERITED_STYLE,
   enterTuiMode,
   exitTuiMode,
   flushFrame,
+} from "./render.ts";
+export type {
+  BorderStyleName,
+  BorderProp,
+  InheritedStyle,
+  InheritableBool,
+  TextStyle,
+  ReactiveTextStyle,
+} from "./render.ts";
+
+// Text utilities (pass-through)
+export {
   measureText,
   lineDisplayWidth,
   wrapLine,
   truncateLine,
-  BORDER_CHARS,
-  DEFAULT_MOUNT_OPTIONS,
-  DEFAULT_INHERITED_STYLE,
-  type Node,
-  type Ref,
-  type BoxProps,
-  type TextProps,
-  type PortalProps,
-  type ShowProps,
-  type ForProps,
-  type TabFocusProps,
-  type FocusScopeProps,
-  type FocusController,
-  type MountOptions,
-  type App,
-  type BorderStyleName,
-  type BorderProp,
-  type InheritedStyle,
-  type InheritableBool,
-  type TextStyle,
-  type ReactiveTextStyle,
-} from "./runtime.ts";
+} from "./text.ts";

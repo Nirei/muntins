@@ -1,0 +1,252 @@
+import {
+  Buffer,
+  DEFAULT_COLOR,
+  type InheritableColor,
+  graphemes,
+} from "../buffer.ts";
+import type { FocusEvent, PasteEvent } from "../input.ts";
+import {
+  type ActivateEvent,
+  type InputEvent,
+  type KeyEvent,
+  type KeyInput,
+  type MouseEvent,
+  type MouseInput,
+  type ScrollEvent,
+  type ScrollInput,
+  createInputParser,
+} from "../input.ts";
+import {
+  DEFAULT_FLEX_STYLE,
+  type FlexStyle,
+  type LayoutNode,
+  type LayoutResult,
+  type ReactiveFlexStyle,
+  computeLayout,
+} from "../layout.ts";
+import {
+  BORDER_CHARS,
+  type BorderProp,
+  type BorderStyleName,
+  type ClipRect,
+  DEFAULT_CLIP,
+  DEFAULT_INHERITED_STYLE,
+  type InheritableBool,
+  type InheritedStyle,
+  type ReactiveTextStyle,
+  enterTuiMode,
+  exitTuiMode,
+  flushFrame,
+  getBorderStyleName,
+  intersectClipRect,
+  isInClipRect,
+  parseBorderProp,
+  renderBorder,
+  renderText,
+  resolveInheritable,
+} from "../render.ts";
+import { batch } from "../signals.ts";
+import {
+  type Accessor,
+  type Setter,
+  createEffect,
+  createRoot,
+  createSignal,
+  onCleanup,
+} from "../signals.ts";
+import { type WrapMode, measureText } from "../text.ts";
+import type { Node, Ref } from "./Node.ts";
+import { Text } from "./Text.ts";
+
+/** Child element that Box can accept - Node, string, or reactive string. */
+export type BoxChild = Node | string | (() => string);
+
+/** Props for Box component. */
+export interface BoxProps extends Partial<ReactiveFlexStyle> {
+  children?: BoxChild | BoxChild[];
+  backgroundColor?: InheritableColor | (() => InheritableColor);
+  border?: BorderProp | (() => BorderProp);
+  borderColor?: InheritableColor | (() => InheritableColor);
+  borderStyle?: BorderStyleName | (() => BorderStyleName);
+  focusable?: boolean;
+  autoFocus?: boolean;
+  ref?: Ref;
+  onKeyPress?: (key: KeyEvent) => boolean | undefined;
+  onMousePress?: (event: MouseEvent) => void;
+  onMouseRelease?: (event: MouseEvent) => void;
+  onMouseMove?: (event: MouseEvent) => void;
+  onScroll?: (event: ScrollEvent) => void;
+  onHover?: (hovering: boolean) => void;
+  onActivate?: (event: ActivateEvent) => void;
+}
+
+/**
+ * Creates a Box node - a layout container that supports reactive styles and event handlers.
+ *
+ * Box is the fundamental container primitive. When backgroundColor is set, Box renders
+ * its background; when border is set, Box renders its border.
+ * Size is determined by flexbox layout based on its children.
+ */
+export function Box(props: BoxProps): Node {
+  const {
+    children: childrenProp,
+    backgroundColor,
+    border,
+    borderColor,
+    borderStyle,
+    focusable,
+    autoFocus,
+    ref,
+    onKeyPress,
+    onMousePress,
+    onMouseRelease,
+    onMouseMove,
+    onScroll,
+    onHover,
+    onActivate,
+    ...styleProps
+  } = props;
+
+  const normalizeChild = (child: BoxChild): Node => {
+    if (typeof child === "string") {
+      return Text({ content: child });
+    }
+    if (typeof child === "function") {
+      return Text({ content: child });
+    }
+    return child;
+  };
+
+  const children: Node[] = childrenProp
+    ? Array.isArray(childrenProp)
+      ? childrenProp.map(normalizeChild)
+      : [normalizeChild(childrenProp)]
+    : [];
+
+  const getBorderFlags = () => {
+    const borderValue = typeof border === "function" ? border() : border;
+    return parseBorderProp(borderValue);
+  };
+
+  const node: Node = {
+    get style() {
+      const resolved: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(styleProps)) {
+        resolved[key] =
+          typeof value === "function" ? (value as () => unknown)() : value;
+      }
+      const borderFlags = getBorderFlags();
+      return {
+        ...DEFAULT_FLEX_STYLE,
+        ...resolved,
+        borderTop: borderFlags.top,
+        borderEnd: borderFlags.end,
+        borderBottom: borderFlags.bottom,
+        borderStart: borderFlags.start,
+      } as FlexStyle;
+    },
+    children,
+    focusable,
+    autoFocus,
+    onKeyPress,
+    onMousePress,
+    onMouseRelease,
+    onMouseMove,
+    onScroll,
+    onHover,
+    onActivate,
+    activate: onActivate
+      ? function (this: Node) {
+          const event: ActivateEvent = { type: "activate", target: this };
+          onActivate(event);
+        }
+      : undefined,
+
+    _inheritableProps: {
+      backgroundColor,
+      borderColor,
+    },
+
+    render:
+      backgroundColor !== undefined || border !== undefined
+        ? (x, y, width, height, buffer, inherited, clip) => {
+            if (
+              x >= clip.x + clip.width ||
+              x + width <= clip.x ||
+              y >= clip.y + clip.height ||
+              y + height <= clip.y
+            ) {
+              return;
+            }
+
+            const bg = resolveInheritable(
+              backgroundColor,
+              inherited.backgroundColor,
+            );
+
+            // Fill area with background color if specified
+            if (backgroundColor !== undefined) {
+              const fillX = Math.max(x, clip.x);
+              const fillY = Math.max(y, clip.y);
+              const fillRight = Math.min(x + width, clip.x + clip.width);
+              const fillBottom = Math.min(y + height, clip.y + clip.height);
+              const fillWidth = fillRight - fillX;
+              const fillHeight = fillBottom - fillY;
+              if (fillWidth > 0 && fillHeight > 0) {
+                buffer.fillRect(
+                  fillX,
+                  fillY,
+                  fillWidth,
+                  fillHeight,
+                  " ",
+                  DEFAULT_COLOR,
+                  bg,
+                  0,
+                );
+              }
+            }
+
+            const borderFlags = getBorderFlags();
+            const hasBorder =
+              borderFlags.top ||
+              borderFlags.end ||
+              borderFlags.bottom ||
+              borderFlags.start;
+
+            if (hasBorder) {
+              const fg = resolveInheritable(borderColor, inherited.borderColor);
+              const borderValue =
+                typeof border === "function" ? border() : border;
+              const borderStyleValue =
+                typeof borderStyle === "function" ? borderStyle() : borderStyle;
+              const styleName = getBorderStyleName(
+                borderValue,
+                borderStyleValue,
+              );
+              renderBorder(
+                buffer,
+                x,
+                y,
+                width,
+                height,
+                borderFlags,
+                styleName,
+                fg,
+                bg,
+                clip,
+              );
+            }
+          }
+        : undefined,
+  };
+
+  if (ref) {
+    ref.current = node;
+  }
+
+  for (const child of children) {
+    child._parent = node;
+  }
+
+  return node;
+}

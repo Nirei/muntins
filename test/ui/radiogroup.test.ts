@@ -40,6 +40,7 @@ function createKeyEvent(
     alt: overrides.alt ?? false,
     shift: overrides.shift ?? false,
     sequence: overrides.sequence ?? "",
+    target: {},
   };
 }
 
@@ -318,6 +319,7 @@ describe("RadioGroup", () => {
         ctrl: false,
         alt: false,
         shift: false,
+        target: {},
       });
 
       assert.strictEqual(receivedValue, "b");
@@ -345,6 +347,7 @@ describe("RadioGroup", () => {
         ctrl: false,
         alt: false,
         shift: false,
+        target: {},
       });
 
       // Should still fire (consistent with keyboard behavior)
@@ -374,6 +377,7 @@ describe("RadioGroup", () => {
         ctrl: false,
         alt: false,
         shift: false,
+        target: {},
       });
 
       assert.strictEqual(called, false);
