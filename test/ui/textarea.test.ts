@@ -719,14 +719,36 @@ describe("Textarea", () => {
     }
 
     // Helper to mount textarea and return utilities for testing
+    // Escape sequences for common keys
+    const KEY_SEQUENCES: Record<string, string> = {
+      up: "\x1b[A",
+      down: "\x1b[B",
+      right: "\x1b[C",
+      left: "\x1b[D",
+      home: "\x1b[H",
+      end: "\x1b[F",
+      pageup: "\x1b[5~",
+      pagedown: "\x1b[6~",
+      backspace: "\x7f",
+      delete: "\x1b[3~",
+      enter: "\r",
+      tab: "\t",
+    };
+
     function mountTextarea(
       initialValue: string,
-      options: { width?: number; maxHeight?: number; multiline?: boolean } = {},
+      options: {
+        width?: number;
+        maxHeight?: number;
+        multiline?: boolean;
+        mouse?: boolean;
+      } = {},
     ) {
       const [value, setValue] = createSignal(initialValue);
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout(80, 24);
       const ref = createRef();
+      const mouseEnabled = options.mouse ?? false;
 
       const app = mount(
         () =>
@@ -746,6 +768,7 @@ describe("Textarea", () => {
           stdin: mockStdin as unknown as NodeJS.ReadStream,
           stdout: mockStdout as unknown as NodeJS.WriteStream,
           fpsLimit: 0,
+          mouse: mouseEnabled,
         },
       );
 
@@ -754,11 +777,17 @@ describe("Textarea", () => {
         stripAnsi(mockStdout.written).includes(s);
 
       // Helper to send key via stdin (triggers full event cycle)
+      // When mouse is enabled, runtime uses 'data' events; otherwise uses 'keypress'
       const sendKey = async (name: string) => {
-        mockStdin.emit("keypress", name.length === 1 ? name : undefined, {
-          name,
-          sequence: name,
-        });
+        if (mouseEnabled) {
+          const seq = KEY_SEQUENCES[name] ?? name;
+          mockStdin.emit("data", Buffer.from(seq));
+        } else {
+          mockStdin.emit("keypress", name.length === 1 ? name : undefined, {
+            name,
+            sequence: name,
+          });
+        }
         await flushMicrotasks();
       };
 
@@ -954,6 +983,429 @@ describe("Textarea", () => {
       assert.ok(
         outputContains("A"),
         "First character should be visible after Home",
+      );
+
+      app.unmount();
+    });
+
+    it("scrolls with mousewheel", async () => {
+      // Create textarea - cursor starts at end, so we see last 3 lines (DDD, EEE, FFF)
+      const { app, mockStdin, clearOutput, getOutput } = mountTextarea(
+        "AAA\nBBB\nCCC\nDDD\nEEE\nFFF",
+        {
+          width: 10,
+          maxHeight: 3,
+          mouse: true,
+        },
+      );
+
+      // Wait for initial render
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      // Initial state: cursor is at end, so we see DDD, EEE, FFF (last 3 lines)
+      // AAA should NOT be visible initially
+      let output = getOutput();
+      assert.ok(
+        !output.includes("AAA"),
+        "AAA should NOT be visible initially (cursor at end)",
+      );
+      assert.ok(
+        output.includes("FFF"),
+        "FFF should be visible initially (cursor at end)",
+      );
+
+      clearOutput();
+
+      // Send mousewheel scroll up multiple times to get to top
+      // SGR scroll up: button 64 (64 scroll + 0 up) at (1,1) -> col=2, row=2 in SGR
+      for (let i = 0; i < 5; i++) {
+        mockStdin.emit("data", Buffer.from("\x1b[<64;2;2M"));
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+
+      // After scrolling up, AAA should now be visible
+      output = getOutput();
+      assert.ok(
+        output.includes("AAA"),
+        `AAA should be visible after scrolling up with mousewheel. Output: ${output.slice(0, 200)}`,
+      );
+
+      app.unmount();
+    });
+
+    it("scrolls with mousewheel when textarea is inside a bordered box", async () => {
+      // This matches the settings app structure where Textarea is inside a Box with border
+      const [value, setValue] = createSignal("AAA\nBBB\nCCC\nDDD\nEEE\nFFF");
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout(80, 24);
+
+      const app = mount(
+        () =>
+          Box({
+            children: [
+              Box({
+                border: "single",
+                children: [
+                  Textarea({
+                    value,
+                    onChange: setValue,
+                    width: 10,
+                    maxHeight: 3,
+                  }),
+                ],
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+          mouse: true,
+        },
+      );
+
+      // Wait for initial render
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      const stripAnsi = (s: string): string => {
+        const ESC = String.fromCharCode(0x1b);
+        const pattern = new RegExp(`${ESC}\\[[0-9;?]*[a-zA-Z]`, "g");
+        return s.replace(pattern, "");
+      };
+
+      // Initial state: cursor is at end, so we see DDD, EEE, FFF (last 3 lines)
+      let output = stripAnsi(mockStdout.written);
+      assert.ok(!output.includes("AAA"), "AAA should NOT be visible initially");
+      assert.ok(output.includes("FFF"), "FFF should be visible initially");
+
+      mockStdout.written = "";
+
+      // Send mousewheel scroll up - note: position needs to be inside the bordered box
+      // Border takes 1 char on each side, so content starts at (1,1)
+      // SGR uses 1-indexed coords, so (2,2) in SGR = (1,1) in 0-indexed
+      for (let i = 0; i < 5; i++) {
+        mockStdin.emit("data", Buffer.from("\x1b[<64;3;3M"));
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+
+      // After scrolling up, AAA should now be visible
+      output = stripAnsi(mockStdout.written);
+      assert.ok(
+        output.includes("AAA"),
+        `AAA should be visible after scrolling up. Output: ${output.slice(0, 300)}`,
+      );
+
+      app.unmount();
+    });
+
+    it("scroll position persists after multiple mousewheel events", async () => {
+      // Test that scroll position doesn't reset between scroll events
+      // Using distinct markers for each line to make them easy to identify
+      const [value, setValue] = createSignal(
+        "AAA\nBBB\nCCC\nDDD\nEEE\nFFF\nGGG\nHHH\nIII\nJJJ",
+      );
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout(80, 24);
+
+      const app = mount(
+        () =>
+          Box({
+            children: [
+              Textarea({
+                value,
+                onChange: setValue,
+                width: 10,
+                maxHeight: 3,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+          mouse: true,
+        },
+      );
+
+      // Wait for initial render
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      const stripAnsi = (s: string): string => {
+        const ESC = String.fromCharCode(0x1b);
+        const pattern = new RegExp(`${ESC}\\[[0-9;?]*[a-zA-Z]`, "g");
+        return s.replace(pattern, "");
+      };
+
+      // Initial: cursor at end, so HHH, III, JJJ visible (last 3 of 10 lines)
+      let output = stripAnsi(mockStdout.written);
+      assert.ok(output.includes("JJJ"), "JJJ should be visible initially");
+      assert.ok(!output.includes("AAA"), "AAA should NOT be visible initially");
+
+      // Scroll up twice (should show FFF, GGG, HHH)
+      mockStdin.emit("data", Buffer.from("\x1b[<64;2;2M"));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      mockStdin.emit("data", Buffer.from("\x1b[<64;2;2M"));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      mockStdout.written = "";
+
+      // Scroll down once (should show GGG, HHH, III - NOT back to JJJ)
+      mockStdin.emit("data", Buffer.from("\x1b[<65;2;2M"));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      output = stripAnsi(mockStdout.written);
+
+      // After scroll up 2 + scroll down 1, we should be at scroll position 6
+      // which shows GGG, HHH, III
+      // If scroll reset to the cursor position (end), we'd see HHH, III, JJJ
+      const showsGGG = output.includes("GGG");
+      const showsJJJ = output.includes("JJJ");
+
+      // GGG should be visible, JJJ should NOT be visible (if scroll persisted)
+      assert.ok(
+        showsGGG && !showsJJJ,
+        `Scroll position should persist. Shows GGG: ${showsGGG}, Shows JJJ: ${showsJJJ}. Output: ${output.slice(0, 300)}`,
+      );
+
+      app.unmount();
+    });
+
+    it("mousewheel scroll after typing content should work incrementally", async () => {
+      // Reproduces exact bug: user types lines into textarea, then scrolls with mousewheel
+      // Bug: scroll jumps to top and then stops working
+      // Note: This test needs mouse mode enabled, so we set up our own mount
+      const [value, setValue] = createSignal("");
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout(80, 24);
+
+      const app = mount(
+        () =>
+          Box({
+            children: [
+              Textarea({
+                value,
+                onChange: setValue,
+                width: 10,
+                maxHeight: 3,
+                autoFocus: true,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+          mouse: true,
+        },
+      );
+
+      const stripAnsi = (s: string): string => {
+        const ESC = String.fromCharCode(0x1b);
+        const pattern = new RegExp(`${ESC}\\[[0-9;?]*[a-zA-Z]`, "g");
+        return s.replace(pattern, "");
+      };
+      const getOutput = () => stripAnsi(mockStdout.written);
+      const clearOutput = () => {
+        mockStdout.written = "";
+      };
+
+      // Wait for initial render
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      // Type content line by line using raw data events (simulating real terminal input)
+      // When mouse is enabled, input parser uses "data" events, not "keypress"
+      for (let i = 1; i <= 9; i++) {
+        mockStdin.emit("data", Buffer.from(String(i)));
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        if (i < 9) {
+          mockStdin.emit("data", Buffer.from("\r"));
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      // Now cursor is at end, showing last 3 lines (7, 8, 9)
+      let output = getOutput();
+      assert.ok(
+        output.includes("9"),
+        `Line 9 should be visible after typing. Output: ${output.slice(0, 100)}`,
+      );
+
+      clearOutput();
+
+      // Scroll up ONCE with mousewheel
+      mockStdin.emit("data", Buffer.from("\x1b[<64;2;2M"));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      output = getOutput();
+
+      // Should scroll by 1, showing line 6 now, but NOT jump to line 1
+      const shows6 = output.includes("6");
+      const shows1 = output.includes("1");
+
+      assert.ok(
+        shows6 && !shows1,
+        `After 1 scroll up, should show line 6 but not line 1 (jumped to top). Shows 6: ${shows6}, Shows 1: ${shows1}. Output: ${output.slice(0, 200)}`,
+      );
+
+      // Now scroll down - should still work
+      clearOutput();
+      mockStdin.emit("data", Buffer.from("\x1b[<65;2;2M"));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      output = getOutput();
+      const shows7 = output.includes("7");
+
+      assert.ok(
+        shows7,
+        `After scrolling down, should show line 7. Output: ${output.slice(0, 200)}`,
+      );
+
+      app.unmount();
+    });
+
+    it("mousewheel scroll up once should scroll by 1, not jump to top", async () => {
+      // Reproduces bug: user has cursor at bottom, scrolls up once with mousewheel,
+      // and it jumps all the way to the top instead of scrolling by 1 line
+      const [value, setValue] = createSignal("1\n2\n3\n4\n5\n6\n7\n8\n9");
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout(80, 24);
+
+      const app = mount(
+        () =>
+          Box({
+            children: [
+              Textarea({
+                value,
+                onChange: setValue,
+                width: 10,
+                maxHeight: 3,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+          mouse: true,
+        },
+      );
+
+      // Wait for initial render
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      const stripAnsi = (s: string): string => {
+        const ESC = String.fromCharCode(0x1b);
+        const pattern = new RegExp(`${ESC}\\[[0-9;?]*[a-zA-Z]`, "g");
+        return s.replace(pattern, "");
+      };
+
+      // Initial: cursor at end (line 8 = "9"), so we see lines 7, 8, 9
+      let output = stripAnsi(mockStdout.written);
+      assert.ok(output.includes("9"), "Line 9 should be visible initially");
+      assert.ok(output.includes("7"), "Line 7 should be visible initially");
+      assert.ok(
+        !output.includes("1"),
+        "Line 1 should NOT be visible initially",
+      );
+
+      mockStdout.written = "";
+
+      // Scroll up ONCE - should show lines 6, 7, 8 (NOT jump to top showing 1, 2, 3)
+      mockStdin.emit("data", Buffer.from("\x1b[<64;2;2M"));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      output = stripAnsi(mockStdout.written);
+
+      // After scrolling up once, we should see line 6 (scrolled by 1)
+      // but NOT line 1 (which would mean it jumped to top)
+      const shows6 = output.includes("6");
+      const shows1 = output.includes("1");
+
+      assert.ok(
+        shows6 && !shows1,
+        `After 1 scroll up, should show line 6 but not line 1. Shows 6: ${shows6}, Shows 1: ${shows1}. Output: ${output.slice(0, 200)}`,
+      );
+
+      app.unmount();
+    });
+
+    it("mousewheel scrolls down when already scrolled up", async () => {
+      // Test: start at top (scrollTop=0), scroll down with mousewheel
+      // This tests the case where user is at top and wants to scroll to see more content
+      const [value, setValue] = createSignal(
+        "AAA\nBBB\nCCC\nDDD\nEEE\nFFF\nGGG\nHHH",
+      );
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout(80, 24);
+
+      const app = mount(
+        () =>
+          Box({
+            children: [
+              Textarea({
+                value,
+                onChange: setValue,
+                width: 10,
+                maxHeight: 3,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+          mouse: true,
+        },
+      );
+
+      // Wait for initial render
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      const stripAnsi = (s: string): string => {
+        const ESC = String.fromCharCode(0x1b);
+        const pattern = new RegExp(`${ESC}\\[[0-9;?]*[a-zA-Z]`, "g");
+        return s.replace(pattern, "");
+      };
+
+      // Initial: cursor at end (line 7 = HHH), so we see FFF, GGG, HHH
+      let output = stripAnsi(mockStdout.written);
+      assert.ok(output.includes("HHH"), "HHH should be visible initially");
+
+      // Scroll up to get to the top
+      for (let i = 0; i < 6; i++) {
+        mockStdin.emit("data", Buffer.from("\x1b[<64;2;2M"));
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      output = stripAnsi(mockStdout.written);
+      // After scrolling up 6 times, we should be at top showing AAA, BBB, CCC
+      assert.ok(
+        output.includes("AAA"),
+        `AAA should be visible after scrolling up. Output: ${output.slice(0, 300)}`,
+      );
+
+      mockStdout.written = "";
+
+      // Now scroll down 2 times - should show CCC, DDD, EEE (not all the way back to HHH)
+      mockStdin.emit("data", Buffer.from("\x1b[<65;2;2M"));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      mockStdin.emit("data", Buffer.from("\x1b[<65;2;2M"));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      output = stripAnsi(mockStdout.written);
+
+      // Should show DDD (3 lines from top)
+      assert.ok(
+        output.includes("DDD"),
+        `DDD should be visible after scrolling down. Output: ${output.slice(0, 300)}`,
+      );
+      // Should NOT show HHH (too far down)
+      assert.ok(
+        !output.includes("HHH"),
+        `HHH should NOT be visible (only scrolled 2 down). Output: ${output.slice(0, 300)}`,
       );
 
       app.unmount();

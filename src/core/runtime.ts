@@ -161,9 +161,6 @@ export interface Node {
   /** Programmatically activate this node (creates and dispatches ActivateEvent) */
   activate?: () => void;
 
-  // Portal marker (for root-level rendering)
-  _isPortal?: boolean;
-
   // Layout signals (set during binding phase)
   _layout?: LayoutSignals;
 }
@@ -351,6 +348,10 @@ interface NodeWithFocusScope extends Node {
 
 // The context is set during mount and captured by component closures
 let activeContext: RuntimeContext | null = null;
+
+// Module-level list for portal children created before root exists.
+// Cleared after each mount() by setting length = 0.
+const pendingPortalAttachments: Node[][] = [];
 
 /**
  * Get the current active context.
@@ -1065,30 +1066,46 @@ export interface PortalProps {
  * Renders children at the root of the render tree, regardless of where
  * the Portal appears in the component hierarchy.
  *
- * Portals enable viewport-level floating elements like dialogs, popovers,
- * and toasts. The children are rendered visually at root level (above all
- * other content) while maintaining their logical position in the tree for
- * reactivity and cleanup.
+ * Portal's children are literally attached to root's children array.
+ * The component tree reflects visual reality - portal children ARE root's
+ * children, not descendants of Portal's logical position.
  *
  * Multiple Portals stack in document order (later Portals appear above earlier ones).
- * Portal children participate in focus management via the logical tree.
+ * Portal children participate in focus management via root scope.
  */
 export function Portal(props: PortalProps): Node {
+  const ctx = activeContext;
   const children = Array.isArray(props.children)
     ? props.children
     : [props.children];
 
-  const node: Node = {
-    style: { ...DEFAULT_FLEX_STYLE, display: "contents" },
-    children,
-    _isPortal: true,
-  };
+  const root = ctx?.state.root;
 
-  for (const child of children) {
-    child._parent = node;
+  if (root) {
+    // Root exists - attach children immediately (dynamic portal via Show/For)
+    if (!root.children) root.children = [];
+    root.children.push(...children);
+    for (const child of children) {
+      child._parent = root;
+    }
+    ctx?.scheduleRelayout();
+  } else {
+    // Initial mount - queue for later attachment
+    pendingPortalAttachments.push(children);
   }
 
-  return node;
+  onCleanup(() => {
+    const currentRoot = ctx?.state.root;
+    if (currentRoot?.children) {
+      currentRoot.children = currentRoot.children.filter(
+        (c) => !children.includes(c),
+      );
+      ctx?.scheduleRelayout();
+    }
+  });
+
+  // Return invisible placeholder
+  return { style: { ...DEFAULT_FLEX_STYLE, display: "none" } };
 }
 
 /** Props for Show component. */
@@ -1419,16 +1436,14 @@ export function TabFocus(props: TabFocusProps): Node {
 /**
  * Convert runtime Node to layout system's LayoutNode.
  * Resolves reactive styles and handles children as either array or getter function.
- * Skips portal nodes (their children are laid out separately at root level).
  */
 function nodeToLayoutNode(node: Node): LayoutNode {
   const style = resolveNodeStyle(node);
   const children = resolveNodeChildren(node);
-  const filteredChildren = children.filter((child) => !child._isPortal);
 
   return {
     style,
-    children: filteredChildren.map(nodeToLayoutNode),
+    children: children.map(nodeToLayoutNode),
     measure: node.measure,
   };
 }
@@ -1572,81 +1587,16 @@ export function hitTest(
 }
 
 /**
- * Collect all portal nodes from a tree.
- * Returns them in order they appear (later portals render on top).
- */
-function collectPortals(node: Node): Node[] {
-  const portals: Node[] = [];
-
-  const visit = (n: Node) => {
-    for (const child of resolveNodeChildren(n)) {
-      if (child._isPortal) {
-        portals.push(child);
-      }
-      visit(child);
-    }
-  };
-
-  visit(node);
-  return portals;
-}
-
-/**
- * Hit test all portal nodes, checking in reverse order (later portals are on top).
- * Computes fresh layout for each portal child since portals use position: absolute.
- */
-function hitTestPortals(
-  portals: Node[],
-  x: number,
-  y: number,
-  screenWidth: number,
-  screenHeight: number,
-): Node | null {
-  // Check portals in reverse order (later = on top)
-  for (let i = portals.length - 1; i >= 0; i--) {
-    const portal = portals[i];
-    for (const portalChild of resolveNodeChildren(portal)) {
-      const portalLayoutNode = nodeToLayoutNode(portalChild);
-      const portalLayout = computeLayout(
-        portalLayoutNode,
-        screenWidth,
-        screenHeight,
-      );
-      const hit = hitTest(portalChild, portalLayout, x, y);
-      if (hit) {
-        return hit;
-      }
-    }
-  }
-  return null;
-}
-
-/**
  * Route mouse input to node under cursor, with hover tracking.
  *
  * Updates hover state and dispatches press/release/move events
- * to the target node. Checks portal nodes first since they render on top.
+ * to the target node.
  */
 function routeMouseEvent(state: RuntimeState, input: MouseInput): void {
-  const { root, layoutResult, hoverState, flushState } = state;
+  const { root, layoutResult, hoverState } = state;
   if (!layoutResult) return;
 
-  // Collect and hit test portals first (they render on top)
-  const portals = collectPortals(root);
-  const screenWidth = flushState.stdout.columns;
-  const screenHeight = flushState.stdout.rows;
-  let target = hitTestPortals(
-    portals,
-    input.x,
-    input.y,
-    screenWidth,
-    screenHeight,
-  );
-
-  // Fall back to main tree if no portal hit
-  if (!target) {
-    target = hitTest(root, layoutResult, input.x, input.y);
-  }
+  const target = hitTest(root, layoutResult, input.x, input.y);
 
   if (target !== hoverState.currentNode) {
     if (hoverState.currentNode?.onHover) {
@@ -1666,15 +1616,10 @@ function routeMouseEvent(state: RuntimeState, input: MouseInput): void {
   switch (input.action) {
     case "press": {
       // Focus the nearest focusable node (like browser click-to-focus)
-      // Skip focusing if the click target is inside a portal - portal content
-      // is temporary UI that may dispose on click, causing circular dependencies
-      const isInsidePortal = path.some((n) => n._isPortal);
-      if (!isInsidePortal) {
-        for (const node of path) {
-          if (node.focusable) {
-            focusNode(state, node);
-            break;
-          }
+      for (const node of path) {
+        if (node.focusable) {
+          focusNode(state, node);
+          break;
         }
       }
       // Then dispatch the press event
@@ -1713,28 +1658,13 @@ function routeMouseEvent(state: RuntimeState, input: MouseInput): void {
  *
  * Scroll events bubble up the tree until a handler is found.
  * This matches browser behavior where scroll events propagate
- * to scrollable ancestors. Checks portal nodes first since they render on top.
+ * to scrollable ancestors.
  */
 function routeScrollEvent(state: RuntimeState, input: ScrollInput): void {
-  const { root, layoutResult, flushState } = state;
+  const { root, layoutResult } = state;
   if (!layoutResult) return;
 
-  // Collect and hit test portals first (they render on top)
-  const portals = collectPortals(root);
-  const screenWidth = flushState.stdout.columns;
-  const screenHeight = flushState.stdout.rows;
-  let target = hitTestPortals(
-    portals,
-    input.x,
-    input.y,
-    screenWidth,
-    screenHeight,
-  );
-
-  // Fall back to main tree if no portal hit
-  if (!target) {
-    target = hitTest(root, layoutResult, input.x, input.y);
-  }
+  const target = hitTest(root, layoutResult, input.x, input.y);
   if (!target) return;
 
   const path = buildPathToRoot(target);
@@ -1907,6 +1837,12 @@ function paintNode(
 ): number {
   const style = resolveNodeStyle(node);
 
+  // display: none nodes don't render but DO consume a layout slot
+  // (layout tree includes them)
+  if (style.display === "none") {
+    return 1;
+  }
+
   // Handle display: contents nodes - they don't have their own layout,
   // their children use layouts from the parent's children array
   if (style.display === "contents") {
@@ -1914,11 +1850,6 @@ function paintNode(
     let consumed = 0;
 
     for (const child of resolveNodeChildren(node)) {
-      if (child._isPortal) {
-        // Paint portal children at root level (no layout consumed)
-        paintPortalChildren(child, buffer, wrapperInherited, stdout);
-        continue;
-      }
       consumed += paintNode(
         child,
         layoutChildren,
@@ -1966,10 +1897,6 @@ function paintNode(
   // Recurse into children using this node's layout children
   let childIndex = 0;
   for (const child of resolveNodeChildren(node)) {
-    if (child._isPortal) {
-      paintPortalChildren(child, buffer, nodeInherited, stdout);
-      continue;
-    }
     childIndex += paintNode(
       child,
       layoutResult.children,
@@ -1985,43 +1912,7 @@ function paintNode(
 }
 
 /**
- * Paints portal children at root level with separate layout computation.
- */
-function paintPortalChildren(
-  portal: Node,
-  buffer: Buffer,
-  inherited: InheritedStyle,
-  stdout: NodeJS.WriteStream,
-): void {
-  const rootClip: ClipRect = {
-    x: 0,
-    y: 0,
-    width: stdout.columns,
-    height: stdout.rows,
-  };
-
-  for (const portalChild of resolveNodeChildren(portal)) {
-    const portalLayoutNode = nodeToLayoutNode(portalChild);
-    const portalLayout = computeLayout(
-      portalLayoutNode,
-      stdout.columns,
-      stdout.rows,
-    );
-    paintNode(
-      portalChild,
-      [portalLayout],
-      0,
-      buffer,
-      inherited,
-      rootClip,
-      stdout,
-    );
-  }
-}
-
-/**
  * Paints all nodes in the tree by calling their render() functions.
- * Entry point for tree painting.
  */
 function paintTree(
   root: Node,
@@ -2040,10 +1931,6 @@ function paintTree(
     let childIndex = 0;
 
     for (const child of resolveNodeChildren(root)) {
-      if (child._isPortal) {
-        paintPortalChildren(child, buffer, wrapperInherited, stdout);
-        continue;
-      }
       childIndex += paintNode(
         child,
         layoutResult.children,
@@ -2171,7 +2058,6 @@ function doRelayout(
     layoutResult,
     rootInheritedAccessor,
     rootClipAccessor,
-    stdout,
     true, // onlyNew: only bind nodes created by Show/For since last bind
   );
 
@@ -2210,47 +2096,34 @@ interface BindableNode {
   clipAccessor: Accessor<ClipRect>;
 }
 
-/** A portal child node with its inherited style accessor. */
-interface PortalChild {
-  node: Node;
-  inheritedAccessor: InheritedStyleAccessor;
-}
-
 /**
- * Flattens a node tree into bindable nodes and portal children.
+ * Flattens a node tree into bindable nodes.
  * Hoists children of `display: "contents"` nodes.
- * Portal children are collected separately for root-level layout.
+ * Skips `display: "none"` nodes.
  */
 function flattenBindableNodes(
   node: Node,
   inheritedAccessor: InheritedStyleAccessor,
   clipAccessor: Accessor<ClipRect>,
   result: BindableNode[],
-  portals: PortalChild[],
 ): void {
   const style = resolveNodeStyle(node);
+
+  // Skip display: none nodes - they don't have layouts
+  if (style.display === "none") {
+    return;
+  }
 
   if (style.display === "contents") {
     const wrapperInheritedAccessor: InheritedStyleAccessor = () =>
       computeInheritedStyle(node, inheritedAccessor());
 
     for (const child of resolveNodeChildren(node)) {
-      if (child._isPortal) {
-        // Collect portal's children with current inherited style
-        for (const portalChild of resolveNodeChildren(child)) {
-          portals.push({
-            node: portalChild,
-            inheritedAccessor: wrapperInheritedAccessor,
-          });
-        }
-        continue;
-      }
       flattenBindableNodes(
         child,
         wrapperInheritedAccessor,
         clipAccessor,
         result,
-        portals,
       );
     }
     return;
@@ -2277,22 +2150,11 @@ function flattenBindableNodes(
   };
 
   for (const child of resolveNodeChildren(node)) {
-    if (child._isPortal) {
-      // Collect portal's children with current inherited style
-      for (const portalChild of resolveNodeChildren(child)) {
-        portals.push({
-          node: portalChild,
-          inheritedAccessor: childInheritedAccessor,
-        });
-      }
-      continue;
-    }
     flattenBindableNodes(
       child,
       childInheritedAccessor,
       childClipAccessor,
       result,
-      portals,
     );
   }
 }
@@ -2300,7 +2162,7 @@ function flattenBindableNodes(
 /**
  * Flattens a LayoutResult tree into a list matching the order produced by
  * `flattenBindableNodes`. Traverses node tree and layout tree in parallel,
- * skipping contents nodes (which don't have layout results).
+ * skipping contents and none nodes (which don't have layout results).
  *
  * Returns the number of layout results consumed from the layoutChildren array.
  */
@@ -2312,10 +2174,15 @@ function flattenLayoutResultsInner(
 ): number {
   const style = resolveNodeStyle(node);
 
+  // display: none nodes still consume a layout slot (layout includes them)
+  // but we don't add them to results since we skip them in flattenBindableNodes
+  if (style.display === "none") {
+    return 1;
+  }
+
   if (style.display === "contents") {
     let consumed = 0;
     for (const child of resolveNodeChildren(node)) {
-      if (child._isPortal) continue;
       consumed += flattenLayoutResultsInner(
         child,
         layoutChildren,
@@ -2333,7 +2200,6 @@ function flattenLayoutResultsInner(
 
   let childConsumed = 0;
   for (const child of resolveNodeChildren(node)) {
-    if (child._isPortal) continue;
     childConsumed += flattenLayoutResultsInner(
       child,
       layout.children,
@@ -2358,7 +2224,6 @@ function flattenLayoutResults(
   if (rootStyle.display === "contents") {
     let consumed = 0;
     for (const child of resolveNodeChildren(root)) {
-      if (child._isPortal) continue;
       consumed += flattenLayoutResultsInner(
         child,
         layoutResult.children,
@@ -2386,9 +2251,8 @@ function bindSingleNode(bindable: BindableNode, layout: LayoutResult): void {
 }
 
 /**
- * Binds nodes in the tree including portals.
+ * Binds nodes in the tree.
  * Sets up layout signals for each node.
- * Portal children are collected during traversal and bound at root level.
  *
  * @param onlyNew - If true, only binds nodes that don't have layout signals yet.
  *                  Used during relayout to bind newly created nodes (Show/For).
@@ -2398,17 +2262,14 @@ function bindNodes(
   layoutResult: LayoutResult,
   rootInheritedAccessor: InheritedStyleAccessor,
   rootClipAccessor: Accessor<ClipRect>,
-  stdout: NodeJS.WriteStream,
   onlyNew = false,
 ): void {
   const bindableNodes: BindableNode[] = [];
-  const portals: PortalChild[] = [];
   flattenBindableNodes(
     root,
     rootInheritedAccessor,
     rootClipAccessor,
     bindableNodes,
-    portals,
   );
 
   const layouts: LayoutResult[] = [];
@@ -2418,33 +2279,6 @@ function bindNodes(
     const { node } = bindableNodes[i];
     if (onlyNew && node._layout) continue;
     bindSingleNode(bindableNodes[i], layouts[i]);
-  }
-
-  for (const { node, inheritedAccessor } of portals) {
-    if (onlyNew && node._layout) continue;
-
-    const portalLayoutNode = nodeToLayoutNode(node);
-    const portalLayout = computeLayout(
-      portalLayoutNode,
-      stdout.columns,
-      stdout.rows,
-    );
-
-    const portalClipAccessor: Accessor<ClipRect> = () => ({
-      x: 0,
-      y: 0,
-      width: stdout.columns,
-      height: stdout.rows,
-    });
-
-    bindNodes(
-      node,
-      portalLayout,
-      inheritedAccessor,
-      portalClipAccessor,
-      stdout,
-      onlyNew,
-    );
   }
 }
 
@@ -2471,14 +2305,19 @@ function updateAllLayoutSignals(root: Node, layoutResult: LayoutResult): void {
 
 /**
  * Flattens a node tree into a list, hoisting children of `display: "contents"` nodes.
+ * Skips `display: "none"` nodes.
  * Used by updateAllLayoutSignals where we only need the nodes, not accessors.
  */
 function flattenNodes(node: Node, result: Node[]): void {
   const style = resolveNodeStyle(node);
 
+  // Skip display: none nodes - they don't have layouts
+  if (style.display === "none") {
+    return;
+  }
+
   if (style.display === "contents") {
     for (const child of resolveNodeChildren(node)) {
-      if (child._isPortal) continue;
       flattenNodes(child, result);
     }
     return;
@@ -2487,7 +2326,6 @@ function flattenNodes(node: Node, result: Node[]): void {
   result.push(node);
 
   for (const child of resolveNodeChildren(node)) {
-    if (child._isPortal) continue;
     flattenNodes(child, result);
   }
 }
@@ -2626,6 +2464,16 @@ export function mount(component: () => Node, options?: MountOptions): App {
   state.rootDispose = createRoot((dispose) => {
     state.root = withContext(ctx, () => component());
 
+    // Attach pending portal children to root
+    for (const children of pendingPortalAttachments) {
+      if (!state.root.children) state.root.children = [];
+      state.root.children.push(...children);
+      for (const child of children) {
+        child._parent = state.root;
+      }
+    }
+    pendingPortalAttachments.length = 0;
+
     initializeFocus(state);
 
     buffer.clear();
@@ -2647,7 +2495,6 @@ export function mount(component: () => Node, options?: MountOptions): App {
       layoutResult,
       rootInheritedAccessor,
       rootClipAccessor,
-      stdout,
     );
 
     return dispose;

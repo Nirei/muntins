@@ -228,7 +228,12 @@ export function ScrollArea(props: ScrollAreaProps): Node {
     return height;
   };
 
-  setContentHeight(estimateContentHeight());
+  // Estimate content height by calling measure() on children.
+  // This is called in an effect so it tracks reactive dependencies
+  // (e.g., Textarea's value signal) and re-runs when content changes.
+  createEffect(() => {
+    setContentHeight(estimateContentHeight());
+  });
 
   const contentRef = createRef();
 
@@ -239,6 +244,7 @@ export function ScrollArea(props: ScrollAreaProps): Node {
     children,
   });
 
+  // Also update from actual layout when available (more accurate)
   createEffect(() => {
     const node = contentRef.current;
     if (node?._layout) {

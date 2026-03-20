@@ -75,8 +75,6 @@ function findNodeLayout(
   if (style.display === "contents") {
     let layoutIndex = 0;
     for (const child of children) {
-      if (child._isPortal) continue;
-
       const childStyle =
         typeof child.style === "function" ? child.style() : child.style;
 
@@ -105,8 +103,6 @@ function findNodeLayout(
 
   let layoutIndex = 0;
   for (const child of children) {
-    if (child._isPortal) continue;
-
     const childStyle =
       typeof child.style === "function" ? child.style() : child.style;
 
@@ -140,7 +136,6 @@ function findNodeLayout(
 function countLayoutNodes(nodes: Node[]): number {
   let count = 0;
   for (const node of nodes) {
-    if (node._isPortal) continue;
     const style = typeof node.style === "function" ? node.style() : node.style;
     if (style.display === "contents") {
       const children =
@@ -186,8 +181,6 @@ function computeIntrinsicSize(
   let layoutIndex = 0;
 
   for (const child of children) {
-    if (child._isPortal) continue;
-
     const childStyle =
       typeof child.style === "function" ? child.style() : child.style;
 
