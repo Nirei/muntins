@@ -2,13 +2,13 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { Buffer as RenderBuffer } from "../../src/core/buffer.ts";
 import {
+  App,
   Box,
   DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
   type FocusController,
   Text,
   createRef,
-  mount,
   useFocus,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
@@ -165,7 +165,7 @@ describe("Label", () => {
       let labelNode: ReturnType<typeof Label> | undefined;
       const inputRef = createRef();
 
-      const app = mount(
+      const app = App.mount(
         () => {
           labelNode = Label({ children: "Username", for: inputRef });
           return Box({
@@ -208,7 +208,7 @@ describe("Label", () => {
       let focusController!: FocusController;
       let labelNode!: ReturnType<typeof Label>;
 
-      const app = mount(
+      const app = App.mount(
         () => {
           focusController = useFocus();
           labelNode = Label({ children: "Username", for: inputRef });
@@ -271,7 +271,7 @@ describe("Label", () => {
       let labelNode!: ReturnType<typeof Label>;
       let activated = false;
 
-      const app = mount(
+      const app = App.mount(
         () => {
           labelNode = Label({ children: "Enable feature", for: checkboxRef });
           return Box({

@@ -2,9 +2,9 @@ import assert from "node:assert";
 import { describe, it, mock } from "node:test";
 import { Buffer as RenderBuffer } from "../../src/core/buffer.ts";
 import {
+  App,
   DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
-  mount,
 } from "../../src/core/runtime.ts";
 import { createRoot, createSignal } from "../../src/core/signals.ts";
 import { Spinner } from "../../src/ui/spinner.ts";
@@ -487,7 +487,7 @@ describe("Spinner", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(() => Spinner({ label: "Loading..." }), {
+      const app = App.mount(() => Spinner({ label: "Loading..." }), {
         stdin: mockStdin as unknown as NodeJS.ReadStream,
         stdout: mockStdout as unknown as NodeJS.WriteStream,
       });

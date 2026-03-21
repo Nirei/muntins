@@ -12,7 +12,7 @@ import {
   TabFocus,
   Text,
   createRef,
-  mount,
+  App,
   useFocus,
 } from "../../src/core/runtime.ts";
 import { createRoot, createSignal, onCleanup } from "../../src/core/signals.ts";
@@ -136,7 +136,7 @@ describe("Portal", () => {
     const mockStdout = createMockStdout(40, 10);
     const childRef = createRef();
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           children: [
@@ -166,7 +166,7 @@ describe("Portal layout exclusion", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout(60, 10);
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           flexDirection: "row",
@@ -208,7 +208,7 @@ describe("Portal rendering", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout(20, 5);
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           width: 20,
@@ -254,7 +254,7 @@ describe("Portal rendering", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout(20, 5);
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           flexDirection: "column",
@@ -311,7 +311,7 @@ describe("Portal rendering", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout(20, 5);
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           width: 20,
@@ -359,7 +359,7 @@ describe("Portal with Show", () => {
     const mockStdout = createMockStdout(40, 10);
     const [visible] = createSignal(true);
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           children: [
@@ -389,7 +389,7 @@ describe("Portal with Show", () => {
     const mockStdout = createMockStdout(20, 5);
     const [visible, setVisible] = createSignal(true);
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           children: [
@@ -425,7 +425,7 @@ describe("Portal with For", () => {
     const mockStdout = createMockStdout(40, 10);
     const [items, setItems] = createSignal(["a", "b", "c"]);
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           children: [
@@ -463,7 +463,7 @@ describe("Portal focus management", () => {
     const portalRef = createRef();
     let focusController!: FocusController;
 
-    const app = mount(
+    const app = App.mount(
       () => {
         focusController = useFocus();
         return TabFocus({
@@ -514,7 +514,7 @@ describe("Portal focus management", () => {
     const portalContentRef = createRef();
     let focusController!: FocusController;
 
-    const app = mount(
+    const app = App.mount(
       () => {
         focusController = useFocus();
         return TabFocus({
@@ -568,7 +568,7 @@ describe("Portal cleanup", () => {
     const [visible, setVisible] = createSignal(true);
     let cleanupCalled = false;
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           children: [
@@ -607,7 +607,7 @@ describe("Portal cleanup", () => {
     const mockStdout = createMockStdout(40, 10);
     let timerCleared = false;
 
-    const app = mount(
+    const app = App.mount(
       () => {
         return Portal({
           children: (() => {
@@ -642,7 +642,7 @@ describe("Portal reactive updates", () => {
     const mockStdout = createMockStdout(40, 10);
     const [count] = createSignal(0);
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           children: [
@@ -673,7 +673,7 @@ describe("Nested Portals", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout(40, 10);
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           children: [
@@ -718,7 +718,7 @@ describe("Portal style inheritance", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout(40, 10);
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           children: [

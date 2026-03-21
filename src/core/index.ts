@@ -85,8 +85,6 @@ export {
   useFocus,
 } from "./runtime/focus.ts";
 
-// Runtime - Mount
-export { mount } from "./runtime/App.ts";
 
 // Render (pass-through)
 export {

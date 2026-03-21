@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { Box, Text, createRef, mount } from "../../src/core/runtime.ts";
+import { App, Box, Text, createRef } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { Select, type SelectOption } from "../../src/ui/select.ts";
 
@@ -120,7 +120,7 @@ describe("Select", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -147,7 +147,7 @@ describe("Select", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -174,7 +174,7 @@ describe("Select", () => {
       const mockStdout = createMockStdout();
       const [value, setValue] = createSignal("us");
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -207,7 +207,7 @@ describe("Select", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -235,7 +235,7 @@ describe("Select", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -270,7 +270,7 @@ describe("Select", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -302,7 +302,7 @@ describe("Select", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -340,7 +340,7 @@ describe("Select", () => {
       const mockStdout = createMockStdout();
       let changeCalled = false;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -381,7 +381,7 @@ describe("Select", () => {
       const mockStdout = createMockStdout();
       let selectedValue: string | undefined;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -427,7 +427,7 @@ describe("Select", () => {
       const mockStdout = createMockStdout();
       let selectedValue: string | undefined;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -473,7 +473,7 @@ describe("Select", () => {
       const mockStdout = createMockStdout();
       let selectedValue: string | undefined;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -516,7 +516,7 @@ describe("Select", () => {
       const mockStdout = createMockStdout();
       let selectedValue: string | undefined;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -571,7 +571,7 @@ describe("Select", () => {
       const mockStdout = createMockStdout();
       let selectedValue: string | undefined;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -616,7 +616,7 @@ describe("Select", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -651,7 +651,7 @@ describe("Select", () => {
       const mockStdout = createMockStdout();
       const [disabled, setDisabled] = createSignal(true);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -695,7 +695,7 @@ describe("Select", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -724,7 +724,7 @@ describe("Select", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -761,7 +761,7 @@ describe("Select", () => {
       const mockStdout = createMockStdout();
       const states: Array<{ highlighted: boolean; selected: boolean }> = [];
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -808,7 +808,7 @@ describe("Select", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -836,7 +836,7 @@ describe("Select", () => {
       const mockStdout = createMockStdout();
       const ref = createRef();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -864,7 +864,7 @@ describe("Select", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -897,7 +897,7 @@ describe("Select", () => {
       const mockStdout = createMockStdout();
       let selectedValue: string | undefined;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -939,7 +939,7 @@ describe("Select", () => {
       const mockStdout = createMockStdout();
       let selectedValue: string | undefined;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -982,7 +982,7 @@ describe("Select", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -1018,7 +1018,7 @@ describe("Select", () => {
       const mockStdout = createMockStdout(80, 24);
       let selectedValue: string | undefined;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -1062,7 +1062,7 @@ describe("Select", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -1103,7 +1103,7 @@ describe("Select", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -1139,7 +1139,7 @@ describe("Select", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout(80, 24);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,

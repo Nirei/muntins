@@ -13,7 +13,7 @@ import type { Accessor, Setter } from "../signals.ts";
 import { batch, createRoot, createSignal } from "../signals.ts";
 import { bindNodes, clearSubtreeLayoutSignals, updateAllLayoutSignals } from "./binding.ts";
 import { routeEvent } from "./events.ts";
-import { initializeFocus } from "./focus.ts";
+import { type FocusScope, initializeFocus } from "./focus.ts";
 import type { Node } from "./Node.ts";
 import { paintTree } from "./paint.ts";
 import { nodeToLayoutNode } from "./tree.ts";
@@ -40,18 +40,6 @@ export const DEFAULT_MOUNT_OPTIONS: Required<MountOptions> = {
   alternateScreen: true,
   fpsLimit: 240,
 };
-
-/**
- * Focus scope for organizing focusable nodes.
- * Scopes can be nested and optionally trap focus within themselves.
- * @internal Exported for testing purposes.
- */
-export interface FocusScope {
-  parent: FocusScope | null;
-  focusableNodes: Node[];
-  focusedIndex: number;
-  trap: boolean;
-}
 
 /**
  * State for throttled buffer flushing.
@@ -96,20 +84,9 @@ export interface RuntimeContext {
 export class App {
   private static activeContext: RuntimeContext | null = null;
 
-  /**
-   * Get the current active context.
-   * @internal Exposed for testing purposes only.
-   */
+  /** Get the current active context, or null if outside a mount. */
   static getActiveContext(): RuntimeContext | null {
     return App.activeContext;
-  }
-
-  /**
-   * Set the active context.
-   * @internal Exposed for testing purposes only.
-   */
-  static setActiveContext(ctx: RuntimeContext | null): void {
-    App.activeContext = ctx;
   }
 
   /**
@@ -138,56 +115,17 @@ export class App {
   }
 
   /**
-   * Create a minimal App instance for unit testing.
-   * Skips terminal setup, input parsing, and signal handlers.
-   * @internal
+   * Mount an application to the terminal.
+   *
+   * Creates the component tree, sets up input handling, and starts the
+   * render loop. Returns an App instance with an unmount() method.
+   *
+   * @param component - Function that returns the root node
+   * @param options - Optional mount configuration
+   * @returns App instance
    */
-  static createForTesting(root: Node, overrides?: {
-    focusedNode?: Accessor<Node | null>;
-    setFocusedNode?: Setter<Node | null>;
-    rootScope?: FocusScope;
-    layoutResult?: LayoutResult | null;
-    hoverState?: HoverState;
-    terminalFocused?: boolean;
-  }): App {
-    const app = Object.create(App.prototype) as App;
-
-    const [focusedNode, setFocusedNode] = createSignal<Node | null>(null);
-
-    app.root = root;
-    app.rootDispose = () => {};
-    app.layoutResult = overrides?.layoutResult ?? {
-      x: 0, y: 0, screenX: 0, screenY: 0,
-      width: 80, height: 24, children: [],
-    };
-    app.flushState = {
-      active: false,
-      scheduled: false,
-      lastFlushTime: 0,
-      timeout: null,
-      buffer: null as unknown as Buffer,
-      stdout: process.stdout,
-      fpsLimit: 0,
-    };
-    app.relayoutScheduled = false;
-    app.options = { ...DEFAULT_MOUNT_OPTIONS, fpsLimit: 0 };
-    app.stdin = process.stdin;
-    app.inputParser = { destroy: () => {} };
-    app.focusedNode = overrides?.focusedNode ?? focusedNode;
-    app.setFocusedNode = overrides?.setFocusedNode ?? setFocusedNode;
-    app.rootScope = overrides?.rootScope ?? {
-      parent: null,
-      focusableNodes: [],
-      focusedIndex: -1,
-      trap: false,
-    };
-    app.hoverState = overrides?.hoverState ?? { currentNode: null };
-    app.terminalFocused = overrides?.terminalFocused ?? true;
-    app.pendingPortalAttachments = [];
-    app.unmounted = false;
-    app.removeSignalHandlers = null;
-
-    return app;
+  static mount(component: () => Node, options?: MountOptions): App {
+    return new App(component, options);
   }
 
   root!: Node;
@@ -479,38 +417,6 @@ export class App {
 }
 
 /**
- * Get the current active context.
- * @internal Exposed for testing purposes only.
- */
-export function getActiveContext(): RuntimeContext | null {
-  return App.getActiveContext();
-}
-
-/**
- * Set the active context.
- * @internal Exposed for testing purposes only.
- */
-export function setActiveContext(ctx: RuntimeContext | null): void {
-  App.setActiveContext(ctx);
-}
-
-/**
- * Execute a function within a runtime context.
- * The context is set during the callback and restored after.
- */
-export function withContext<T>(ctx: RuntimeContext, fn: () => T): T {
-  return App.withContext(ctx, fn);
-}
-
-/**
- * Get the current runtime context.
- * Throws if called outside of a mounted component.
- */
-export function getContext(): RuntimeContext {
-  return App.getContext();
-}
-
-/**
  * Layout information for reactive layout access via refs.
  * All values are integers representing terminal cells.
  */
@@ -526,18 +432,4 @@ export interface LayoutInfo {
   screenX: number;
   /** Absolute Y position from screen origin */
   screenY: number;
-}
-
-/**
- * Mount an application to the terminal.
- *
- * Creates the component tree, sets up input handling, and starts the
- * render loop. Returns an App instance with an unmount() method.
- *
- * @param component - Function that returns the root node
- * @param options - Optional mount configuration
- * @returns App instance
- */
-export function mount(component: () => Node, options?: MountOptions): App {
-  return new App(component, options);
 }

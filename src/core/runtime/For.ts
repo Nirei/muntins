@@ -1,6 +1,6 @@
 import { DEFAULT_FLEX_STYLE } from "../layout.ts";
 import { createEffect, createRoot, createSignal, onCleanup } from "../signals.ts";
-import { getActiveContext } from "./App.ts";
+import { App } from "./App.ts";
 import { clearSubtreeLayoutSignals } from "./binding.ts";
 import { cleanupSubtreeState, registerSubtreeFocusables } from "./focus.ts";
 import type { Node } from "./Node.ts";
@@ -37,7 +37,7 @@ interface ForItemEntry<T> {
 export function For<T>(props: ForProps<T>): Node {
   const { each: items, render, key: keyFn } = props;
 
-  const ctx = getActiveContext();
+  const ctx = App.getActiveContext();
   const children: Node[] = [];
   const itemRoots: Map<unknown, ForItemEntry<T>[]> = new Map();
   const getKey = keyFn ?? ((item: T) => item);

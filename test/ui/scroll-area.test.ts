@@ -2,12 +2,12 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { Buffer as RenderBuffer } from "../../src/core/buffer.ts";
 import {
+  App,
   Box,
   DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
   Text,
   createRef,
-  mount,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { ScrollArea } from "../../src/ui/scroll-area.ts";
@@ -620,7 +620,7 @@ describe("ScrollArea", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [

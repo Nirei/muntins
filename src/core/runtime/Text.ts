@@ -16,7 +16,7 @@ import {
     type ReactiveTextStyle,
     renderText
 } from "../render.ts";
-import { getActiveContext } from "./App.ts";
+import { App } from "./App.ts";
 import {
     createEffect
 } from "../signals.ts";
@@ -145,7 +145,7 @@ export function Text(props: TextProps): Node {
 
   // If content is reactive, track it and schedule flush when it changes
   if (typeof content === "function") {
-    const ctx = getActiveContext();
+    const ctx = App.getActiveContext();
     if (ctx) {
       createEffect(() => {
         getContent(); // Track the content signal

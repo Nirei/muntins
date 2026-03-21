@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { Box, Text, createRef, mount } from "../../src/core/runtime.ts";
+import { App, Box, Text, createRef } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { Button } from "../../src/ui/button.ts";
 import { Drawer } from "../../src/ui/drawer.ts";
@@ -111,7 +111,7 @@ describe("Drawer", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -136,7 +136,7 @@ describe("Drawer", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -162,7 +162,7 @@ describe("Drawer", () => {
       const mockStdout = createMockStdout();
       const [isOpen, setIsOpen] = createSignal(true);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -196,7 +196,7 @@ describe("Drawer", () => {
       const mockStdout = createMockStdout();
       let closeCalled = false;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -227,7 +227,7 @@ describe("Drawer", () => {
       const mockStdout = createMockStdout();
       let closeCalled = false;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -259,7 +259,7 @@ describe("Drawer", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -284,7 +284,7 @@ describe("Drawer", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -310,7 +310,7 @@ describe("Drawer", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -337,7 +337,7 @@ describe("Drawer", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -365,7 +365,7 @@ describe("Drawer", () => {
       const mockStdout = createMockStdout();
       const [side, setSide] = createSignal<"left" | "right">("left");
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -398,7 +398,7 @@ describe("Drawer", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -423,7 +423,7 @@ describe("Drawer", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -450,7 +450,7 @@ describe("Drawer", () => {
       const mockStdout = createMockStdout();
       const [size, setSize] = createSignal(30);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -481,7 +481,7 @@ describe("Drawer", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -507,7 +507,7 @@ describe("Drawer", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -531,7 +531,7 @@ describe("Drawer", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -561,7 +561,7 @@ describe("Drawer", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -594,7 +594,7 @@ describe("Drawer", () => {
       const buttonRef1 = createRef();
       const buttonRef2 = createRef();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -630,7 +630,7 @@ describe("Drawer", () => {
       const mockStdout = createMockStdout();
       const [isOpen, setIsOpen] = createSignal(true);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -663,7 +663,7 @@ describe("Drawer", () => {
       const mockStdout = createMockStdout();
       let buttonClicked = false;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -703,7 +703,7 @@ describe("Drawer", () => {
       const mockStdout = createMockStdout();
       let onCloseCalled = false;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [

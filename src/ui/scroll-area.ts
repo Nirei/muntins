@@ -3,7 +3,7 @@
 import type { KeyEvent, ScrollEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
-import { Box, Text, createRef, getActiveContext } from "../core/runtime.ts";
+import { App, Box, Text, createRef } from "../core/runtime.ts";
 import { createEffect, createSignal, resolve } from "../core/signals.ts";
 
 // Unicode box drawing characters for scrollbar
@@ -131,7 +131,7 @@ function Scrollbar(props: {
 export function ScrollArea(props: ScrollAreaProps): Node {
   const [internalOffset, setInternalOffset] = createSignal(0);
 
-  const ctx = getActiveContext();
+  const ctx = App.getActiveContext();
 
   const getScrollTop = () => resolve(props.scrollTop) ?? internalOffset();
   const getHeight = () => resolve(props.height) ?? DEFAULT_HEIGHT;

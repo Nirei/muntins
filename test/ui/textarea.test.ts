@@ -2,11 +2,11 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { Buffer as RenderBuffer } from "../../src/core/buffer.ts";
 import {
+  App,
   Box,
   DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
   createRef,
-  mount,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { Textarea } from "../../src/ui/textarea.ts";
@@ -751,7 +751,7 @@ describe("Textarea", () => {
       const ref = createRef();
       const mouseEnabled = options.mouse ?? false;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -1040,7 +1040,7 @@ describe("Textarea", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout(80, 24);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -1108,7 +1108,7 @@ describe("Textarea", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout(80, 24);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -1179,7 +1179,7 @@ describe("Textarea", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout(80, 24);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -1273,7 +1273,7 @@ describe("Textarea", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout(80, 24);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -1341,7 +1341,7 @@ describe("Textarea", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout(80, 24);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -1476,7 +1476,7 @@ describe("Textarea", () => {
 
       const [value, setValue] = createSignal("");
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -1506,7 +1506,7 @@ describe("Textarea", () => {
 
       const [value, setValue] = createSignal("1\n2\n3\n4\n5\n6\n7\n8\n9\n10");
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [

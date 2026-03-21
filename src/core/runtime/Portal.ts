@@ -1,6 +1,6 @@
 import { DEFAULT_FLEX_STYLE } from "../layout.ts";
 import { onCleanup } from "../signals.ts";
-import { getActiveContext } from "./App.ts";
+import { App } from "./App.ts";
 import type { Node } from "./Node.ts";
 
 /** Props for Portal component. */
@@ -21,7 +21,7 @@ export interface PortalProps {
  * Portal children participate in focus management via root scope.
  */
 export function Portal(props: PortalProps): Node {
-  const ctx = getActiveContext();
+  const ctx = App.getActiveContext();
   const app = ctx?.app;
   const children = Array.isArray(props.children)
     ? props.children

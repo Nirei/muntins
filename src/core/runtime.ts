@@ -17,17 +17,13 @@ export {
   type MountOptions,
   DEFAULT_MOUNT_OPTIONS,
   type RuntimeContext,
-  type FocusScope,
   type FlushState,
-  getActiveContext,
-  setActiveContext,
-  withContext,
-  mount,
   type LayoutInfo,
 } from "./runtime/App.ts";
 
 // Focus
 export {
+  type FocusScope,
   type FocusController,
   type FocusScopeProps,
   type TabFocusProps,

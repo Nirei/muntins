@@ -1,6 +1,6 @@
 import { DEFAULT_FLEX_STYLE } from "../layout.ts";
 import { createEffect, createRoot, onCleanup } from "../signals.ts";
-import { getActiveContext, withContext } from "./App.ts";
+import { App } from "./App.ts";
 import { clearSubtreeLayoutSignals } from "./binding.ts";
 import { cleanupSubtreeState, registerSubtreeFocusables } from "./focus.ts";
 import type { Node } from "./Node.ts";
@@ -26,7 +26,7 @@ export interface ShowProps<T> {
 export function Show<T>(props: ShowProps<T>): Node {
   const { when: condition, children: childrenBranch, fallback } = props;
 
-  const ctx = getActiveContext();
+  const ctx = App.getActiveContext();
   const children: Node[] = [];
   let currentDispose: (() => void) | null = null;
   let currentChild: Node | null = null;
@@ -56,7 +56,7 @@ export function Show<T>(props: ShowProps<T>): Node {
     factory: () => Node,
     dispose: () => void,
   ): (() => void) => {
-    const node = ctx ? withContext(ctx, factory) : factory();
+    const node = ctx ? App.withContext(ctx, factory) : factory();
     node._parent = container;
     children.push(node);
     currentChild = node;

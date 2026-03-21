@@ -7,6 +7,7 @@ import {
   computeLayout,
 } from "../../src/core/layout.ts";
 import {
+  App,
   Box,
   type ClipRect,
   DEFAULT_CLIP,
@@ -14,7 +15,6 @@ import {
   type InheritedStyle,
   type Node,
   createRef,
-  mount,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { Input } from "../../src/ui/input.ts";
@@ -778,7 +778,7 @@ describe("Input", () => {
 
       const [value, setValue] = createSignal("");
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [

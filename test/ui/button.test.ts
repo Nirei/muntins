@@ -2,12 +2,12 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { DIM, Buffer as RenderBuffer } from "../../src/core/buffer.ts";
 import {
+  App,
   Box,
   DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
   Text,
   createRef,
-  mount,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { Button } from "../../src/ui/button.ts";
@@ -472,7 +472,7 @@ describe("Button", () => {
 
       let clicked = false;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [

@@ -2,7 +2,7 @@
 
 import type { MouseEvent } from "../core/input.ts";
 import type { Node, ReactiveTextStyle, Ref } from "../core/runtime.ts";
-import { Text, getActiveContext, useFocus } from "../core/runtime.ts";
+import { App, Text, useFocus } from "../core/runtime.ts";
 
 /**
  * Props for the Label component.
@@ -45,7 +45,7 @@ export function Label(props: LabelProps): Node {
 
   // Get focus controller to handle for association
   // Only available within mount context - outside context, for won't work but label still renders
-  const ctx = getActiveContext();
+  const ctx = App.getActiveContext();
   const focus = ctx ? useFocus() : undefined;
 
   const handleMousePress = forRef

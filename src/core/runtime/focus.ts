@@ -1,11 +1,16 @@
 import type { Accessor } from "../signals.ts";
-import {
-  type App,
-  type FocusScope,
-  type RuntimeContext,
-  getContext,
-  withContext,
-} from "./App.ts";
+import { App, type RuntimeContext } from "./App.ts";
+
+/**
+ * Focus scope for organizing focusable nodes.
+ * Scopes can be nested and optionally trap focus within themselves.
+ */
+export interface FocusScope {
+  parent: FocusScope | null;
+  focusableNodes: Node[];
+  focusedIndex: number;
+  trap: boolean;
+}
 import { Box } from "./Box.ts";
 import type { Node, Ref } from "./Node.ts";
 import { isNodeInSubtree, resolveNodeChildren } from "./tree.ts";
@@ -299,7 +304,7 @@ function createFocusController(
  * Must be called within a mounted component context.
  */
 export function useFocus(): FocusController {
-  const ctx = getContext();
+  const ctx = App.getContext();
   return createFocusController(ctx.app, ctx.currentScope);
 }
 
@@ -323,7 +328,7 @@ function createFocusScopeNode(
   props: { children: Node[]; trap?: boolean },
   boxFactory: (children: Node[], scope: FocusScope) => Node,
 ): Node {
-  const ctx = getContext();
+  const ctx = App.getContext();
 
   const scope: FocusScope = {
     parent: ctx.currentScope,
@@ -337,7 +342,7 @@ function createFocusScopeNode(
     currentScope: scope,
   };
 
-  const node = withContext(childCtx, () => boxFactory(props.children, scope));
+  const node = App.withContext(childCtx, () => boxFactory(props.children, scope));
 
   (node as NodeWithFocusScope)._focusScope = scope;
   collectFocusableInScope(node, scope);
@@ -362,7 +367,7 @@ export function FocusScopeComponent(props: FocusScopeProps): Node {
  * between focusable children.
  */
 export function TabFocus(props: TabFocusProps): Node {
-  const ctx = getContext();
+  const ctx = App.getContext();
 
   const propsWithTrap = { ...props, trap: props.trap ?? true };
 

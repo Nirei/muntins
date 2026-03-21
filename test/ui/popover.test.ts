@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { Box, Text, mount } from "../../src/core/runtime.ts";
+import { App, Box, Text } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { Button } from "../../src/ui/button.ts";
 import { Popover, type PopoverPlacement } from "../../src/ui/popover.ts";
@@ -111,7 +111,7 @@ describe("Popover", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -141,7 +141,7 @@ describe("Popover", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -173,7 +173,7 @@ describe("Popover", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -203,7 +203,7 @@ describe("Popover", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -238,7 +238,7 @@ describe("Popover", () => {
       const mockStdout = createMockStdout();
       const [isOpen, setIsOpen] = createSignal(true);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -278,7 +278,7 @@ describe("Popover", () => {
       const mockStdout = createMockStdout();
       let closeCalled = false;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -314,7 +314,7 @@ describe("Popover", () => {
       const mockStdout = createMockStdout();
       let closeCalled = false;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -351,7 +351,7 @@ describe("Popover", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -401,7 +401,7 @@ describe("Popover", () => {
         const mockStdin = createMockStdin();
         const mockStdout = createMockStdout();
 
-        const app = mount(
+        const app = App.mount(
           () =>
             Box({
               // Container that doesn't fill viewport so popover has room
@@ -441,7 +441,7 @@ describe("Popover", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -476,7 +476,7 @@ describe("Popover", () => {
       const [placement, setPlacement] =
         createSignal<PopoverPlacement>("bottom-start");
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -519,7 +519,7 @@ describe("Popover", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             // No height specified - anchor will stretch to fill viewport
@@ -557,7 +557,7 @@ describe("Popover", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -595,7 +595,7 @@ describe("Popover", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -626,7 +626,7 @@ describe("Popover", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -664,7 +664,7 @@ describe("Popover", () => {
       const mockStdout = createMockStdout(80, 24);
       let closeCalled = false;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -718,7 +718,7 @@ describe("Popover", () => {
       const mockStdout = createMockStdout(80, 24);
       let closeCalled = false;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -772,7 +772,7 @@ describe("Popover", () => {
       const mockStdout = createMockStdout(80, 24);
       let closeCalled = false;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -828,7 +828,7 @@ describe("Popover", () => {
       const mockStdout = createMockStdout();
       const [isOpen, setIsOpen] = createSignal(true);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,

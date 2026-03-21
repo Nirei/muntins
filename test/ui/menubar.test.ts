@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { Box, Text, mount } from "../../src/core/runtime.ts";
+import { App, Box, Text } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import {
   type Menu,
@@ -159,7 +159,7 @@ describe("Menubar", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -183,7 +183,7 @@ describe("Menubar", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -212,7 +212,7 @@ describe("Menubar", () => {
       const mockStdout = createMockStdout();
 
       let lastFocusedLabel = "";
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -254,7 +254,7 @@ describe("Menubar", () => {
       const mockStdout = createMockStdout();
 
       let lastFocusedLabel = "";
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -295,7 +295,7 @@ describe("Menubar", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -331,7 +331,7 @@ describe("Menubar", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -360,7 +360,7 @@ describe("Menubar", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -392,7 +392,7 @@ describe("Menubar", () => {
       const mockStdout = createMockStdout();
 
       let currentHighlight = "";
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -442,7 +442,7 @@ describe("Menubar", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -482,7 +482,7 @@ describe("Menubar", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -536,7 +536,7 @@ describe("Menubar", () => {
         },
       ];
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -567,7 +567,7 @@ describe("Menubar", () => {
       const mockStdout = createMockStdout();
 
       let currentHighlight = "";
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -617,7 +617,7 @@ describe("Menubar", () => {
       const mockStdout = createMockStdout();
 
       let currentHighlight = "";
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -678,7 +678,7 @@ describe("Menubar", () => {
         },
       ];
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [Menubar({ menus, autoFocus: true })],
@@ -708,7 +708,7 @@ describe("Menubar", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -744,7 +744,7 @@ describe("Menubar", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -787,7 +787,7 @@ describe("Menubar", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -818,7 +818,7 @@ describe("Menubar", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             height: 10,
@@ -871,7 +871,7 @@ describe("Menubar", () => {
 
       // This test verifies the style prop is passed to Box
       // We can't directly test styling, but we ensure no errors
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -901,7 +901,7 @@ describe("Menubar", () => {
       const mockStdout = createMockStdout();
 
       // Menubar should be focusable by default to receive key events
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -927,7 +927,7 @@ describe("Menubar", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [

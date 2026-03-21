@@ -3,13 +3,7 @@
 import type { KeyEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref, RuntimeContext } from "../core/runtime.ts";
-import {
-  Box,
-  Portal,
-  Show,
-  createRef,
-  getActiveContext,
-} from "../core/runtime.ts";
+import { App, Box, Portal, Show, createRef } from "../core/runtime.ts";
 import { type MaybeAccessor, resolve } from "../core/signals.ts";
 
 /**
@@ -326,7 +320,7 @@ export function Popover(props: PopoverProps): Node {
   const isOpen = () => resolve(props.open) ?? false;
   const getPlacement = () => resolve(props.placement) ?? "bottom-start";
 
-  const ctx = getActiveContext();
+  const ctx = App.getActiveContext();
 
   const handleKeyPress = (key: KeyEvent): boolean | undefined => {
     if (key.name === "escape") {

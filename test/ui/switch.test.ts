@@ -4,11 +4,11 @@ import { DIM, Buffer as RenderBuffer } from "../../src/core/buffer.ts";
 import { DEFAULT_FLEX_STYLE, computeLayout } from "../../src/core/layout.ts";
 import type { LayoutNode } from "../../src/core/layout.ts";
 import {
+  App,
   Box,
   DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
   createRef,
-  mount,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { Switch } from "../../src/ui/switch.ts";
@@ -465,7 +465,7 @@ describe("Switch", () => {
       const [checked, setChecked] = createSignal(false);
       let lastValue: boolean | undefined;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [

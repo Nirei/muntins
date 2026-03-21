@@ -11,7 +11,7 @@ import { type KeyEvent, isPrintable } from "../core/input.ts";
 import { DEFAULT_FLEX_STYLE, type FlexStyle } from "../core/layout.ts";
 import { isInClipRect } from "../core/render.ts";
 import type { ClipRect, InheritedStyle, Node, Ref } from "../core/runtime.ts";
-import { Box, getActiveContext } from "../core/runtime.ts";
+import { App, Box } from "../core/runtime.ts";
 import {
   type Accessor,
   type MaybeAccessor,
@@ -178,7 +178,7 @@ export function Textarea(props: TextareaProps): Node {
   const getPlaceholder = () => resolve(props.placeholder) ?? "";
   const isMultiline = props.multiline ?? true;
 
-  const ctx = getActiveContext();
+  const ctx = App.getActiveContext();
   const focusedNodeAccessor: Accessor<Node | null> | null =
     ctx?.app.focusedNode ?? null;
 

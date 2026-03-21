@@ -12,7 +12,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
-  mount,
+  App,
   onCleanup,
 } from "../src/index.ts";
 import { Input } from "../src/ui/input.ts";
@@ -208,7 +208,7 @@ describe("cursor position", () => {
     // Simulate cursor at row 10 (not at the top of the screen)
     stdout.write("\x1b[11;1H");
 
-    const app = mount(() => Text({ content: "Hello" }), { stdin, stdout });
+    const app = App.mount(() => Text({ content: "Hello" }), { stdin, stdout });
 
     // After mount, cursor has moved somewhere in the TUI
     // After unmount, cursor should be back at row 10
@@ -244,8 +244,8 @@ describe("cursor position", () => {
     }) as unknown as NodeJS.WriteStream;
 
     let unmounted = false;
-    const appRef = { current: null as ReturnType<typeof mount> | null };
-    const app = mount(
+    const appRef = { current: null as App | null };
+    const app = App.mount(
       () =>
         Box({
           focusable: true,
@@ -289,8 +289,8 @@ describe("cursor position", () => {
     // positioning sequences onto the main screen — moving the cursor away from row 10.
     const [label, setLabel] = createSignal("A");
 
-    const appRef = { current: null as ReturnType<typeof mount> | null };
-    const app = mount(
+    const appRef = { current: null as App | null };
+    const app = App.mount(
       () =>
         Box({
           focusable: true,
@@ -325,7 +325,7 @@ describe("integration", () => {
     it("renders Text content to screen", () => {
       const { stdin, stdout, screen } = createMockStreams();
 
-      const app = mount(() => Text({ content: "Hello World" }), {
+      const app = App.mount(() => Text({ content: "Hello World" }), {
         stdin,
         stdout,
       });
@@ -341,7 +341,7 @@ describe("integration", () => {
     it("renders Box with multiple Text children", () => {
       const { stdin, stdout, screen } = createMockStreams();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             flexDirection: "column",
@@ -365,7 +365,7 @@ describe("integration", () => {
       const { stdin, stdout, screen } = createMockStreams();
       const [text] = createSignal("Initial Value");
 
-      const app = mount(() => Text({ content: text }), {
+      const app = App.mount(() => Text({ content: text }), {
         stdin,
         stdout,
       });
@@ -381,7 +381,7 @@ describe("integration", () => {
     it("renders nested Box hierarchy", () => {
       const { stdin, stdout, screen } = createMockStreams();
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -408,7 +408,7 @@ describe("integration", () => {
       const { stdin, stdout, screen } = createMockStreams();
       const [count, setCount] = createSignal(0);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             focusable: true,
@@ -448,7 +448,7 @@ describe("integration", () => {
       // Track the values seen during content calls to verify batching
       const valuesSeen: string[] = [];
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             focusable: true,
@@ -504,7 +504,7 @@ describe("integration", () => {
       const [count, setCount] = createSignal(1);
       const doubled = createMemo(() => count() * 2);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             focusable: true,
@@ -534,7 +534,7 @@ describe("integration", () => {
       let focusedReceived = false;
       let unfocusedReceived = false;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -572,7 +572,7 @@ describe("integration", () => {
       const { stdin, stdout, screen } = createMockStreams();
       const received: string[] = [];
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             onKeyPress: () => {
@@ -617,7 +617,7 @@ describe("integration", () => {
       const { stdin, stdout, screen } = createMockStreams();
       const received: string[] = [];
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             onKeyPress: () => {
@@ -663,7 +663,7 @@ describe("integration", () => {
       let receivedKey: { name: string; ctrl: boolean; shift: boolean } | null =
         null;
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             focusable: true,
@@ -698,7 +698,7 @@ describe("integration", () => {
       const { stdin, stdout, screen } = createMockStreams();
       const focused: string[] = [];
 
-      const app = mount(
+      const app = App.mount(
         () =>
           TabFocus({
             children: [
@@ -755,7 +755,7 @@ describe("integration", () => {
       const { stdin, stdout, screen } = createMockStreams();
       const focused: string[] = [];
 
-      const app = mount(
+      const app = App.mount(
         () =>
           TabFocus({
             children: [
@@ -812,7 +812,7 @@ describe("integration", () => {
       const { stdin, stdout, screen } = createMockStreams();
       const focused: string[] = [];
 
-      const app = mount(
+      const app = App.mount(
         () =>
           TabFocus({
             children: [
@@ -854,7 +854,7 @@ describe("integration", () => {
       const { stdin, stdout, screen } = createMockStreams();
       const [visible] = createSignal(true);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Show({
             when: visible,
@@ -872,7 +872,7 @@ describe("integration", () => {
       const { stdin, stdout, screen } = createMockStreams();
       const [visible] = createSignal(false);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Show({
             when: visible,
@@ -892,7 +892,7 @@ describe("integration", () => {
       const { stdin, stdout, screen } = createMockStreams();
       const [visible, setVisible] = createSignal(true);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             focusable: true,
@@ -930,7 +930,7 @@ describe("integration", () => {
       const cleanups: string[] = [];
       const [visible, setVisible] = createSignal(true);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             focusable: true,
@@ -977,7 +977,7 @@ describe("integration", () => {
       const { stdin, stdout, screen } = createMockStreams();
       const [items] = createSignal(["apple", "banana", "cherry"]);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           For({
             each: items,
@@ -997,7 +997,7 @@ describe("integration", () => {
       const { stdin, stdout, screen } = createMockStreams();
       const [items] = createSignal(["x", "y", "z"]);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             flexDirection: "column",
@@ -1023,7 +1023,7 @@ describe("integration", () => {
       const { stdin, stdout, screen } = createMockStreams();
       const [items, setItems] = createSignal(["a", "b"]);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             focusable: true,
@@ -1060,7 +1060,7 @@ describe("integration", () => {
       const cleanups: string[] = [];
       const [items, setItems] = createSignal(["a", "b", "c"]);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             focusable: true,
@@ -1097,7 +1097,7 @@ describe("integration", () => {
       const createCount = { value: 0 };
       const [items, setItems] = createSignal(["a", "b", "c"]);
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             focusable: true,
@@ -1140,7 +1140,7 @@ describe("integration", () => {
       const { stdin, stdout, screen } = createMockStreams();
       let cleanupCalled = false;
 
-      const app = mount(
+      const app = App.mount(
         () => {
           onCleanup(() => {
             cleanupCalled = true;
@@ -1160,7 +1160,7 @@ describe("integration", () => {
       const [signal, setSignal] = createSignal(0);
       let effectRuns = 0;
 
-      const app = mount(
+      const app = App.mount(
         () => {
           createEffect(() => {
             signal();
@@ -1197,7 +1197,7 @@ describe("integration", () => {
     it("enters alternate screen buffer on mount", () => {
       const { stdin, stdout, screen } = createMockStreams();
 
-      const app = mount(() => Text({ content: "Test" }), {
+      const app = App.mount(() => Text({ content: "Test" }), {
         stdin,
         stdout,
         alternateScreen: true,
@@ -1214,7 +1214,7 @@ describe("integration", () => {
     it("skips alternate screen when disabled", () => {
       const { stdin, stdout, screen } = createMockStreams();
 
-      const app = mount(() => Text({ content: "Test" }), {
+      const app = App.mount(() => Text({ content: "Test" }), {
         stdin,
         stdout,
         alternateScreen: false,
@@ -1231,7 +1231,7 @@ describe("integration", () => {
     it("hides cursor on mount", () => {
       const { stdin, stdout, screen } = createMockStreams();
 
-      const app = mount(() => Text({ content: "Test" }), {
+      const app = App.mount(() => Text({ content: "Test" }), {
         stdin,
         stdout,
       });
@@ -1247,7 +1247,7 @@ describe("integration", () => {
     it("restores terminal state on unmount", () => {
       const { stdin, stdout, screen } = createMockStreams();
 
-      const app = mount(() => Text({ content: "Test" }), {
+      const app = App.mount(() => Text({ content: "Test" }), {
         stdin,
         stdout,
         alternateScreen: true,
@@ -1264,7 +1264,7 @@ describe("integration", () => {
     it("clears screen on mount", () => {
       const { stdin, stdout, screen } = createMockStreams();
 
-      const app = mount(() => Text({ content: "Test" }), {
+      const app = App.mount(() => Text({ content: "Test" }), {
         stdin,
         stdout,
       });
@@ -1453,7 +1453,7 @@ describe("integration", () => {
       const { stdin, stdout, screen } = createMockStreamsWithModifiers();
       const [value, setValue] = createSignal("");
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -1515,7 +1515,7 @@ describe("integration", () => {
       const { stdin, stdout, screen } = createMockStreamsWithModifiers();
       const [value, setValue] = createSignal("");
 
-      const app = mount(
+      const app = App.mount(
         () =>
           Box({
             children: [
@@ -1581,7 +1581,7 @@ describe("integration", () => {
       const [value1, setValue1] = createSignal("hello");
       const [value2, setValue2] = createSignal("world");
 
-      const app = mount(
+      const app = App.mount(
         () =>
           TabFocus({
             children: [

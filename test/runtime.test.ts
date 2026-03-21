@@ -45,17 +45,13 @@ import {
   flushFrame,
   focusNext,
   focusPrev,
-  getActiveContext,
   hitTest,
   initializeFocus,
   isNodeInSubtree,
   lineDisplayWidth,
   measureText,
-  mount,
-  setActiveContext,
   truncateLine,
   useFocus,
-  withContext,
   wrapLine,
 } from "../src/core/runtime.ts";
 import {
@@ -64,6 +60,7 @@ import {
   createSignal,
   onCleanup,
 } from "../src/core/signals.ts";
+import { createTestApp, setActiveContext } from "./test-helpers.ts";
 
 describe("runtime core types", () => {
   it("createRef returns object with null current", () => {
@@ -1690,7 +1687,7 @@ describe("focus cleanup on Show disposal", () => {
     const [visible, setVisible] = createSignal(true);
     let focusController!: FocusController;
 
-    const app = mount(
+    const app = App.mount(
       () => {
         focusController = useFocus();
         return Box({
@@ -1732,7 +1729,7 @@ describe("focus cleanup on Show disposal", () => {
     const firstRef = createRef();
     let focusController!: FocusController;
 
-    const app = mount(
+    const app = App.mount(
       () => {
         focusController = useFocus();
         return Box({
@@ -1778,7 +1775,7 @@ describe("stale focusableNodes cleanup", () => {
     let focusController!: FocusController;
     const keyPresses: string[] = [];
 
-    const app = mount(
+    const app = App.mount(
       () => {
         focusController = useFocus();
         return TabFocus({
@@ -1875,7 +1872,7 @@ describe("focus cleanup on For disposal", () => {
     let focusController!: FocusController;
     const bRef = createRef();
 
-    const app = mount(
+    const app = App.mount(
       () => {
         focusController = useFocus();
         return For({
@@ -1917,7 +1914,7 @@ describe("hover cleanup on Show disposal", () => {
     const [visible, setVisible] = createSignal(true);
     let hoverState: boolean | null = null;
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Show({
           when: visible,
@@ -2060,7 +2057,7 @@ describe("mount", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout();
 
-    const app = mount(() => Text({ content: "hello" }), {
+    const app = App.mount(() => Text({ content: "hello" }), {
       stdin: mockStdin as unknown as NodeJS.ReadStream,
       stdout: mockStdout as unknown as NodeJS.WriteStream,
     });
@@ -2073,7 +2070,7 @@ describe("mount", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout();
 
-    const app = mount(() => Text({ content: "hello" }), {
+    const app = App.mount(() => Text({ content: "hello" }), {
       stdin: mockStdin as unknown as NodeJS.ReadStream,
       stdout: mockStdout as unknown as NodeJS.WriteStream,
     });
@@ -2086,7 +2083,7 @@ describe("mount", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout();
 
-    const app = mount(() => Text({ content: "hello" }), {
+    const app = App.mount(() => Text({ content: "hello" }), {
       stdin: mockStdin as unknown as NodeJS.ReadStream,
       stdout: mockStdout as unknown as NodeJS.WriteStream,
     });
@@ -2101,7 +2098,7 @@ describe("mount", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout();
 
-    const app = mount(() => Text({ content: "hello" }), {
+    const app = App.mount(() => Text({ content: "hello" }), {
       stdin: mockStdin as unknown as NodeJS.ReadStream,
       stdout: mockStdout as unknown as NodeJS.WriteStream,
     });
@@ -2115,7 +2112,7 @@ describe("mount", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout();
 
-    const app = mount(
+    const app = App.mount(
       () => {
         onCleanup(() => {
           cleanupCalled = true;
@@ -2137,7 +2134,7 @@ describe("mount", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout();
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           children: [Text({ content: "line1" }), Text({ content: "line2" })],
@@ -2158,7 +2155,7 @@ describe("mount", () => {
     const mockStdout = createMockStdout();
     const [count, _setCount] = createSignal(0);
 
-    const app = mount(() => Text({ content: () => `Count: ${count()}` }), {
+    const app = App.mount(() => Text({ content: () => `Count: ${count()}` }), {
       stdin: mockStdin as unknown as NodeJS.ReadStream,
       stdout: mockStdout as unknown as NodeJS.WriteStream,
       // Immediate mode
@@ -2178,7 +2175,7 @@ describe("mount", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout();
 
-    const app = mount(() => Text({ content: "hello" }), {
+    const app = App.mount(() => Text({ content: "hello" }), {
       stdin: mockStdin as unknown as NodeJS.ReadStream,
       stdout: mockStdout as unknown as NodeJS.WriteStream,
       alternateScreen: false,
@@ -2193,7 +2190,7 @@ describe("mount", () => {
     const mockStdout = createMockStdout();
 
     // First cycle
-    const app1 = mount(() => Text({ content: "first" }), {
+    const app1 = App.mount(() => Text({ content: "first" }), {
       stdin: mockStdin as unknown as NodeJS.ReadStream,
       stdout: mockStdout as unknown as NodeJS.WriteStream,
     });
@@ -2204,7 +2201,7 @@ describe("mount", () => {
     mockStdout.written = "";
 
     // Second cycle - should work identically
-    const app2 = mount(() => Text({ content: "second" }), {
+    const app2 = App.mount(() => Text({ content: "second" }), {
       stdin: mockStdin as unknown as NodeJS.ReadStream,
       stdout: mockStdout as unknown as NodeJS.WriteStream,
     });
@@ -2215,7 +2212,7 @@ describe("mount", () => {
     mockStdout.written = "";
     const focusedNodes: string[] = [];
 
-    const app3 = mount(
+    const app3 = App.mount(
       () =>
         TabFocus({
           children: [
@@ -2262,7 +2259,7 @@ describe("renderFrame", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout(20, 10);
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           flexDirection: "column",
@@ -2285,7 +2282,7 @@ describe("renderFrame", () => {
     const mockStdout = createMockStdout();
     const [visible, _setVisible] = createSignal(true);
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Show({
           when: visible,
@@ -2307,7 +2304,7 @@ describe("renderFrame", () => {
     const mockStdout = createMockStdout();
     const [items, _setItems] = createSignal(["a", "b", "c"]);
 
-    const app = mount(
+    const app = App.mount(
       () =>
         For({
           each: items,
@@ -2342,7 +2339,7 @@ describe("fpsLimit throttling", () => {
 
     const [count, setCount] = createSignal(0);
 
-    const app = mount(() => Text({ content: () => `Count: ${count()}` }), {
+    const app = App.mount(() => Text({ content: () => `Count: ${count()}` }), {
       stdin: mockStdin as unknown as NodeJS.ReadStream,
       stdout: mockStdout as unknown as NodeJS.WriteStream,
       fpsLimit: 10, // 100ms between frames
@@ -2374,7 +2371,7 @@ describe("fpsLimit throttling", () => {
 
     const [count, setCount] = createSignal(0);
 
-    const app = mount(() => Text({ content: () => `Count: ${count()}` }), {
+    const app = App.mount(() => Text({ content: () => `Count: ${count()}` }), {
       stdin: mockStdin as unknown as NodeJS.ReadStream,
       stdout: mockStdout as unknown as NodeJS.WriteStream,
       fpsLimit: 0, // Unlimited
@@ -2400,7 +2397,7 @@ describe("fpsLimit throttling", () => {
 
     const [count, setCount] = createSignal(0);
 
-    const app = mount(() => Text({ content: () => `Count: ${count()}` }), {
+    const app = App.mount(() => Text({ content: () => `Count: ${count()}` }), {
       stdin: mockStdin as unknown as NodeJS.ReadStream,
       stdout: mockStdout as unknown as NodeJS.WriteStream,
       fpsLimit: 1, // Very slow: 1000ms between frames
@@ -2425,7 +2422,7 @@ describe("resize handling", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout(80, 24);
 
-    const app = mount(() => Text({ content: "hello" }), {
+    const app = App.mount(() => Text({ content: "hello" }), {
       stdin: mockStdin as unknown as NodeJS.ReadStream,
       stdout: mockStdout as unknown as NodeJS.WriteStream,
     });
@@ -2476,7 +2473,7 @@ describe("keyboard routing", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout();
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           focusable: true,
@@ -2505,7 +2502,7 @@ describe("keyboard routing", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout();
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           onKeyPress: () => {
@@ -2542,7 +2539,7 @@ describe("keyboard routing", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout();
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           onKeyPress: () => {
@@ -2680,7 +2677,7 @@ describe("hover tracking", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout(20, 10);
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Text({
           content: "hello",
@@ -2709,7 +2706,7 @@ describe("hover tracking", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout(20, 10);
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           width: 5,
@@ -2748,7 +2745,7 @@ describe("mouse events", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout(20, 10);
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Text({
           content: "hello",
@@ -2777,7 +2774,7 @@ describe("mouse events", () => {
     const secondRef = createRef();
     let focusController!: FocusController;
 
-    const app = mount(
+    const app = App.mount(
       () => {
         focusController = useFocus();
         return Box({
@@ -2830,7 +2827,7 @@ describe("mouse events", () => {
     const secondBoxRef = createRef();
     let focusController!: FocusController;
 
-    const app = mount(
+    const app = App.mount(
       () => {
         focusController = useFocus();
         return Box({
@@ -2886,7 +2883,7 @@ describe("mouse events", () => {
     const mockStdout = createMockStdout(40, 10);
     let focusController!: FocusController;
 
-    const app = mount(
+    const app = App.mount(
       () => {
         focusController = useFocus();
         return Box({
@@ -2926,7 +2923,7 @@ describe("scroll events", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout(20, 10);
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Text({
           content: "hello",
@@ -2951,7 +2948,7 @@ describe("scroll events", () => {
 
 // Test helpers for focus management
 function createTestState(root: Node): App {
-  return App.createForTesting(root);
+  return createTestApp(root);
 }
 
 function createTestScope(nodes: Node[], trap = false): FocusScope {
@@ -3224,7 +3221,7 @@ describe("useFocus", () => {
     // However, current() returns state.focusedNode which is global,
     // so reactive tracking works from any scope.
 
-    const app = mount(
+    const app = App.mount(
       () => {
         // Get the root focus controller - its current() is state.focusedNode
         focusController = useFocus();
@@ -3341,8 +3338,8 @@ describe("withContext", () => {
 
     let capturedContext: RuntimeContext | null = null;
 
-    withContext(ctx, () => {
-      capturedContext = getActiveContext();
+    App.withContext(ctx, () => {
+      capturedContext = App.getActiveContext();
     });
 
     assert.strictEqual(capturedContext, ctx);
@@ -3362,11 +3359,11 @@ describe("withContext", () => {
 
     setActiveContext(ctx1);
 
-    withContext(ctx2, () => {
-      assert.strictEqual(getActiveContext(), ctx2);
+    App.withContext(ctx2, () => {
+      assert.strictEqual(App.getActiveContext(), ctx2);
     });
 
-    assert.strictEqual(getActiveContext(), ctx1);
+    assert.strictEqual(App.getActiveContext(), ctx1);
     setActiveContext(null);
   });
 });
@@ -3395,7 +3392,7 @@ describe("focus.set with nested scopes", () => {
     const innerRef = createRef();
     let focusController!: FocusController;
 
-    const app = mount(
+    const app = App.mount(
       () => {
         focusController = useFocus();
         return Box({
@@ -3443,7 +3440,7 @@ describe("TabFocus component", () => {
     const mockStdout = createMockStdout();
     const focusedNodes: string[] = [];
 
-    const app = mount(
+    const app = App.mount(
       () =>
         TabFocus({
           children: [
@@ -3490,7 +3487,7 @@ describe("TabFocus component", () => {
     const mockStdout = createMockStdout();
     const focusedNodes: string[] = [];
 
-    const app = mount(
+    const app = App.mount(
       () =>
         TabFocus({
           children: [
@@ -3541,7 +3538,7 @@ describe("TabFocus component", () => {
     const mockStdout = createMockStdout();
     const focusedNodes: string[] = [];
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           focusable: true, // Parent with focusable (like settings app root)
@@ -3619,7 +3616,7 @@ describe("scroll event bubbling", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout(20, 10);
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           onScroll: (e) => {
@@ -3646,7 +3643,7 @@ describe("scroll event bubbling", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout(20, 10);
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           onScroll: () => {
@@ -3682,7 +3679,7 @@ describe("paste event bubbling", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout();
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           onKeyPress: () => {
@@ -3720,7 +3717,7 @@ describe("paste event bubbling", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout();
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Text({
           content: "focused",
@@ -3750,7 +3747,7 @@ describe("paste event bubbling", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout();
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Text({
           content: "focused",
@@ -3785,7 +3782,7 @@ describe("dynamic focus collection", () => {
     const [visible, setVisible] = createSignal(false);
     const receivedKeys: string[] = [];
 
-    const app = mount(
+    const app = App.mount(
       () =>
         TabFocus({
           children: [
@@ -3840,7 +3837,7 @@ describe("dynamic focus collection", () => {
     const [items, setItems] = createSignal<string[]>(["a"]);
     const receivedKeys: string[] = [];
 
-    const app = mount(
+    const app = App.mount(
       () =>
         TabFocus({
           children: [
@@ -3887,7 +3884,7 @@ describe("nested scope autoFocus", () => {
     const mockStdout = createMockStdout();
     const receivedKeys: string[] = [];
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           children: [
@@ -3945,7 +3942,7 @@ describe("layout signals", () => {
 
     const ref = createRef();
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           width: 20,
@@ -3976,7 +3973,7 @@ describe("layout signals", () => {
 
     const innerRef = createRef();
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           paddingTop: 5,
@@ -4015,7 +4012,7 @@ describe("reactive content relayout", () => {
     const [count, setCount] = createSignal(0);
     const textRef = createRef();
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           width: 10,
@@ -4072,7 +4069,7 @@ describe("reactive content relayout", () => {
     const [count, setCount] = createSignal(111);
     const textRef = createRef();
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           width: 10,
@@ -4140,7 +4137,7 @@ describe("reactive content relayout", () => {
     const [count, setCount] = createSignal(-34);
     const textRef = createRef();
 
-    const app = mount(
+    const app = App.mount(
       () =>
         Box({
           width: 10,
