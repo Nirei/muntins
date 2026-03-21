@@ -141,7 +141,7 @@ export function ScrollArea(props: ScrollAreaProps): Node {
 
   createEffect(() => {
     getScrollTop(); // Track scroll position
-    ctx?.scheduleRelayout();
+    ctx?.app.scheduleRelayout();
   });
 
   const handleScroll = (delta: number): void => {

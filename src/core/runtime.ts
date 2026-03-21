@@ -13,17 +13,17 @@ export { type Node, type Ref, createRef } from "./runtime/Node.ts";
 
 // App / Context
 export {
-  type App,
+  App,
   type MountOptions,
   DEFAULT_MOUNT_OPTIONS,
-  type RuntimeState,
   type RuntimeContext,
   type FocusScope,
   type FlushState,
   getActiveContext,
   setActiveContext,
   withContext,
-  pendingPortalAttachments,
+  mount,
+  type LayoutInfo,
 } from "./runtime/App.ts";
 
 // Focus
@@ -68,8 +68,6 @@ export {
 // Events
 export { routeEvent } from "./runtime/events.ts";
 
-// Mount
-export { mount, type LayoutInfo } from "./runtime/mount.ts";
 
 // Layout signals
 export { type LayoutSignals, createLayoutSignals } from "./runtime/LayoutSignals.ts";

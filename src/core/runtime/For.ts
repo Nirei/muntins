@@ -51,7 +51,7 @@ export function For<T>(props: ForProps<T>): Node {
 
   const disposeEntry = (entry: ForItemEntry<T>) => {
     if (ctx) {
-      cleanupSubtreeState(ctx.state, entry.node);
+      cleanupSubtreeState(ctx.app, entry.node);
     }
     // Clear layout signals for the removed subtree
     clearSubtreeLayoutSignals(entry.node);
@@ -84,7 +84,7 @@ export function For<T>(props: ForProps<T>): Node {
         }
 
         if (ctx) {
-          registerSubtreeFocusables(ctx.state, node);
+          registerSubtreeFocusables(ctx.app, node);
         }
 
         return dispose;
@@ -142,7 +142,7 @@ export function For<T>(props: ForProps<T>): Node {
       }
     }
 
-    ctx?.scheduleRelayout();
+    ctx?.app.scheduleRelayout();
   });
 
   onCleanup(() => {

@@ -70,7 +70,7 @@ export { type Node, type Ref, createRef } from "./runtime/Node.ts";
 
 // Runtime - App / Context
 export {
-  type App,
+  App,
   type MountOptions,
   DEFAULT_MOUNT_OPTIONS,
 } from "./runtime/App.ts";
@@ -86,7 +86,7 @@ export {
 } from "./runtime/focus.ts";
 
 // Runtime - Mount
-export { mount } from "./runtime/mount.ts";
+export { mount } from "./runtime/App.ts";
 
 // Render (pass-through)
 export {

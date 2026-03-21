@@ -41,7 +41,7 @@ export function Show<T>(props: ShowProps<T>): Node {
   const disposeChild = () => {
     if (currentDispose) {
       if (ctx && currentChild) {
-        cleanupSubtreeState(ctx.state, currentChild);
+        cleanupSubtreeState(ctx.app, currentChild);
       }
       if (currentChild) {
         clearSubtreeLayoutSignals(currentChild);
@@ -62,7 +62,7 @@ export function Show<T>(props: ShowProps<T>): Node {
     currentChild = node;
 
     if (ctx) {
-      registerSubtreeFocusables(ctx.state, node);
+      registerSubtreeFocusables(ctx.app, node);
     }
 
     return dispose;
@@ -78,12 +78,12 @@ export function Show<T>(props: ShowProps<T>): Node {
       currentDispose = createRoot((dispose) =>
         createChildNode(() => childrenBranch(value), dispose),
       );
-      ctx?.scheduleRelayout();
+      ctx?.app.scheduleRelayout();
     } else if (fallback) {
       currentDispose = createRoot((dispose) =>
         createChildNode(fallback, dispose),
       );
-      ctx?.scheduleRelayout();
+      ctx?.app.scheduleRelayout();
     }
   });
 

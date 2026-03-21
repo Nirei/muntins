@@ -1,6 +1,6 @@
 import { DEFAULT_FLEX_STYLE } from "../layout.ts";
 import { onCleanup } from "../signals.ts";
-import { getActiveContext, pendingPortalAttachments } from "./App.ts";
+import { getActiveContext } from "./App.ts";
 import type { Node } from "./Node.ts";
 
 /** Props for Portal component. */
@@ -22,11 +22,12 @@ export interface PortalProps {
  */
 export function Portal(props: PortalProps): Node {
   const ctx = getActiveContext();
+  const app = ctx?.app;
   const children = Array.isArray(props.children)
     ? props.children
     : [props.children];
 
-  const root = ctx?.state.root;
+  const root = app?.root;
 
   if (root) {
     // Root exists - attach children immediately (dynamic portal via Show/For)
@@ -35,19 +36,19 @@ export function Portal(props: PortalProps): Node {
     for (const child of children) {
       child._parent = root;
     }
-    ctx?.scheduleRelayout();
-  } else {
+    app?.scheduleRelayout();
+  } else if (app) {
     // Initial mount - queue for later attachment
-    pendingPortalAttachments.push(children);
+    app.pendingPortalAttachments.push(children);
   }
 
   onCleanup(() => {
-    const currentRoot = ctx?.state.root;
+    const currentRoot = app?.root;
     if (currentRoot?.children) {
       currentRoot.children = currentRoot.children.filter(
         (c) => !children.includes(c),
       );
-      ctx?.scheduleRelayout();
+      app?.scheduleRelayout();
     }
   });
 

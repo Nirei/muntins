@@ -180,7 +180,7 @@ export function Textarea(props: TextareaProps): Node {
 
   const ctx = getActiveContext();
   const focusedNodeAccessor: Accessor<Node | null> | null =
-    ctx?.state.focusedNode ?? null;
+    ctx?.app.focusedNode ?? null;
 
   let focusableNode: Node;
 

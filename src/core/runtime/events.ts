@@ -10,7 +10,7 @@ import type {
   ScrollEvent,
   ScrollInput,
 } from "../input.ts";
-import type { RuntimeState } from "./App.ts";
+import type { App } from "./App.ts";
 import { focusNode } from "./focus.ts";
 import type { Node } from "./Node.ts";
 import { buildPathToRoot, hitTest } from "./tree.ts";
@@ -21,8 +21,8 @@ import { buildPathToRoot, hitTest } from "./tree.ts";
  * Events start at the focused node and bubble up to the root.
  * Handlers return true to consume the event and stop bubbling.
  */
-function routeKeyEvent(state: RuntimeState, input: KeyInput): void {
-  const focused = state.focusedNode();
+function routeKeyEvent(app: App, input: KeyInput): void {
+  const focused = app.focusedNode();
   if (!focused) return;
 
   const path = buildPathToRoot(focused);
@@ -44,8 +44,8 @@ function routeKeyEvent(state: RuntimeState, input: KeyInput): void {
  * Updates hover state and dispatches press/release/move events
  * to the target node.
  */
-function routeMouseEvent(state: RuntimeState, input: MouseInput): void {
-  const { root, layoutResult, hoverState } = state;
+function routeMouseEvent(app: App, input: MouseInput): void {
+  const { root, layoutResult, hoverState } = app;
   if (!layoutResult) return;
 
   const target = hitTest(root, layoutResult, input.x, input.y);
@@ -69,7 +69,7 @@ function routeMouseEvent(state: RuntimeState, input: MouseInput): void {
       // Focus the nearest focusable node (like browser click-to-focus)
       for (const node of path) {
         if (node.focusable) {
-          focusNode(state, node);
+          focusNode(app, node);
           break;
         }
       }
@@ -109,8 +109,8 @@ function routeMouseEvent(state: RuntimeState, input: MouseInput): void {
  *
  * Scroll events bubble up the tree until a handler is found.
  */
-function routeScrollEvent(state: RuntimeState, input: ScrollInput): void {
-  const { root, layoutResult } = state;
+function routeScrollEvent(app: App, input: ScrollInput): void {
+  const { root, layoutResult } = app;
   if (!layoutResult) return;
 
   const target = hitTest(root, layoutResult, input.x, input.y);
@@ -133,8 +133,8 @@ function routeScrollEvent(state: RuntimeState, input: ScrollInput): void {
  * Paste text is converted to synthetic key events for each grapheme.
  * Events bubble up the tree like regular keyboard events.
  */
-function routePasteEvent(state: RuntimeState, event: PasteEvent): void {
-  const focused = state.focusedNode();
+function routePasteEvent(app: App, event: PasteEvent): void {
+  const focused = app.focusedNode();
   if (!focused) return;
 
   const path = buildPathToRoot(focused);
@@ -172,8 +172,8 @@ function routePasteEvent(state: RuntimeState, event: PasteEvent): void {
  * Route terminal focus event.
  * Tracks whether the terminal window has focus.
  */
-function routeFocusEvent(state: RuntimeState, event: FocusEvent): void {
-  state.terminalFocused = event.focused;
+function routeFocusEvent(app: App, event: FocusEvent): void {
+  app.terminalFocused = event.focused;
 }
 
 /**
@@ -187,22 +187,22 @@ function routeFocusEvent(state: RuntimeState, event: FocusEvent): void {
  * - focus: Updates terminal focus state
  * - resize: Handled separately in handleEvent
  */
-export function routeEvent(state: RuntimeState, event: InputEvent): void {
+export function routeEvent(app: App, event: InputEvent): void {
   switch (event.type) {
     case "key":
-      routeKeyEvent(state, event);
+      routeKeyEvent(app, event);
       break;
     case "mouse":
-      routeMouseEvent(state, event);
+      routeMouseEvent(app, event);
       break;
     case "scroll":
-      routeScrollEvent(state, event);
+      routeScrollEvent(app, event);
       break;
     case "paste":
-      routePasteEvent(state, event);
+      routePasteEvent(app, event);
       break;
     case "focus":
-      routeFocusEvent(state, event);
+      routeFocusEvent(app, event);
       break;
     case "resize":
       // Handled separately in handleEvent

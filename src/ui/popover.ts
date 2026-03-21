@@ -228,10 +228,10 @@ function getNodePosition(
 ):
   | { screenX: number; screenY: number; width: number; height: number }
   | undefined {
-  const { state } = ctx;
-  if (!state.layoutResult) return undefined;
+  const { app } = ctx;
+  if (!app.layoutResult) return undefined;
 
-  const layout = findNodeLayout(node, state.root, state.layoutResult);
+  const layout = findNodeLayout(node, app.root, app.layoutResult);
   if (!layout) return undefined;
 
   const intrinsicSize = computeIntrinsicSize(node, layout);

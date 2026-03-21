@@ -1,8 +1,8 @@
 import type { Accessor } from "../signals.ts";
 import {
+  type App,
   type FocusScope,
   type RuntimeContext,
-  type RuntimeState,
   getContext,
   withContext,
 } from "./App.ts";
@@ -49,7 +49,7 @@ export function collectFocusableInScope(node: Node, scope: FocusScope): void {
  * Find the focus scope that should contain a node by walking up the tree.
  * Returns the first scope encountered, or the root scope if none found.
  */
-function findParentScope(state: RuntimeState, node: Node): FocusScope {
+function findParentScope(app: App, node: Node): FocusScope {
   let current: Node | undefined = node._parent;
 
   while (current) {
@@ -60,7 +60,7 @@ function findParentScope(state: RuntimeState, node: Node): FocusScope {
     current = current._parent;
   }
 
-  return state.rootScope;
+  return app.rootScope;
 }
 
 /**
@@ -68,10 +68,10 @@ function findParentScope(state: RuntimeState, node: Node): FocusScope {
  * Called when Show/For creates new child nodes.
  */
 export function registerSubtreeFocusables(
-  state: RuntimeState,
+  app: App,
   subtreeRoot: Node,
 ): void {
-  const scope = findParentScope(state, subtreeRoot);
+  const scope = findParentScope(app, subtreeRoot);
   collectFocusableInScope(subtreeRoot, scope);
 }
 
@@ -80,10 +80,10 @@ export function registerSubtreeFocusables(
  * Removes nodes from their containing scope's focusableNodes array.
  */
 export function unregisterSubtreeFocusables(
-  state: RuntimeState,
+  app: App,
   subtreeRoot: Node,
 ): void {
-  const scope = findParentScope(state, subtreeRoot);
+  const scope = findParentScope(app, subtreeRoot);
 
   const nodesToRemove: Node[] = [];
   collectFocusableInScope(subtreeRoot, {
@@ -114,24 +114,24 @@ export function unregisterSubtreeFocusables(
  * Must be called before disposing a subtree to prevent stale references.
  */
 export function cleanupSubtreeState(
-  state: RuntimeState,
+  app: App,
   subtreeRoot: Node,
 ): void {
-  const focused = state.focusedNode();
+  const focused = app.focusedNode();
   if (focused && isNodeInSubtree(focused, subtreeRoot)) {
-    state.setFocusedNode(null);
+    app.setFocusedNode(null);
   }
 
-  unregisterSubtreeFocusables(state, subtreeRoot);
+  unregisterSubtreeFocusables(app, subtreeRoot);
 
   if (
-    state.hoverState.currentNode &&
-    isNodeInSubtree(state.hoverState.currentNode, subtreeRoot)
+    app.hoverState.currentNode &&
+    isNodeInSubtree(app.hoverState.currentNode, subtreeRoot)
   ) {
-    if (state.hoverState.currentNode.onHover) {
-      state.hoverState.currentNode.onHover(false);
+    if (app.hoverState.currentNode.onHover) {
+      app.hoverState.currentNode.onHover(false);
     }
-    state.hoverState.currentNode = null;
+    app.hoverState.currentNode = null;
   }
 }
 
@@ -156,7 +156,7 @@ type FocusDirection = 1 | -1;
  * Handles wrapping and scope escaping based on trap setting.
  */
 function focusNavigate(
-  state: RuntimeState,
+  app: App,
   scope: FocusScope,
   direction: FocusDirection,
 ): void {
@@ -164,7 +164,7 @@ function focusNavigate(
 
   if (focusableNodes.length === 0) {
     if (!scope.trap && scope.parent) {
-      focusNavigate(state, scope.parent, direction);
+      focusNavigate(app, scope.parent, direction);
     }
     return;
   }
@@ -172,7 +172,7 @@ function focusNavigate(
   if (focusedIndex === -1) {
     const index = direction === 1 ? 0 : focusableNodes.length - 1;
     scope.focusedIndex = index;
-    state.setFocusedNode(focusableNodes[index]);
+    app.setFocusedNode(focusableNodes[index]);
     return;
   }
 
@@ -185,32 +185,32 @@ function focusNavigate(
 
     if (scope.trap) {
       scope.focusedIndex = wrapIndex;
-      state.setFocusedNode(focusableNodes[wrapIndex]);
+      app.setFocusedNode(focusableNodes[wrapIndex]);
     } else if (scope.parent && countFocusablesInAncestors(scope.parent) > 0) {
       scope.focusedIndex = -1;
-      focusNavigate(state, scope.parent, direction);
+      focusNavigate(app, scope.parent, direction);
     } else {
       scope.focusedIndex = wrapIndex;
-      state.setFocusedNode(focusableNodes[wrapIndex]);
+      app.setFocusedNode(focusableNodes[wrapIndex]);
     }
   } else {
     scope.focusedIndex = targetIndex;
-    state.setFocusedNode(focusableNodes[targetIndex]);
+    app.setFocusedNode(focusableNodes[targetIndex]);
   }
 }
 
 /**
  * Navigate focus to the next focusable node within a scope.
  */
-export function focusNext(state: RuntimeState, scope: FocusScope): void {
-  focusNavigate(state, scope, 1);
+export function focusNext(app: App, scope: FocusScope): void {
+  focusNavigate(app, scope, 1);
 }
 
 /**
  * Navigate focus to the previous focusable node within a scope.
  */
-export function focusPrev(state: RuntimeState, scope: FocusScope): void {
-  focusNavigate(state, scope, -1);
+export function focusPrev(app: App, scope: FocusScope): void {
+  focusNavigate(app, scope, -1);
 }
 
 /**
@@ -239,11 +239,11 @@ function findScopeContaining(
 /**
  * Set focus to a specific node via ref.
  */
-function focusSet(state: RuntimeState, scope: FocusScope, ref: Ref): void {
+function focusSet(app: App, scope: FocusScope, ref: Ref): void {
   if (!ref.current?.focusable) return;
 
   const targetScope = findScopeContaining(
-    state.rootScope,
+    app.rootScope,
     ref.current,
   );
   if (!targetScope) return;
@@ -252,7 +252,7 @@ function focusSet(state: RuntimeState, scope: FocusScope, ref: Ref): void {
   if (index !== -1) {
     scope.focusedIndex = -1;
     targetScope.focusedIndex = index;
-    state.setFocusedNode(ref.current);
+    app.setFocusedNode(ref.current);
   }
 }
 
@@ -260,16 +260,16 @@ function focusSet(state: RuntimeState, scope: FocusScope, ref: Ref): void {
  * Focus a node directly (used for click-to-focus).
  * Finds the node's containing scope and updates focus state.
  */
-export function focusNode(state: RuntimeState, node: Node): void {
+export function focusNode(app: App, node: Node): void {
   if (!node.focusable) return;
 
-  const targetScope = findScopeContaining(state.rootScope, node);
+  const targetScope = findScopeContaining(app.rootScope, node);
   if (!targetScope) return;
 
   const index = targetScope.focusableNodes.indexOf(node);
   if (index !== -1) {
     targetScope.focusedIndex = index;
-    state.setFocusedNode(node);
+    app.setFocusedNode(node);
   }
 }
 
@@ -277,20 +277,20 @@ export function focusNode(state: RuntimeState, node: Node): void {
  * Create a focus controller for a scope.
  */
 function createFocusController(
-  state: RuntimeState,
+  app: App,
   scope: FocusScope,
 ): FocusController {
   return {
     next() {
-      focusNext(state, scope);
+      focusNext(app, scope);
     },
     prev() {
-      focusPrev(state, scope);
+      focusPrev(app, scope);
     },
     set(ref: Ref) {
-      focusSet(state, scope, ref);
+      focusSet(app, scope, ref);
     },
-    current: state.focusedNode,
+    current: app.focusedNode,
   };
 }
 
@@ -300,7 +300,7 @@ function createFocusController(
  */
 export function useFocus(): FocusController {
   const ctx = getContext();
-  return createFocusController(ctx.state, ctx.currentScope);
+  return createFocusController(ctx.app, ctx.currentScope);
 }
 
 /** Props for FocusScopeComponent */
@@ -333,10 +333,8 @@ function createFocusScopeNode(
   };
 
   const childCtx: RuntimeContext = {
-    state: ctx.state,
+    app: ctx.app,
     currentScope: scope,
-    scheduleRelayout: ctx.scheduleRelayout,
-    scheduleFlush: ctx.scheduleFlush,
   };
 
   const node = withContext(childCtx, () => boxFactory(props.children, scope));
@@ -369,7 +367,7 @@ export function TabFocus(props: TabFocusProps): Node {
   const propsWithTrap = { ...props, trap: props.trap ?? true };
 
   return createFocusScopeNode(propsWithTrap, (children, scope) => {
-    const focus = createFocusController(ctx.state, scope);
+    const focus = createFocusController(ctx.app, scope);
 
     return Box({
       children,
@@ -423,21 +421,21 @@ function findScopeForNode(target: Node, defaultScope: FocusScope): FocusScope {
  * Searches the entire tree for a node with autoFocus. If found, focuses it.
  * Otherwise, focuses the first focusable node in tree order.
  */
-export function initializeFocus(state: RuntimeState): void {
-  state.rootScope.focusableNodes = [];
-  collectFocusableInScope(state.root, state.rootScope);
+export function initializeFocus(app: App): void {
+  app.rootScope.focusableNodes = [];
+  collectFocusableInScope(app.root, app.rootScope);
 
-  const allFocusables = collectAllFocusables(state.root);
+  const allFocusables = collectAllFocusables(app.root);
 
   if (allFocusables.length === 0) {
     return;
   }
 
   const targetNode = allFocusables.find((n) => n.autoFocus) ?? allFocusables[0];
-  const scope = findScopeForNode(targetNode, state.rootScope);
+  const scope = findScopeForNode(targetNode, app.rootScope);
   const index = scope.focusableNodes.indexOf(targetNode);
   if (index !== -1) {
     scope.focusedIndex = index;
   }
-  state.setFocusedNode(targetNode);
+  app.setFocusedNode(targetNode);
 }

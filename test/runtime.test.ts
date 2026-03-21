@@ -17,6 +17,7 @@ import {
 } from "../src/core/layout.ts";
 import type { LayoutResult } from "../src/core/layout.ts";
 import {
+  App,
   BORDER_CHARS,
   type BorderStyleName,
   Box,
@@ -31,7 +32,6 @@ import {
   type LayoutInfo,
   type Node,
   type RuntimeContext,
-  type RuntimeState,
   Show,
   TabFocus,
   Text,
@@ -2950,52 +2950,8 @@ describe("scroll events", () => {
 });
 
 // Test helpers for focus management
-function createTestState(root: Node): RuntimeState {
-  const rootScope: FocusScope = {
-    parent: null,
-    focusableNodes: [],
-    focusedIndex: -1,
-    trap: false,
-  };
-
-  const [focusedNode, setFocusedNode] = createSignal<Node | null>(null);
-
-  return {
-    root,
-    rootDispose: () => {},
-    layoutResult: {
-      x: 0,
-      y: 0,
-      screenX: 0,
-      screenY: 0,
-      width: 80,
-      height: 24,
-      children: [],
-    },
-    flushState: {
-      scheduled: false,
-      lastFlushTime: 0,
-      timeout: null,
-      buffer: null as unknown as import("../src/core/buffer.ts").Buffer,
-      stdout: process.stdout,
-      fpsLimit: 0,
-    },
-    relayoutScheduled: false,
-    inputParser: { destroy: () => {} },
-    stdin: null as unknown as NodeJS.ReadStream,
-    options: {
-      mouse: false,
-      alternateScreen: true,
-      stdout: process.stdout,
-      stdin: process.stdin,
-      fpsLimit: 0, // Unlimited for tests
-    },
-    focusedNode,
-    setFocusedNode,
-    rootScope,
-    hoverState: { currentNode: null },
-    terminalFocused: true,
-  };
+function createTestState(root: Node): App {
+  return App.createForTesting(root);
 }
 
 function createTestScope(nodes: Node[], trap = false): FocusScope {
@@ -3356,13 +3312,11 @@ describe("useFocus", () => {
   });
 
   it("returns controller within context", () => {
-    const state = createTestState(Box({}));
+    const app = createTestState(Box({}));
     const scope = createTestScope([]);
     setActiveContext({
-      state,
+      app,
       currentScope: scope,
-      scheduleRelayout: () => {},
-      scheduleFlush: () => {},
     });
 
     const controller = useFocus();
@@ -3378,13 +3332,11 @@ describe("useFocus", () => {
 
 describe("withContext", () => {
   it("sets context during callback", () => {
-    const state = createTestState(Box({}));
+    const app = createTestState(Box({}));
     const scope = createTestScope([]);
     const ctx: RuntimeContext = {
-      state,
+      app,
       currentScope: scope,
-      scheduleRelayout: () => {},
-      scheduleFlush: () => {},
     };
 
     let capturedContext: RuntimeContext | null = null;
@@ -3397,19 +3349,15 @@ describe("withContext", () => {
   });
 
   it("restores previous context after callback", () => {
-    const state1 = createTestState(Box({}));
-    const state2 = createTestState(Box({}));
+    const app1 = createTestState(Box({}));
+    const app2 = createTestState(Box({}));
     const ctx1: RuntimeContext = {
-      state: state1,
+      app: app1,
       currentScope: createTestScope([]),
-      scheduleRelayout: () => {},
-      scheduleFlush: () => {},
     };
     const ctx2: RuntimeContext = {
-      state: state2,
+      app: app2,
       currentScope: createTestScope([]),
-      scheduleRelayout: () => {},
-      scheduleFlush: () => {},
     };
 
     setActiveContext(ctx1);

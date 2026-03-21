@@ -149,7 +149,7 @@ export function Text(props: TextProps): Node {
     if (ctx) {
       createEffect(() => {
         getContent(); // Track the content signal
-        ctx.scheduleFlush(); // Schedule repaint when it changes
+        ctx.app.scheduleFlush(); // Schedule repaint when it changes
       });
     }
   }
