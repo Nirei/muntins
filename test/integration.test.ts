@@ -15,7 +15,7 @@ import {
   App,
   onCleanup,
 } from "../src/index.ts";
-import { Input } from "../src/ui/input.ts";
+import { Input } from "../src/ui/Input.ts";
 
 /**
  * Virtual terminal screen that simulates a real terminal.

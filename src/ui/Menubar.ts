@@ -5,7 +5,7 @@ import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Show, Text } from "../core/runtime.ts";
 import { createSignal } from "../core/signals.ts";
-import { Popover } from "./popover.ts";
+import { Popover } from "./Popover.ts";
 
 /**
  * A single menu item with label, optional shortcut, and action.

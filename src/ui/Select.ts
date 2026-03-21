@@ -5,7 +5,7 @@ import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
 import { type MaybeAccessor, createSignal, resolve } from "../core/signals.ts";
-import { Popover } from "./popover.ts";
+import { Popover } from "./Popover.ts";
 
 /**
  * A single option in the Select dropdown.

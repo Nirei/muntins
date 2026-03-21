@@ -2,8 +2,8 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { App, Box, Text, createRef } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
-import { Button } from "../../src/ui/button.ts";
-import { Drawer } from "../../src/ui/drawer.ts";
+import { Button } from "../../src/ui/Button.ts";
+import { Dialog } from "../../src/ui/Dialog.ts";
 
 // Mock stdin for mount tests
 interface MockStdin {
@@ -105,7 +105,23 @@ function createMockStdout(cols = 80, rows = 24): MockStdout {
   return stdout;
 }
 
-describe("Drawer", () => {
+// Helper to create a key event
+function createKeyEvent(
+  name: string,
+  options: Partial<{ shift: boolean }> = {},
+) {
+  return {
+    type: "key" as const,
+    name,
+    char: name.length === 1 ? name : "",
+    ctrl: false,
+    alt: false,
+    shift: options.shift ?? false,
+    sequence: name,
+  };
+}
+
+describe("Dialog", () => {
   describe("conditional rendering", () => {
     it("not rendered when open is false", () => {
       const mockStdin = createMockStdin();
@@ -115,9 +131,9 @@ describe("Drawer", () => {
         () =>
           Box({
             children: [
-              Drawer({
+              Dialog({
                 open: false,
-                children: Text({ content: "DrawerContent" }),
+                children: Text({ content: "DialogContent" }),
               }),
             ],
           }),
@@ -127,8 +143,8 @@ describe("Drawer", () => {
         },
       );
 
-      // Drawer content should not appear in output when closed
-      assert.ok(!mockStdout.written.includes("DrawerContent"));
+      // Dialog content should not appear in output when closed
+      assert.ok(!mockStdout.written.includes("DialogContent"));
       app.unmount();
     });
 
@@ -140,9 +156,9 @@ describe("Drawer", () => {
         () =>
           Box({
             children: [
-              Drawer({
+              Dialog({
                 open: true,
-                children: Text({ content: "DrawerContent" }),
+                children: Text({ content: "DialogContent" }),
               }),
             ],
           }),
@@ -152,12 +168,14 @@ describe("Drawer", () => {
         },
       );
 
-      // Drawer content should appear in output when open
-      assert.ok(mockStdout.written.includes("DrawerContent"));
+      // Dialog content should appear in output when open
+      assert.ok(mockStdout.written.includes("DialogContent"));
       app.unmount();
     });
 
-    it("reactive open prop controls drawer visibility", () => {
+    it("reactive open prop controls dialog visibility", () => {
+      // Test that dialog responds to reactive open prop
+      // When open is a getter function, dialog checks it each render
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
       const [isOpen, setIsOpen] = createSignal(true);
@@ -166,9 +184,9 @@ describe("Drawer", () => {
         () =>
           Box({
             children: [
-              Drawer({
+              Dialog({
                 open: isOpen,
-                children: Text({ content: "DrawerContent" }),
+                children: Text({ content: "DialogContent" }),
               }),
             ],
           }),
@@ -179,9 +197,9 @@ describe("Drawer", () => {
       );
 
       // Initially open - should be visible
-      assert.ok(mockStdout.written.includes("DrawerContent"));
+      assert.ok(mockStdout.written.includes("DialogContent"));
 
-      // Close the drawer (signal update)
+      // Close the dialog (signal update)
       setIsOpen(false);
 
       // The Show component disposes the child when signal becomes false
@@ -200,12 +218,12 @@ describe("Drawer", () => {
         () =>
           Box({
             children: [
-              Drawer({
+              Dialog({
                 open: true,
                 onClose: () => {
                   closeCalled = true;
                 },
-                children: Text({ content: "Drawer" }),
+                children: Text({ content: "Dialog" }),
               }),
             ],
           }),
@@ -222,7 +240,7 @@ describe("Drawer", () => {
       app.unmount();
     });
 
-    it("other keys do not close drawer", () => {
+    it("other keys do not close dialog", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
       let closeCalled = false;
@@ -231,12 +249,12 @@ describe("Drawer", () => {
         () =>
           Box({
             children: [
-              Drawer({
+              Dialog({
                 open: true,
                 onClose: () => {
                   closeCalled = true;
                 },
-                children: Text({ content: "Drawer" }),
+                children: Text({ content: "Dialog" }),
               }),
             ],
           }),
@@ -254,228 +272,6 @@ describe("Drawer", () => {
     });
   });
 
-  describe("side positioning", () => {
-    it("defaults to right side", () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
-
-      const app = App.mount(
-        () =>
-          Box({
-            children: [
-              Drawer({
-                open: true,
-                children: Text({ content: "RightDrawer" }),
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-        },
-      );
-
-      // Drawer content should be rendered
-      assert.ok(mockStdout.written.includes("RightDrawer"));
-      app.unmount();
-    });
-
-    it("appears from left side when specified", () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
-
-      const app = App.mount(
-        () =>
-          Box({
-            children: [
-              Drawer({
-                open: true,
-                side: "left",
-                children: Text({ content: "LeftDrawer" }),
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-        },
-      );
-
-      // Drawer content should be rendered
-      assert.ok(mockStdout.written.includes("LeftDrawer"));
-      app.unmount();
-    });
-
-    it("appears from top when specified", () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
-
-      const app = App.mount(
-        () =>
-          Box({
-            children: [
-              Drawer({
-                open: true,
-                side: "top",
-                size: 10, // Must fit within mock viewport (24 rows)
-                children: Text({ content: "TopDrawer" }),
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-        },
-      );
-
-      // Drawer content should be rendered
-      assert.ok(mockStdout.written.includes("TopDrawer"));
-      app.unmount();
-    });
-
-    it("appears from bottom when specified", () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
-
-      const app = App.mount(
-        () =>
-          Box({
-            children: [
-              Drawer({
-                open: true,
-                side: "bottom",
-                size: 10, // Must fit within mock viewport (24 rows)
-                children: Text({ content: "BottomDrawer" }),
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-        },
-      );
-
-      // Drawer content should be rendered
-      assert.ok(mockStdout.written.includes("BottomDrawer"));
-      app.unmount();
-    });
-
-    it("reactive side prop updates position", () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
-      const [side, setSide] = createSignal<"left" | "right">("left");
-
-      const app = App.mount(
-        () =>
-          Box({
-            children: [
-              Drawer({
-                open: true,
-                side: side,
-                children: Text({ content: "SideDrawer" }),
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-        },
-      );
-
-      // Initially left side
-      assert.ok(mockStdout.written.includes("SideDrawer"));
-
-      // Change to right side
-      setSide("right");
-
-      // Should still render
-      app.unmount();
-    });
-  });
-
-  describe("size", () => {
-    it("defaults to size 30", () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
-
-      const app = App.mount(
-        () =>
-          Box({
-            children: [
-              Drawer({
-                open: true,
-                children: Text({ content: "DefaultSize" }),
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-        },
-      );
-
-      // Drawer content should be rendered
-      assert.ok(mockStdout.written.includes("DefaultSize"));
-      app.unmount();
-    });
-
-    it("custom size prop works", () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
-
-      const app = App.mount(
-        () =>
-          Box({
-            children: [
-              Drawer({
-                open: true,
-                size: 40,
-                children: Text({ content: "CustomSize" }),
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-        },
-      );
-
-      // Drawer content should be rendered
-      assert.ok(mockStdout.written.includes("CustomSize"));
-      app.unmount();
-    });
-
-    it("reactive size prop works", () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
-      const [size, setSize] = createSignal(30);
-
-      const app = App.mount(
-        () =>
-          Box({
-            children: [
-              Drawer({
-                open: true,
-                size: size,
-                children: Text({ content: "ReactiveSize" }),
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-        },
-      );
-
-      assert.ok(mockStdout.written.includes("ReactiveSize"));
-
-      // Change size
-      setSize(50);
-
-      app.unmount();
-    });
-  });
-
   describe("structure", () => {
     it("renders via Portal (at root level)", () => {
       const mockStdin = createMockStdin();
@@ -486,7 +282,7 @@ describe("Drawer", () => {
           Box({
             children: [
               Text({ content: "Background" }),
-              Drawer({
+              Dialog({
                 open: true,
                 children: Text({ content: "PortalContent" }),
               }),
@@ -511,7 +307,7 @@ describe("Drawer", () => {
         () =>
           Box({
             children: [
-              Drawer({
+              Dialog({
                 open: true,
                 children: Text({ content: "SingleChild" }),
               }),
@@ -535,7 +331,7 @@ describe("Drawer", () => {
         () =>
           Box({
             children: [
-              Drawer({
+              Dialog({
                 open: true,
                 children: [
                   Text({ content: "Child1" }),
@@ -565,10 +361,11 @@ describe("Drawer", () => {
         () =>
           Box({
             children: [
-              Drawer({
+              Dialog({
                 open: true,
                 children: Text({ content: "Styled" }),
                 style: {
+                  width: 40,
                   paddingTop: 2,
                   paddingStart: 2,
                 },
@@ -581,14 +378,14 @@ describe("Drawer", () => {
         },
       );
 
-      // Drawer renders, style is applied to content box
+      // Dialog renders, style is applied to content box
       assert.ok(mockStdout.written.includes("Styled"));
       app.unmount();
     });
   });
 
   describe("focus trapping", () => {
-    it("Tab navigates within drawer content", () => {
+    it("Tab navigates within dialog content", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
       const buttonRef1 = createRef();
@@ -598,7 +395,7 @@ describe("Drawer", () => {
         () =>
           Box({
             children: [
-              Drawer({
+              Dialog({
                 open: true,
                 children: [
                   Button({ children: "Button1", ref: buttonRef1 }),
@@ -634,7 +431,7 @@ describe("Drawer", () => {
         () =>
           Box({
             children: [
-              Drawer({
+              Dialog({
                 open: isOpen,
                 children: Text({ content: "CleanupContent" }),
               }),
@@ -667,12 +464,12 @@ describe("Drawer", () => {
         () =>
           Box({
             children: [
-              Drawer({
+              Dialog({
                 open: true,
                 children: [
-                  Text({ content: "Navigation" }),
+                  Text({ content: "Confirm" }),
                   Button({
-                    children: "Home",
+                    children: "OK",
                     autoFocus: true,
                     onClick: () => {
                       buttonClicked = true;
@@ -688,8 +485,8 @@ describe("Drawer", () => {
         },
       );
 
-      assert.ok(mockStdout.written.includes("Navigation"));
-      assert.ok(mockStdout.written.includes("Home"));
+      assert.ok(mockStdout.written.includes("Confirm"));
+      assert.ok(mockStdout.written.includes("OK"));
 
       // Press Enter on the focused button
       mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
@@ -707,13 +504,13 @@ describe("Drawer", () => {
         () =>
           Box({
             children: [
-              Drawer({
+              Dialog({
                 open: true,
                 onClose: () => {
                   onCloseCalled = true;
                 },
                 children: Text({
-                  content: "ClosableDrawer",
+                  content: "ClosableDialog",
                   focusable: true,
                   autoFocus: true,
                 }),
@@ -727,7 +524,7 @@ describe("Drawer", () => {
       );
 
       // Initially open
-      assert.ok(mockStdout.written.includes("ClosableDrawer"));
+      assert.ok(mockStdout.written.includes("ClosableDialog"));
 
       // Press Escape (keypress event format)
       mockStdin.emit("keypress", "\x1b", { name: "escape", sequence: "\x1b" });

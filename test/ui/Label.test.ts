@@ -12,8 +12,8 @@ import {
   useFocus,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
-import { Checkbox } from "../../src/ui/checkbox.ts";
-import { Label } from "../../src/ui/label.ts";
+import { Checkbox } from "../../src/ui/Checkbox.ts";
+import { Label } from "../../src/ui/Label.ts";
 
 // Helper to create mock stdin/stdout for mount tests
 function createMockStdin() {

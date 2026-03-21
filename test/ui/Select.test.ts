@@ -2,7 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { App, Box, Text, createRef } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
-import { Select, type SelectOption } from "../../src/ui/select.ts";
+import { Select, type SelectOption } from "../../src/ui/Select.ts";
 
 // Mock stdin for mount tests
 interface MockStdin {

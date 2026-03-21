@@ -10,7 +10,7 @@ import {
   createRef,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
-import { ScrollArea } from "../../src/ui/scroll-area.ts";
+import { ScrollArea } from "../../src/ui/ScrollArea.ts";
 
 // Helper to create mock stdin for mount tests
 function createMockStdin() {

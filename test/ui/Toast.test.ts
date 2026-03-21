@@ -2,7 +2,7 @@ import assert from "node:assert";
 import { describe, it, mock } from "node:test";
 import { App, Box, Text } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
-import { Toast } from "../../src/ui/toast.ts";
+import { Toast } from "../../src/ui/Toast.ts";
 
 // Mock stdin for mount tests
 interface MockStdin {

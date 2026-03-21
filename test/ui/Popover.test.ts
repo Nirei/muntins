@@ -2,8 +2,8 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { App, Box, Text } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
-import { Button } from "../../src/ui/button.ts";
-import { Popover, type PopoverPlacement } from "../../src/ui/popover.ts";
+import { Button } from "../../src/ui/Button.ts";
+import { Popover, type PopoverPlacement } from "../../src/ui/Popover.ts";
 
 // Mock stdin for mount tests
 interface MockStdin {

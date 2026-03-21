@@ -7,7 +7,7 @@ import {
   createRef,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
-import { Checkbox } from "../../src/ui/checkbox.ts";
+import { Checkbox } from "../../src/ui/Checkbox.ts";
 
 describe("Checkbox", () => {
   describe("rendering", () => {

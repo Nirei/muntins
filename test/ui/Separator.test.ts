@@ -20,7 +20,7 @@ import {
   Separator,
   type SeparatorOrientation,
   type SeparatorProps,
-} from "../../src/ui/separator.ts";
+} from "../../src/ui/Separator.ts";
 
 // Helper to convert Node tree to LayoutNode tree for computeLayout
 function toLayoutNode(node: Node): LayoutNode {

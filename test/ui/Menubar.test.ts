@@ -8,7 +8,7 @@ import {
   type MenuItemRenderProps,
   type MenuLabelRenderProps,
   Menubar,
-} from "../../src/ui/menubar.ts";
+} from "../../src/ui/Menubar.ts";
 
 // Mock stdin for mount tests
 interface MockStdin {

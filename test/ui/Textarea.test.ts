@@ -9,7 +9,7 @@ import {
   createRef,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
-import { Textarea } from "../../src/ui/textarea.ts";
+import { Textarea } from "../../src/ui/Textarea.ts";
 
 // Helper to create mock stdin for mount tests
 function createMockStdin() {

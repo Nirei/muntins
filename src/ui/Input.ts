@@ -3,7 +3,7 @@
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import type { MaybeAccessor } from "../core/signals.ts";
-import { Textarea } from "./textarea.ts";
+import { Textarea } from "./Textarea.ts";
 
 /**
  * Props for the Input component.

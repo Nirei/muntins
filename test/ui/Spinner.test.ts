@@ -7,7 +7,7 @@ import {
   DEFAULT_INHERITED_STYLE,
 } from "../../src/core/runtime.ts";
 import { createRoot, createSignal } from "../../src/core/signals.ts";
-import { Spinner } from "../../src/ui/spinner.ts";
+import { Spinner } from "../../src/ui/Spinner.ts";
 
 // Helper to create mock stdin/stdout for mount tests
 function createMockStdin() {

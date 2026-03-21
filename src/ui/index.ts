@@ -1,46 +1,46 @@
 // Public API exports
 
 // Basic components
-export { Label, type LabelProps } from "./label.ts";
-export { Button, type ButtonProps } from "./button.ts";
+export { Label, type LabelProps } from "./Label.ts";
+export { Button, type ButtonProps } from "./Button.ts";
 export {
   Separator,
   type SeparatorProps,
   type SeparatorOrientation,
-} from "./separator.ts";
+} from "./Separator.ts";
 
 // Form controls
-export { Switch, type SwitchProps } from "./switch.ts";
-export { Checkbox, type CheckboxProps } from "./checkbox.ts";
+export { Switch, type SwitchProps } from "./Switch.ts";
+export { Checkbox, type CheckboxProps } from "./Checkbox.ts";
 export {
   RadioGroup,
   type RadioGroupProps,
   type RadioOption,
   type RadioOptionRenderProps,
-} from "./radiogroup.ts";
-export { Input, type InputProps } from "./input.ts";
-export { Textarea, type TextareaProps } from "./textarea.ts";
+} from "./Radiogroup.ts";
+export { Input, type InputProps } from "./Input.ts";
+export { Textarea, type TextareaProps } from "./Textarea.ts";
 export {
   Select,
   type SelectProps,
   type SelectOption,
   type SelectTriggerRenderProps,
   type SelectOptionRenderProps,
-} from "./select.ts";
+} from "./Select.ts";
 
 // Feedback
-export { Progress, type ProgressProps } from "./progress.ts";
-export { Spinner, type SpinnerProps, type SpinnerVariant } from "./spinner.ts";
-export { Toast, type ToastProps, type ToastPosition } from "./toast.ts";
+export { Progress, type ProgressProps } from "./Progress.ts";
+export { Spinner, type SpinnerProps, type SpinnerVariant } from "./Spinner.ts";
+export { Toast, type ToastProps, type ToastPosition } from "./Toast.ts";
 
 // Overlays
-export { Dialog, type DialogProps } from "./dialog.ts";
+export { Dialog, type DialogProps } from "./Dialog.ts";
 export {
   Popover,
   type PopoverProps,
   type PopoverPlacement,
-} from "./popover.ts";
-export { Drawer, type DrawerProps, type DrawerSide } from "./drawer.ts";
+} from "./Popover.ts";
+export { Drawer, type DrawerProps, type DrawerSide } from "./Drawer.ts";
 
 // Navigation
 export {
@@ -51,7 +51,7 @@ export {
   type MenuSeparator,
   type MenuLabelRenderProps,
   type MenuItemRenderProps,
-} from "./menubar.ts";
+} from "./Menubar.ts";
 
 // Layout
-export { ScrollArea, type ScrollAreaProps } from "./scroll-area.ts";
+export { ScrollArea, type ScrollAreaProps } from "./ScrollArea.ts";

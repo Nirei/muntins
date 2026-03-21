@@ -14,7 +14,7 @@ import {
   createRef,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
-import { RadioGroup } from "../../src/ui/radiogroup.ts";
+import { RadioGroup } from "../../src/ui/Radiogroup.ts";
 
 const options = [
   { value: "a", label: "Option A" },

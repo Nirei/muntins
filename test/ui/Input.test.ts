@@ -17,7 +17,7 @@ import {
   createRef,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
-import { Input } from "../../src/ui/input.ts";
+import { Input } from "../../src/ui/Input.ts";
 
 // Helper to convert Node tree to LayoutNode tree for computeLayout
 function toLayoutNode(node: Node): LayoutNode {

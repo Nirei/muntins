@@ -14,7 +14,7 @@ import {
   type Node,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
-import { Progress } from "../../src/ui/progress.ts";
+import { Progress } from "../../src/ui/Progress.ts";
 
 // Helper to convert Node tree to LayoutNode tree for computeLayout
 function toLayoutNode(node: Node): LayoutNode {
