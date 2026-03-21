@@ -22,6 +22,7 @@
  */
 
 import {
+  App,
   Box,
   Button,
   Checkbox,
@@ -37,7 +38,6 @@ import {
   Textarea,
   createRef,
   createSignal,
-  mount,
 } from "../src/index.ts";
 
 // Color palette
@@ -336,7 +336,7 @@ function SettingsPanel() {
   });
 }
 
-function App() {
+function Settings() {
   return Box({
     flexGrow: 1,
     focusable: true,
@@ -355,4 +355,4 @@ function App() {
   });
 }
 
-const app = mount(App, { mouse: true });
+const app = App.mount(Settings, { mouse: true });

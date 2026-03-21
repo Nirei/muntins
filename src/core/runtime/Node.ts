@@ -1,22 +1,12 @@
+import type { Buffer, InheritableColor } from "../buffer.ts";
 import type {
-    Buffer,
-    InheritableColor
-} from "../buffer.ts";
-import type {
-    ActivateEvent,
-    KeyEvent,
-    MouseEvent,
-    ScrollEvent
+  ActivateEvent,
+  KeyEvent,
+  MouseEvent,
+  ScrollEvent,
 } from "../input.ts";
-import type {
-    FlexStyle,
-    LayoutNode
-} from "../layout.ts";
-import type {
-    ClipRect,
-    InheritableBool,
-    InheritedStyle
-} from "../render.ts";
+import type { FlexStyle, LayoutNode } from "../layout.ts";
+import type { ClipRect, InheritableBool, InheritedStyle } from "../render.ts";
 import type { LayoutSignals } from "./binding.ts";
 
 /**
@@ -39,6 +29,33 @@ export function createRef(): Ref {
   return { current: null };
 }
 
+type InheritableProps = {
+  backgroundColor?: InheritableColor | (() => InheritableColor);
+  borderColor?: InheritableColor | (() => InheritableColor);
+  color?: InheritableColor | (() => InheritableColor);
+  bold?: InheritableBool | (() => InheritableBool);
+  dim?: InheritableBool | (() => InheritableBool);
+  italic?: InheritableBool | (() => InheritableBool);
+  underline?: InheritableBool | (() => InheritableBool);
+  strikethrough?: InheritableBool | (() => InheritableBool);
+  inverse?: InheritableBool | (() => InheritableBool);
+};
+
+type MeasureFunction = (
+    width: number,
+    height: number,
+  ) => { width: number; height: number }
+
+type RenderFunction = (
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  buffer: Buffer,
+  inherited: InheritedStyle,
+  clip: ClipRect,
+) => void;
+
 /**
  * Constructor argument for Node.
  * Same shape as Node minus runtime-set fields (_parent, _layout) and methods.
@@ -46,30 +63,9 @@ export function createRef(): Ref {
 export interface NodeInit {
   style: FlexStyle | (() => FlexStyle);
   children?: Node[] | (() => Node[]);
-  measure?: (
-    width: number,
-    height: number,
-  ) => { width: number; height: number };
-  render?: (
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    buffer: Buffer,
-    inherited: InheritedStyle,
-    clip: ClipRect,
-  ) => void;
-  _inheritableProps?: {
-    backgroundColor?: InheritableColor | (() => InheritableColor);
-    borderColor?: InheritableColor | (() => InheritableColor);
-    color?: InheritableColor | (() => InheritableColor);
-    bold?: InheritableBool | (() => InheritableBool);
-    dim?: InheritableBool | (() => InheritableBool);
-    italic?: InheritableBool | (() => InheritableBool);
-    underline?: InheritableBool | (() => InheritableBool);
-    strikethrough?: InheritableBool | (() => InheritableBool);
-    inverse?: InheritableBool | (() => InheritableBool);
-  };
+  measure?: MeasureFunction;
+  render?: RenderFunction;
+  _inheritableProps?: InheritableProps;
   focusable?: boolean;
   autoFocus?: boolean;
   ref?: Ref;
@@ -92,31 +88,10 @@ export interface NodeInit {
 export class Node {
   style!: FlexStyle | (() => FlexStyle);
   children?: Node[] | (() => Node[]);
-  measure?: (
-    width: number,
-    height: number,
-  ) => { width: number; height: number };
-  render?: (
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    buffer: Buffer,
-    inherited: InheritedStyle,
-    clip: ClipRect,
-  ) => void;
+  measure?: MeasureFunction;
+  render?: RenderFunction;
 
-  _inheritableProps?: {
-    backgroundColor?: InheritableColor | (() => InheritableColor);
-    borderColor?: InheritableColor | (() => InheritableColor);
-    color?: InheritableColor | (() => InheritableColor);
-    bold?: InheritableBool | (() => InheritableBool);
-    dim?: InheritableBool | (() => InheritableBool);
-    italic?: InheritableBool | (() => InheritableBool);
-    underline?: InheritableBool | (() => InheritableBool);
-    strikethrough?: InheritableBool | (() => InheritableBool);
-    inverse?: InheritableBool | (() => InheritableBool);
-  };
+  _inheritableProps?: InheritableProps;
 
   _parent?: Node;
 

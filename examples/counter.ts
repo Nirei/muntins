@@ -14,12 +14,12 @@
  */
 
 import {
+  App,
   Box,
   type Color,
   TabFocus,
   Text,
   createSignal,
-  mount,
 } from "../src/index.ts";
 
 const subtle: Color = { type: "palette", index: 240 };
@@ -116,4 +116,4 @@ function Counter() {
   });
 }
 
-const app = mount(() => TabFocus({ children: [Counter()] }));
+const app = App.mount(() => TabFocus({ children: [Counter()] }));
