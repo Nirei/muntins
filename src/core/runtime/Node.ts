@@ -16,7 +16,7 @@ import type {
     InheritableBool,
     InheritedStyle
 } from "../render.ts";
-import type { LayoutSignals } from "./LayoutSignals.ts";
+import type { LayoutSignals } from "./binding.ts";
 
 /**
  * A mutable reference to a node.

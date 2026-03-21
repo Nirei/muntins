@@ -17,8 +17,6 @@ export {
   type MountOptions,
   DEFAULT_MOUNT_OPTIONS,
   type RuntimeContext,
-  type FlushState,
-  type LayoutInfo,
 } from "./runtime/App.ts";
 
 // Focus
@@ -62,11 +60,13 @@ export {
 } from "./runtime/binding.ts";
 
 // Events
-export { routeEvent } from "./runtime/events.ts";
+export { routeEvent, handleEvent } from "./runtime/events.ts";
 
+// Pipeline
+export type { FlushState } from "./runtime/pipeline.ts";
 
 // Layout signals
-export { type LayoutSignals, createLayoutSignals } from "./runtime/LayoutSignals.ts";
+export { type LayoutSignals, createLayoutSignals, type LayoutInfo } from "./runtime/binding.ts";
 
 // Pass-through re-exports from render.ts
 export {

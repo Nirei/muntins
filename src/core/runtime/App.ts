@@ -1,5 +1,4 @@
 import { Buffer } from "../buffer.ts";
-import type { InputEvent } from "../input.ts";
 import { createInputParser } from "../input.ts";
 import { computeLayout, type LayoutResult } from "../layout.ts";
 import type { ClipRect, InheritedStyle } from "../render.ts";
@@ -7,15 +6,14 @@ import {
   DEFAULT_INHERITED_STYLE,
   enterTuiMode,
   exitTuiMode,
-  flushFrame,
 } from "../render.ts";
 import type { Accessor, Setter } from "../signals.ts";
-import { batch, createRoot, createSignal } from "../signals.ts";
-import { bindNodes, clearSubtreeLayoutSignals, updateAllLayoutSignals } from "./binding.ts";
-import { routeEvent } from "./events.ts";
+import { createRoot, createSignal } from "../signals.ts";
+import { bindNodes, clearSubtreeLayoutSignals } from "./binding.ts";
+import { handleEvent } from "./events.ts";
 import { type FocusScope, initializeFocus } from "./focus.ts";
 import type { Node } from "./Node.ts";
-import { paintTree } from "./paint.ts";
+import { type FlushState, doFlush, scheduleFlush, scheduleRelayout } from "./pipeline.ts";
 import { nodeToLayoutNode } from "./tree.ts";
 
 /**
@@ -41,19 +39,6 @@ export const DEFAULT_MOUNT_OPTIONS: Required<MountOptions> = {
   fpsLimit: 240,
 };
 
-/**
- * State for throttled buffer flushing.
- */
-export interface FlushState {
-  active: boolean;
-  scheduled: boolean;
-  lastFlushTime: number;
-  timeout: ReturnType<typeof setTimeout> | null;
-  buffer: Buffer;
-  stdout: NodeJS.WriteStream;
-  fpsLimit: number;
-}
-
 interface HoverState {
   currentNode: Node | null;
 }
@@ -61,7 +46,6 @@ interface HoverState {
 /**
  * Runtime context threaded through component construction via closures.
  * Supports multiple concurrent mount() calls.
- * @internal Exported for testing purposes.
  */
 export interface RuntimeContext {
   app: App;
@@ -71,12 +55,12 @@ export interface RuntimeContext {
 /**
  * A mounted terminal UI application.
  *
- * Owns the component tree, rendering pipeline, input handling, and focus
- * management. Created by `mount()` or `new App()`.
+ * Owns the component tree and coordinates subsystems: rendering pipeline,
+ * input handling, and focus management. Created via `App.mount()`.
  *
  * @example
  * ```ts
- * const app = mount(() => Box({ children: [Text({ content: "hello" })] }));
+ * const app = App.mount(() => Box({ children: [Text({ content: "hello" })] }));
  * // later...
  * app.unmount();
  * ```
@@ -188,7 +172,7 @@ export class App {
     this.inputParser = createInputParser(
       stdin,
       stdout,
-      (event) => this.handleEvent(event),
+      (event) => handleEvent(this, event),
       { mouse: opts.mouse },
     );
 
@@ -236,7 +220,7 @@ export class App {
       return dispose;
     });
 
-    this.doFlush();
+    doFlush(this);
     this.setupSignalHandlers();
   }
 
@@ -264,125 +248,12 @@ export class App {
 
   /** Schedule a flush to repaint the screen. */
   scheduleFlush(): void {
-    const fs = this.flushState;
-    if (fs.scheduled) return;
-    fs.scheduled = true;
-
-    const now = performance.now();
-    const elapsed = now - fs.lastFlushTime;
-    const frameInterval = fs.fpsLimit > 0 ? 1000 / fs.fpsLimit : 0;
-
-    if (frameInterval === 0 || elapsed >= frameInterval) {
-      queueMicrotask(() => this.doFlush());
-    } else {
-      const remaining = frameInterval - elapsed;
-      fs.timeout = setTimeout(() => this.doFlush(), remaining);
-    }
+    scheduleFlush(this);
   }
 
   /** Schedule a relayout for when Show/For create new children. */
   scheduleRelayout(): void {
-    if (this.relayoutScheduled) return;
-    this.relayoutScheduled = true;
-
-    queueMicrotask(() => this.doRelayout());
-  }
-
-  private doFlush(): void {
-    const fs = this.flushState;
-    if (!fs.active) return;
-    fs.scheduled = false;
-    fs.lastFlushTime = performance.now();
-
-    if (fs.timeout) {
-      clearTimeout(fs.timeout);
-      fs.timeout = null;
-    }
-
-    const layoutNode = nodeToLayoutNode(this.root);
-    const layoutResult = computeLayout(
-      layoutNode,
-      fs.stdout.columns,
-      fs.stdout.rows,
-    );
-    this.layoutResult = layoutResult;
-
-    updateAllLayoutSignals(this.root, layoutResult);
-
-    fs.buffer.clear();
-
-    const rootClip: ClipRect = {
-      x: 0,
-      y: 0,
-      width: fs.stdout.columns,
-      height: fs.stdout.rows,
-    };
-    paintTree(
-      this.root,
-      layoutResult,
-      fs.buffer,
-      DEFAULT_INHERITED_STYLE,
-      rootClip,
-      fs.stdout,
-    );
-
-    const output = fs.buffer.flush();
-    if (output.length > 0) {
-      flushFrame(fs.stdout, output);
-    }
-  }
-
-  private doRelayout(): void {
-    this.relayoutScheduled = false;
-
-    const { root, flushState } = this;
-    const { stdout } = flushState;
-
-    const layoutNode = nodeToLayoutNode(root);
-    const layoutResult = computeLayout(layoutNode, stdout.columns, stdout.rows);
-    this.layoutResult = layoutResult;
-
-    updateAllLayoutSignals(root, layoutResult);
-
-    const rootClipAccessor: Accessor<ClipRect> = () => ({
-      x: 0,
-      y: 0,
-      width: stdout.columns,
-      height: stdout.rows,
-    });
-    const rootInheritedAccessor: Accessor<InheritedStyle> = () =>
-      DEFAULT_INHERITED_STYLE;
-
-    bindNodes(
-      root,
-      layoutResult,
-      rootInheritedAccessor,
-      rootClipAccessor,
-      true,
-    );
-
-    this.scheduleFlush();
-  }
-
-  private handleEvent(event: InputEvent): void {
-    if (event.type === "resize") {
-      this.flushState.buffer.resize(event.width, event.height);
-
-      const layoutNode = nodeToLayoutNode(this.root);
-      const layoutResult = computeLayout(layoutNode, event.width, event.height);
-      this.layoutResult = layoutResult;
-
-      updateAllLayoutSignals(this.root, layoutResult);
-
-      this.scheduleFlush();
-      return;
-    }
-
-    batch(() => {
-      routeEvent(this, event);
-    });
-
-    this.scheduleFlush();
+    scheduleRelayout(this);
   }
 
   private setupSignalHandlers(): void {
@@ -414,22 +285,4 @@ export class App {
       process.off("uncaughtException", handleUncaughtException);
     };
   }
-}
-
-/**
- * Layout information for reactive layout access via refs.
- * All values are integers representing terminal cells.
- */
-export interface LayoutInfo {
-  /** Position relative to parent */
-  x: number;
-  y: number;
-  /** Computed width in cells */
-  width: number;
-  /** Computed height in cells */
-  height: number;
-  /** Absolute X position from screen origin */
-  screenX: number;
-  /** Absolute Y position from screen origin */
-  screenY: number;
 }

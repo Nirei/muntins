@@ -10,10 +10,14 @@ import type {
   ScrollEvent,
   ScrollInput,
 } from "../input.ts";
+import { computeLayout } from "../layout.ts";
+import { batch } from "../signals.ts";
 import type { App } from "./App.ts";
+import { updateAllLayoutSignals } from "./binding.ts";
 import { focusNode } from "./focus.ts";
 import type { Node } from "./Node.ts";
-import { buildPathToRoot, hitTest } from "./tree.ts";
+import { scheduleFlush } from "./pipeline.ts";
+import { buildPathToRoot, hitTest, nodeToLayoutNode } from "./tree.ts";
 
 /**
  * Route keyboard input to focused node with bubbling.
@@ -208,4 +212,29 @@ export function routeEvent(app: App, event: InputEvent): void {
       // Handled separately in handleEvent
       break;
   }
+}
+
+/**
+ * Handle incoming input events.
+ * Resize events trigger relayout and repaint; others route to the node tree.
+ */
+export function handleEvent(app: App, event: InputEvent): void {
+  if (event.type === "resize") {
+    app.flushState.buffer.resize(event.width, event.height);
+
+    const layoutNode = nodeToLayoutNode(app.root);
+    const layoutResult = computeLayout(layoutNode, event.width, event.height);
+    app.layoutResult = layoutResult;
+
+    updateAllLayoutSignals(app.root, layoutResult);
+
+    scheduleFlush(app);
+    return;
+  }
+
+  batch(() => {
+    routeEvent(app, event);
+  });
+
+  scheduleFlush(app);
 }

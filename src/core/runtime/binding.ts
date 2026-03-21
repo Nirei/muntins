@@ -1,10 +1,78 @@
+// Binding connects the node tree to computed layout results.
+// Both trees are flattened into parallel lists (same order, same indices),
+// then each node gets reactive layout signals set from its corresponding
+// layout result. This is what makes position/size available to painting.
+
 import type { LayoutResult } from "../layout.ts";
 import type { ClipRect, InheritedStyle } from "../render.ts";
 import { intersectClipRect } from "../render.ts";
 import type { Accessor } from "../signals.ts";
-import { batch } from "../signals.ts";
-import { createLayoutSignals } from "./LayoutSignals.ts";
+import { batch, createSignal } from "../signals.ts";
 import type { Node } from "./Node.ts";
+
+/**
+ * Layout information for reactive layout access via refs.
+ * All values are integers representing terminal cells.
+ */
+export interface LayoutInfo {
+  /** Position relative to parent */
+  x: number;
+  y: number;
+  /** Computed width in cells */
+  width: number;
+  /** Computed height in cells */
+  height: number;
+  /** Absolute X position from screen origin */
+  screenX: number;
+  /** Absolute Y position from screen origin */
+  screenY: number;
+}
+
+/**
+ * Layout signals for reactive layout coordinates.
+ * Created during node binding and updated on resize/relayout.
+ */
+export interface LayoutSignals {
+  x: Accessor<number>;
+  y: Accessor<number>;
+  width: Accessor<number>;
+  height: Accessor<number>;
+  screenX: Accessor<number>;
+  screenY: Accessor<number>;
+  setLayout: (result: LayoutResult) => void;
+}
+
+/**
+ * Creates layout signals for a node.
+ * These signals are updated when layout changes and can be tracked by effects.
+ */
+export function createLayoutSignals(): LayoutSignals {
+  const [x, setX] = createSignal(0);
+  const [y, setY] = createSignal(0);
+  const [width, setWidth] = createSignal(0);
+  const [height, setHeight] = createSignal(0);
+  const [screenX, setScreenX] = createSignal(0);
+  const [screenY, setScreenY] = createSignal(0);
+
+  return {
+    x,
+    y,
+    width,
+    height,
+    screenX,
+    screenY,
+    setLayout(result: LayoutResult) {
+      batch(() => {
+        setX(result.x);
+        setY(result.y);
+        setWidth(result.width);
+        setHeight(result.height);
+        setScreenX(result.screenX);
+        setScreenY(result.screenY);
+      });
+    },
+  };
+}
 import { computeInheritedStyle } from "./paint.ts";
 import {
   flattenNodes,
