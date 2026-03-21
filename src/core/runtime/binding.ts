@@ -74,11 +74,6 @@ export function createLayoutSignals(): LayoutSignals {
   };
 }
 import { computeInheritedStyle } from "./paint.ts";
-import {
-  flattenNodes,
-  resolveNodeChildren,
-  resolveNodeStyle,
-} from "./tree.ts";
 
 type InheritedStyleAccessor = Accessor<InheritedStyle>;
 
@@ -103,7 +98,7 @@ function flattenBindableNodes(
   clipAccessor: Accessor<ClipRect>,
   result: BindableNode[],
 ): void {
-  const style = resolveNodeStyle(node);
+  const style = node.resolveStyle();
 
   if (style.display === "none") {
     return;
@@ -113,7 +108,7 @@ function flattenBindableNodes(
     const wrapperInheritedAccessor: InheritedStyleAccessor = () =>
       computeInheritedStyle(node, inheritedAccessor());
 
-    for (const child of resolveNodeChildren(node)) {
+    for (const child of node.resolveChildren()) {
       flattenBindableNodes(
         child,
         wrapperInheritedAccessor,
@@ -131,7 +126,7 @@ function flattenBindableNodes(
 
   const childClipAccessor: Accessor<ClipRect> = () => {
     const parentClip = clipAccessor();
-    const s = resolveNodeStyle(node);
+    const s = node.resolveStyle();
     const layout = node._layout;
     if (s.overflow === "hidden" && layout) {
       return intersectClipRect(parentClip, {
@@ -144,7 +139,7 @@ function flattenBindableNodes(
     return parentClip;
   };
 
-  for (const child of resolveNodeChildren(node)) {
+  for (const child of node.resolveChildren()) {
     flattenBindableNodes(
       child,
       childInheritedAccessor,
@@ -167,7 +162,7 @@ function flattenLayoutResultsInner(
   startIndex: number,
   result: LayoutResult[],
 ): number {
-  const style = resolveNodeStyle(node);
+  const style = node.resolveStyle();
 
   // display: none nodes still consume a layout slot but we skip them in results
   if (style.display === "none") {
@@ -176,7 +171,7 @@ function flattenLayoutResultsInner(
 
   if (style.display === "contents") {
     let consumed = 0;
-    for (const child of resolveNodeChildren(node)) {
+    for (const child of node.resolveChildren()) {
       consumed += flattenLayoutResultsInner(
         child,
         layoutChildren,
@@ -193,7 +188,7 @@ function flattenLayoutResultsInner(
   result.push(layout);
 
   let childConsumed = 0;
-  for (const child of resolveNodeChildren(node)) {
+  for (const child of node.resolveChildren()) {
     childConsumed += flattenLayoutResultsInner(
       child,
       layout.children,
@@ -213,11 +208,11 @@ function flattenLayoutResults(
   root: Node,
   result: LayoutResult[],
 ): void {
-  const rootStyle = resolveNodeStyle(root);
+  const rootStyle = root.resolveStyle();
 
   if (rootStyle.display === "contents") {
     let consumed = 0;
-    for (const child of resolveNodeChildren(root)) {
+    for (const child of root.resolveChildren()) {
       consumed += flattenLayoutResultsInner(
         child,
         layoutResult.children,
@@ -284,7 +279,7 @@ export function updateAllLayoutSignals(
   layoutResult: LayoutResult,
 ): void {
   const nodes: Node[] = [];
-  flattenNodes(root, nodes);
+  root.flatten(nodes);
 
   const layouts: LayoutResult[] = [];
   flattenLayoutResults(layoutResult, root, layouts);
@@ -305,7 +300,7 @@ export function updateAllLayoutSignals(
 export function clearSubtreeLayoutSignals(node: Node): void {
   node._layout = undefined;
 
-  for (const child of resolveNodeChildren(node)) {
+  for (const child of node.resolveChildren()) {
     clearSubtreeLayoutSignals(child);
   }
 }

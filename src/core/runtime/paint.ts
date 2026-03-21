@@ -7,7 +7,6 @@ import {
   resolveInheritable,
 } from "../render.ts";
 import type { Node } from "./Node.ts";
-import { resolveNodeChildren, resolveNodeStyle } from "./tree.ts";
 
 /**
  * Compute resolved inherited style from a node's inheritable props.
@@ -55,7 +54,7 @@ function paintNode(
   clip: ClipRect,
   stdout: NodeJS.WriteStream,
 ): number {
-  const style = resolveNodeStyle(node);
+  const style = node.resolveStyle();
 
   // display: none nodes don't render but DO consume a layout slot
   if (style.display === "none") {
@@ -68,7 +67,7 @@ function paintNode(
     const wrapperInherited = computeInheritedStyle(node, inherited);
     let consumed = 0;
 
-    for (const child of resolveNodeChildren(node)) {
+    for (const child of node.resolveChildren()) {
       consumed += paintNode(
         child,
         layoutChildren,
@@ -113,7 +112,7 @@ function paintNode(
 
   // Recurse into children using this node's layout children
   let childIndex = 0;
-  for (const child of resolveNodeChildren(node)) {
+  for (const child of node.resolveChildren()) {
     childIndex += paintNode(
       child,
       layoutResult.children,
@@ -139,13 +138,13 @@ export function paintTree(
   clip: ClipRect,
   stdout: NodeJS.WriteStream,
 ): void {
-  const rootStyle = resolveNodeStyle(root);
+  const rootStyle = root.resolveStyle();
 
   if (rootStyle.display === "contents") {
     const wrapperInherited = computeInheritedStyle(root, inherited);
     let childIndex = 0;
 
-    for (const child of resolveNodeChildren(root)) {
+    for (const child of root.resolveChildren()) {
       childIndex += paintNode(
         child,
         layoutResult.children,

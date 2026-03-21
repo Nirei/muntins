@@ -10,7 +10,8 @@ import {
 import { type KeyEvent, isPrintable } from "../core/input.ts";
 import { DEFAULT_FLEX_STYLE, type FlexStyle } from "../core/layout.ts";
 import { isInClipRect } from "../core/render.ts";
-import type { ClipRect, InheritedStyle, Node, Ref } from "../core/runtime.ts";
+import { Node } from "../core/runtime.ts";
+import type { ClipRect, InheritedStyle, Ref } from "../core/runtime.ts";
 import { App, Box } from "../core/runtime.ts";
 import {
   type Accessor,
@@ -373,8 +374,8 @@ export function Textarea(props: TextareaProps): Node {
     return focusedNodeAccessor() === focusableNode;
   };
 
-  const contentNode: Node = {
-    get style() {
+  const contentNode = new Node({
+    style: () => {
       const val = getValue();
       const lineCount = val.length === 0 ? 1 : val.split("\n").length;
 
@@ -448,7 +449,7 @@ export function Textarea(props: TextareaProps): Node {
         clip,
       );
     },
-  };
+  });
 
   const maxHeight = getMaxHeight();
 
@@ -472,12 +473,12 @@ export function Textarea(props: TextareaProps): Node {
     };
     focusableNode = Box(boxProps as Parameters<typeof Box>[0]);
   } else {
-    focusableNode = {
+    focusableNode = new Node({
       ...contentNode,
       focusable: props.focusable ?? true,
       autoFocus: props.autoFocus,
       onKeyPress: handleKeyPress,
-    };
+    });
   }
 
   if (props.ref) {

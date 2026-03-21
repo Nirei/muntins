@@ -30,13 +30,12 @@ import {
   For,
   type InheritedStyle,
   type LayoutInfo,
-  type Node,
+  Node,
   type RuntimeContext,
   Show,
   TabFocus,
   Text,
   type WrapMode,
-  buildPathToRoot,
   cleanupSubtreeState,
   collectFocusableInScope,
   createRef,
@@ -47,7 +46,6 @@ import {
   focusPrev,
   hitTest,
   initializeFocus,
-  isNodeInSubtree,
   lineDisplayWidth,
   measureText,
   truncateLine,
@@ -70,7 +68,7 @@ describe("runtime core types", () => {
 
   it("createRef.current is mutable", () => {
     const ref = createRef();
-    const node: Node = { style: DEFAULT_FLEX_STYLE };
+    const node: Node = new Node({ style: DEFAULT_FLEX_STYLE });
     ref.current = node;
     assert.strictEqual(ref.current, node);
   });
@@ -188,8 +186,8 @@ describe("Box", () => {
     const child = Box({});
     const parent = Box({ children: [child] });
 
-    assert.strictEqual(parent.children?.length, 1);
-    assert.strictEqual(parent.children?.[0], child);
+    assert.strictEqual(parent.resolveChildren().length, 1);
+    assert.strictEqual(parent.resolveChildren()[0], child);
   });
 
   it("has no measure function", () => {
@@ -1186,7 +1184,7 @@ describe("Show", () => {
         fallback: () => Text({ content: "no" }),
       });
 
-      assert.strictEqual(node.children?.length, 1);
+      assert.strictEqual(node.resolveChildren().length, 1);
       dispose();
       return dispose;
     });
@@ -1201,7 +1199,7 @@ describe("Show", () => {
         fallback: () => Text({ content: "no" }),
       });
 
-      assert.strictEqual(node.children?.length, 1);
+      assert.strictEqual(node.resolveChildren().length, 1);
       dispose();
       return dispose;
     });
@@ -1215,7 +1213,7 @@ describe("Show", () => {
         children: () => Text({ content: "yes" }),
       });
 
-      assert.strictEqual(node.children?.length, 0);
+      assert.strictEqual(node.resolveChildren().length, 0);
       dispose();
       return dispose;
     });
@@ -1254,9 +1252,9 @@ describe("Show", () => {
         fallback: () => Text({ content: "no" }),
       });
 
-      const firstChild = node.children?.[0];
+      const firstChild = node.resolveChildren()[0];
       setCond(false);
-      const secondChild = node.children?.[0];
+      const secondChild = node.resolveChildren()[0];
 
       assert.notStrictEqual(firstChild, secondChild);
       dispose();
@@ -1315,7 +1313,7 @@ describe("Show", () => {
         children: () => Text({ content: "yes" }),
       });
 
-      const child = node.children?.[0];
+      const child = node.resolveChildren()[0];
       assert.strictEqual(child?._parent, node);
       dispose();
       return dispose;
@@ -1345,7 +1343,7 @@ describe("Show", () => {
       // Helper to recursively resolve styles for layout
       const toLayoutNode = (node: Node): LayoutNode => ({
         style: typeof node.style === "function" ? node.style() : node.style,
-        children: node.children?.map(toLayoutNode),
+        children: node.resolveChildren().map(toLayoutNode),
         measure: node.measure,
       });
 
@@ -1383,7 +1381,7 @@ describe("For", () => {
         render: (item) => Text({ content: item }),
       });
 
-      assert.strictEqual(node.children?.length, 3);
+      assert.strictEqual(node.resolveChildren().length, 3);
       dispose();
       return dispose;
     });
@@ -1397,10 +1395,10 @@ describe("For", () => {
         render: (item) => Text({ content: item }),
       });
 
-      assert.strictEqual(node.children?.length, 2);
+      assert.strictEqual(node.resolveChildren().length, 2);
 
       setItems(["a", "b", "c"]);
-      assert.strictEqual(node.children?.length, 3);
+      assert.strictEqual(node.resolveChildren().length, 3);
       dispose();
       return dispose;
     });
@@ -1415,7 +1413,7 @@ describe("For", () => {
       });
 
       setItems(["a", "c"]);
-      assert.strictEqual(node.children?.length, 2);
+      assert.strictEqual(node.resolveChildren().length, 2);
       dispose();
       return dispose;
     });
@@ -1453,14 +1451,14 @@ describe("For", () => {
         render: (item) => Text({ content: item }),
       });
 
-      const originalNodes = [...(node.children ?? [])];
+      const originalNodes = [...node.resolveChildren()];
 
       setItems(["c", "b", "a"]); // Reorder
 
       // Same nodes, different order
-      assert.strictEqual(node.children?.length, 3);
+      assert.strictEqual(node.resolveChildren().length, 3);
       for (const orig of originalNodes) {
-        assert.ok(node.children?.includes(orig));
+        assert.ok(node.resolveChildren().includes(orig));
       }
       dispose();
       return dispose;
@@ -1501,7 +1499,7 @@ describe("For", () => {
         render: (item) => Text({ content: item }),
       });
 
-      assert.strictEqual(node.children?.length, 0);
+      assert.strictEqual(node.resolveChildren().length, 0);
       dispose();
       return dispose;
     });
@@ -1524,7 +1522,7 @@ describe("For", () => {
         render: (item) => Text({ content: () => item().name }),
       });
 
-      const originalNodes = [...(node.children ?? [])];
+      const originalNodes = [...node.resolveChildren()];
 
       // Replace with new objects but same IDs
       setItems([
@@ -1533,9 +1531,9 @@ describe("For", () => {
       ]);
 
       // Same nodes (by key), different order
-      assert.strictEqual(node.children?.length, 2);
+      assert.strictEqual(node.resolveChildren().length, 2);
       for (const orig of originalNodes) {
-        assert.ok(node.children?.includes(orig));
+        assert.ok(node.resolveChildren().includes(orig));
       }
       dispose();
       return dispose;
@@ -1550,7 +1548,7 @@ describe("For", () => {
         render: (item) => Text({ content: item }),
       });
 
-      for (const child of node.children ?? []) {
+      for (const child of node.resolveChildren()) {
         assert.strictEqual(child._parent, node);
       }
       dispose();
@@ -1568,8 +1566,8 @@ describe("For", () => {
       });
 
       // Each occurrence gets its own node
-      assert.strictEqual(node.children?.length, 2);
-      assert.notStrictEqual(node.children?.[0], node.children?.[1]);
+      assert.strictEqual(node.resolveChildren().length, 2);
+      assert.notStrictEqual(node.resolveChildren()[0], node.resolveChildren()[1]);
       dispose();
       return dispose;
     });
@@ -1648,35 +1646,35 @@ describe("For", () => {
   });
 });
 
-describe("isNodeInSubtree", () => {
+describe("isInSubtree", () => {
   it("returns true when node is the subtree root", () => {
     const node = Box({});
-    assert.strictEqual(isNodeInSubtree(node, node), true);
+    assert.strictEqual(node.isInSubtree(node), true);
   });
 
   it("returns true when node is a child of subtree root", () => {
     const child = Text({ content: "child" });
     const parent = Box({ children: [child] });
-    assert.strictEqual(isNodeInSubtree(child, parent), true);
+    assert.strictEqual(child.isInSubtree(parent), true);
   });
 
   it("returns true when node is deeply nested", () => {
     const leaf = Text({ content: "leaf" });
     const middle = Box({ children: [leaf] });
     const root = Box({ children: [middle] });
-    assert.strictEqual(isNodeInSubtree(leaf, root), true);
+    assert.strictEqual(leaf.isInSubtree(root), true);
   });
 
   it("returns false when node is not in subtree", () => {
     const node1 = Box({});
     const node2 = Box({});
-    assert.strictEqual(isNodeInSubtree(node1, node2), false);
+    assert.strictEqual(node1.isInSubtree(node2), false);
   });
 
   it("returns false when node is parent of subtree root", () => {
     const child = Text({ content: "child" });
     const parent = Box({ children: [child] });
-    assert.strictEqual(isNodeInSubtree(parent, child), false);
+    assert.strictEqual(parent.isInSubtree(child), false);
   });
 });
 
@@ -2437,7 +2435,7 @@ describe("resize handling", () => {
   });
 });
 
-describe("buildPathToRoot", () => {
+describe("pathToRoot", () => {
   it("returns path from target to root via parent pointers", () => {
     const grandchild = Text({ content: "grandchild" });
     const child = Box({ children: [grandchild] });
@@ -2448,7 +2446,7 @@ describe("buildPathToRoot", () => {
     // child._parent === root
     // root._parent === undefined
 
-    const path = buildPathToRoot(grandchild);
+    const path = grandchild.pathToRoot();
 
     assert.strictEqual(path.length, 3);
     assert.strictEqual(path[0], grandchild);
@@ -2460,7 +2458,7 @@ describe("buildPathToRoot", () => {
     const root = Text({ content: "root" });
     // No parent set
 
-    const path = buildPathToRoot(root);
+    const path = root.pathToRoot();
 
     assert.strictEqual(path.length, 1);
     assert.strictEqual(path[0], root);

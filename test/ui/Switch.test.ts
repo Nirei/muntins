@@ -91,7 +91,7 @@ describe("Switch", () => {
       const node = Switch({ checked: false });
 
       // Get the Text child node
-      const textNode = node.children?.[0];
+      const textNode = node.resolveChildren()?.[0];
       assert.ok(textNode?.render);
 
       const buffer = new RenderBuffer(2, 1);
@@ -112,7 +112,7 @@ describe("Switch", () => {
     it("renders on state ( ■) when checked: true", () => {
       const node = Switch({ checked: true });
 
-      const textNode = node.children?.[0];
+      const textNode = node.resolveChildren()?.[0];
       assert.ok(textNode?.render);
 
       const buffer = new RenderBuffer(2, 1);
@@ -134,7 +134,7 @@ describe("Switch", () => {
       const [checked, setChecked] = createSignal(false);
       const node = Switch({ checked });
 
-      const textNode = node.children?.[0];
+      const textNode = node.resolveChildren()?.[0];
       assert.ok(textNode?.render);
 
       const buffer = new RenderBuffer(2, 1);
@@ -354,7 +354,7 @@ describe("Switch", () => {
     it("disabled switch renders with dim", () => {
       const node = Switch({ checked: false, disabled: true });
 
-      const textNode = node.children?.[0];
+      const textNode = node.resolveChildren()?.[0];
       assert.ok(textNode?._inheritableProps?.dim);
 
       // The dim prop should be a getter that returns true
@@ -448,7 +448,7 @@ describe("Switch", () => {
     it("measures as width 2", () => {
       const node = Switch({ checked: false });
 
-      const textNode = node.children?.[0];
+      const textNode = node.resolveChildren()?.[0];
       assert.ok(textNode?.measure);
 
       const size = textNode.measure(100, 100);

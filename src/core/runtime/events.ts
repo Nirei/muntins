@@ -15,9 +15,8 @@ import { batch } from "../signals.ts";
 import type { App } from "./App.ts";
 import { updateAllLayoutSignals } from "./binding.ts";
 import { focusNode } from "./focus.ts";
-import type { Node } from "./Node.ts";
 import { scheduleFlush } from "./pipeline.ts";
-import { buildPathToRoot, hitTest, nodeToLayoutNode } from "./tree.ts";
+import { hitTest } from "./tree.ts";
 
 /**
  * Route keyboard input to focused node with bubbling.
@@ -29,7 +28,7 @@ function routeKeyEvent(app: App, input: KeyInput): void {
   const focused = app.focusedNode();
   if (!focused) return;
 
-  const path = buildPathToRoot(focused);
+  const path = focused.pathToRoot();
 
   for (const node of path) {
     if (node.onKeyPress) {
@@ -66,7 +65,7 @@ function routeMouseEvent(app: App, input: MouseInput): void {
 
   if (!target) return;
 
-  const path = buildPathToRoot(target);
+  const path = target.pathToRoot();
 
   switch (input.action) {
     case "press": {
@@ -120,7 +119,7 @@ function routeScrollEvent(app: App, input: ScrollInput): void {
   const target = hitTest(root, layoutResult, input.x, input.y);
   if (!target) return;
 
-  const path = buildPathToRoot(target);
+  const path = target.pathToRoot();
 
   for (const node of path) {
     if (node.onScroll) {
@@ -141,7 +140,7 @@ function routePasteEvent(app: App, event: PasteEvent): void {
   const focused = app.focusedNode();
   if (!focused) return;
 
-  const path = buildPathToRoot(focused);
+  const path = focused.pathToRoot();
 
   for (const char of graphemes(event.text)) {
     const keyInput: KeyInput = {
@@ -222,7 +221,7 @@ export function handleEvent(app: App, event: InputEvent): void {
   if (event.type === "resize") {
     app.flushState.buffer.resize(event.width, event.height);
 
-    const layoutNode = nodeToLayoutNode(app.root);
+    const layoutNode = app.root.toLayoutNode();
     const layoutResult = computeLayout(layoutNode, event.width, event.height);
     app.layoutResult = layoutResult;
 

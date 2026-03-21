@@ -3,7 +3,7 @@ import { createEffect, createRoot, createSignal, onCleanup } from "../signals.ts
 import { App } from "./App.ts";
 import { clearSubtreeLayoutSignals } from "./binding.ts";
 import { cleanupSubtreeState, registerSubtreeFocusables } from "./focus.ts";
-import type { Node } from "./Node.ts";
+import { Node } from "./Node.ts";
 
 /** Props for For component. */
 export interface ForProps<T> {
@@ -42,12 +42,10 @@ export function For<T>(props: ForProps<T>): Node {
   const itemRoots: Map<unknown, ForItemEntry<T>[]> = new Map();
   const getKey = keyFn ?? ((item: T) => item);
 
-  const container: Node = {
+  const container = new Node({
     style: { ...DEFAULT_FLEX_STYLE, display: "contents" },
-    get children() {
-      return children;
-    },
-  };
+    children: () => children,
+  });
 
   const disposeEntry = (entry: ForItemEntry<T>) => {
     if (ctx) {

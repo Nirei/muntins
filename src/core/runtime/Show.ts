@@ -3,7 +3,7 @@ import { createEffect, createRoot, onCleanup } from "../signals.ts";
 import { App } from "./App.ts";
 import { clearSubtreeLayoutSignals } from "./binding.ts";
 import { cleanupSubtreeState, registerSubtreeFocusables } from "./focus.ts";
-import type { Node } from "./Node.ts";
+import { Node } from "./Node.ts";
 
 /** Props for Show component. */
 export interface ShowProps<T> {
@@ -31,12 +31,10 @@ export function Show<T>(props: ShowProps<T>): Node {
   let currentDispose: (() => void) | null = null;
   let currentChild: Node | null = null;
 
-  const container: Node = {
+  const container = new Node({
     style: { ...DEFAULT_FLEX_STYLE, display: "contents" },
-    get children() {
-      return children;
-    },
-  };
+    children: () => children,
+  });
 
   const disposeChild = () => {
     if (currentDispose) {

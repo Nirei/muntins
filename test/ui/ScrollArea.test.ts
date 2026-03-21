@@ -131,7 +131,7 @@ describe("ScrollArea", () => {
       const style =
         typeof node.style === "function" ? node.style() : node.style;
       assert.strictEqual(style.flexDirection, "row");
-      assert.strictEqual(node.children?.length, 2);
+      assert.strictEqual(node.resolveChildren()?.length, 2);
     });
 
     it("applies height from props", () => {
@@ -169,7 +169,7 @@ describe("ScrollArea", () => {
       });
 
       // Get the scrollbar node (second child)
-      const scrollbar = node.children?.[1];
+      const scrollbar = node.resolveChildren()?.[1];
       assert.ok(scrollbar, "Scrollbar should exist");
       assert.ok(scrollbar.render, "Scrollbar should have render function");
 
@@ -433,8 +433,8 @@ describe("ScrollArea", () => {
 
       // The component should use the provided scrollTop
       // We verify by checking the content box's marginTop
-      const contentContainer = node.children?.[0];
-      const contentBox = contentContainer?.children?.[0];
+      const contentContainer = node.resolveChildren()?.[0];
+      const contentBox = contentContainer?.resolveChildren()?.[0];
       assert.ok(contentBox, "Content box should exist");
 
       const style =
@@ -542,7 +542,7 @@ describe("ScrollArea", () => {
         children: [Text({ content: "1\n2\n3\n4\n5\n6\n7\n8\n9\n10" })],
       });
 
-      const scrollbar = node.children?.[1];
+      const scrollbar = node.resolveChildren()?.[1];
       assert.ok(scrollbar?.render);
 
       const buffer = new RenderBuffer(1, 5);
@@ -578,7 +578,7 @@ describe("ScrollArea", () => {
         children: [Text({ content: "1\n2\n3\n4\n5\n6\n7\n8\n9\n10" })],
       });
 
-      const scrollbar = node.children?.[1];
+      const scrollbar = node.resolveChildren()?.[1];
       assert.ok(scrollbar?.render);
 
       // Render at top

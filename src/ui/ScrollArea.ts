@@ -212,9 +212,10 @@ export function ScrollArea(props: ScrollAreaProps): Node {
         const size = node.measure(1000, 1000);
         return size.height;
       }
-      if (node.children) {
+      const children = node.resolveChildren();
+      if (children.length > 0) {
         let total = 0;
-        for (const child of node.children) {
+        for (const child of children) {
           total += countHeight(child);
         }
         return total;

@@ -49,9 +49,9 @@ describe("overflow clipping", () => {
     const buffer = new RenderBuffer(10, 10);
     const layoutNode = {
       style: typeof parent.style === "function" ? parent.style() : parent.style,
-      children: parent.children?.map((c) => ({
+      children: parent.resolveChildren().map((c) => ({
         style: typeof c.style === "function" ? c.style() : c.style,
-        children: c.children?.map((gc) => ({
+        children: c.resolveChildren().map((gc) => ({
           style: typeof gc.style === "function" ? gc.style() : gc.style,
           measure: gc.measure,
         })),
@@ -234,12 +234,13 @@ describe("nested overflow containers", () => {
     });
 
     // This verifies the structure - the paint pipeline handles the clipping
-    assert.ok(outer.children);
-    assert.strictEqual(outer.children.length, 1);
+    const outerChildren = outer.resolveChildren();
+    assert.ok(outerChildren);
+    assert.strictEqual(outerChildren.length, 1);
     const innerStyle =
-      typeof outer.children[0].style === "function"
-        ? outer.children[0].style()
-        : outer.children[0].style;
+      typeof outerChildren[0].style === "function"
+        ? outerChildren[0].style()
+        : outerChildren[0].style;
     assert.strictEqual(innerStyle.overflow, "hidden");
   });
 });

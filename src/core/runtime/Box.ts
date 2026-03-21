@@ -55,7 +55,7 @@ import {
   onCleanup,
 } from "../signals.ts";
 import { type WrapMode, measureText } from "../text.ts";
-import type { Node, Ref } from "./Node.ts";
+import { Node, type Ref } from "./Node.ts";
 import { Text } from "./Text.ts";
 
 /** Child element that Box can accept - Node, string, or reactive string. */
@@ -128,8 +128,8 @@ export function Box(props: BoxProps): Node {
     return parseBorderProp(borderValue);
   };
 
-  const node: Node = {
-    get style() {
+  const node = new Node({
+    style: () => {
       const resolved: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(styleProps)) {
         resolved[key] =
@@ -156,8 +156,8 @@ export function Box(props: BoxProps): Node {
     onHover,
     onActivate,
     activate: onActivate
-      ? function (this: Node) {
-          const event: ActivateEvent = { type: "activate", target: this };
+      ? () => {
+          const event: ActivateEvent = { type: "activate", target: node };
           onActivate(event);
         }
       : undefined,
@@ -238,7 +238,7 @@ export function Box(props: BoxProps): Node {
             }
           }
         : undefined,
-  };
+  });
 
   if (ref) {
     ref.current = node;

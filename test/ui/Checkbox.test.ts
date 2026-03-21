@@ -14,7 +14,7 @@ describe("Checkbox", () => {
     it("renders unchecked glyph (☐) when checked: false", () => {
       const node = Checkbox({ checked: false });
 
-      const textNode = node.children?.[0];
+      const textNode = node.resolveChildren()[0];
       assert.ok(textNode?.render);
 
       const buffer = new RenderBuffer(1, 1);
@@ -34,7 +34,7 @@ describe("Checkbox", () => {
     it("renders checked glyph (☑) when checked: true", () => {
       const node = Checkbox({ checked: true });
 
-      const textNode = node.children?.[0];
+      const textNode = node.resolveChildren()[0];
       assert.ok(textNode?.render);
 
       const buffer = new RenderBuffer(1, 1);
@@ -55,7 +55,7 @@ describe("Checkbox", () => {
       const [checked, setChecked] = createSignal(false);
       const node = Checkbox({ checked });
 
-      const textNode = node.children?.[0];
+      const textNode = node.resolveChildren()[0];
       assert.ok(textNode?.render);
 
       const buffer = new RenderBuffer(1, 1);
@@ -273,7 +273,7 @@ describe("Checkbox", () => {
     it("disabled checkbox renders with dim", () => {
       const node = Checkbox({ checked: false, disabled: true });
 
-      const textNode = node.children?.[0];
+      const textNode = node.resolveChildren()[0];
       assert.ok(textNode?._inheritableProps?.dim);
 
       // The dim prop should be a getter that returns true
@@ -367,7 +367,7 @@ describe("Checkbox", () => {
     it("measures as width 1", () => {
       const node = Checkbox({ checked: false });
 
-      const textNode = node.children?.[0];
+      const textNode = node.resolveChildren()[0];
       assert.ok(textNode?.measure);
 
       const size = textNode.measure(100, 100);

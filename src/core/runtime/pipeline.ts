@@ -6,7 +6,6 @@ import type { Accessor } from "../signals.ts";
 import type { App } from "./App.ts";
 import { bindNodes, updateAllLayoutSignals } from "./binding.ts";
 import { paintTree } from "./paint.ts";
-import { nodeToLayoutNode } from "./tree.ts";
 
 /**
  * State for throttled buffer flushing.
@@ -36,7 +35,7 @@ export function doFlush(app: App): void {
     fs.timeout = null;
   }
 
-  const layoutNode = nodeToLayoutNode(app.root);
+  const layoutNode = app.root.toLayoutNode();
   const layoutResult = computeLayout(
     layoutNode,
     fs.stdout.columns,
@@ -98,7 +97,7 @@ export function doRelayout(app: App): void {
   const { root, flushState } = app;
   const { stdout } = flushState;
 
-  const layoutNode = nodeToLayoutNode(root);
+  const layoutNode = root.toLayoutNode();
   const layoutResult = computeLayout(layoutNode, stdout.columns, stdout.rows);
   app.layoutResult = layoutResult;
 

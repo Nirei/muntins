@@ -1,7 +1,7 @@
 import { DEFAULT_FLEX_STYLE } from "../layout.ts";
 import { onCleanup } from "../signals.ts";
 import { App } from "./App.ts";
-import type { Node } from "./Node.ts";
+import { Node } from "./Node.ts";
 
 /** Props for Portal component. */
 export interface PortalProps {
@@ -31,8 +31,10 @@ export function Portal(props: PortalProps): Node {
 
   if (root) {
     // Root exists - attach children immediately (dynamic portal via Show/For)
-    if (!root.children) root.children = [];
-    root.children.push(...children);
+    // Root's children is always a static array (created by Box)
+    const rootChildren = root.children as Node[] ?? [];
+    if (!root.children) root.children = rootChildren;
+    rootChildren.push(...children);
     for (const child of children) {
       child._parent = root;
     }
@@ -45,13 +47,13 @@ export function Portal(props: PortalProps): Node {
   onCleanup(() => {
     const currentRoot = app?.root;
     if (currentRoot?.children) {
-      currentRoot.children = currentRoot.children.filter(
-        (c) => !children.includes(c),
+      currentRoot.children = (currentRoot.children as Node[]).filter(
+        (c: Node) => !children.includes(c),
       );
       app?.scheduleRelayout();
     }
   });
 
   // Return invisible placeholder
-  return { style: { ...DEFAULT_FLEX_STYLE, display: "none" } };
+  return new Node({ style: { ...DEFAULT_FLEX_STYLE, display: "none" } });
 }

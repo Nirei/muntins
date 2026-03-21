@@ -122,8 +122,8 @@ describe("Spinner", () => {
 
       assert.ok(node);
       // When label is provided, returns a Box with children
-      assert.ok(node.children);
-      assert.strictEqual(node.children.length, 2);
+      assert.ok(node.resolveChildren());
+      assert.strictEqual(node.resolveChildren().length, 2);
     });
   });
 
@@ -394,11 +394,11 @@ describe("Spinner", () => {
       });
 
       assert.ok(node);
-      assert.ok(node.children);
-      assert.strictEqual(node.children.length, 2);
+      assert.ok(node.resolveChildren());
+      assert.strictEqual(node.resolveChildren().length, 2);
 
       // Check that the second child (label) has correct content
-      const labelNode = node.children[1];
+      const labelNode = node.resolveChildren()[1];
       assert.ok(labelNode.measure);
       const size = labelNode.measure(100, 100);
       assert.strictEqual(size.width, 10); // "Loading..." is 10 chars
@@ -412,8 +412,8 @@ describe("Spinner", () => {
         node = Spinner({ label });
 
         assert.ok(node);
-        assert.ok(node.children);
-        const labelNode = node.children[1];
+        assert.ok(node.resolveChildren());
+        const labelNode = node.resolveChildren()[1];
         assert.ok(labelNode.measure);
 
         // Initial label

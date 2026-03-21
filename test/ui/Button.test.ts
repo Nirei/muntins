@@ -89,7 +89,7 @@ describe("Button", () => {
     it("renders string children as text", () => {
       const node = Button({ children: "Click me" });
 
-      const textNode = node.children?.[0];
+      const textNode = node.resolveChildren()[0];
       assert.ok(textNode?.render);
 
       const buffer = new RenderBuffer(8, 1);
@@ -117,7 +117,7 @@ describe("Button", () => {
       const [label, setLabel] = createSignal("Hello");
       const node = Button({ children: label });
 
-      const textNode = node.children?.[0];
+      const textNode = node.resolveChildren()[0];
       assert.ok(textNode?.render);
 
       const buffer = new RenderBuffer(5, 1);
@@ -162,7 +162,7 @@ describe("Button", () => {
       const node = Button({ children: textChild });
 
       // Should have the Text node directly as child
-      assert.strictEqual(node.children?.[0], textChild);
+      assert.strictEqual(node.resolveChildren()[0], textChild);
     });
 
     it("renders array of Node children", () => {
@@ -170,9 +170,9 @@ describe("Button", () => {
       const child2 = Text({ content: "B" });
       const node = Button({ children: [child1, child2] });
 
-      assert.strictEqual(node.children?.length, 2);
-      assert.strictEqual(node.children?.[0], child1);
-      assert.strictEqual(node.children?.[1], child2);
+      assert.strictEqual(node.resolveChildren().length, 2);
+      assert.strictEqual(node.resolveChildren()[0], child1);
+      assert.strictEqual(node.resolveChildren()[1], child2);
     });
   });
 
@@ -363,7 +363,7 @@ describe("Button", () => {
       // Button is intentionally unstyled - user controls disabled appearance
       const node = Button({ children: "Disabled", disabled: true });
 
-      const textNode = node.children?.[0];
+      const textNode = node.resolveChildren()[0];
       // Text nodes wrapped by Box don't have dim applied automatically
       assert.ok(textNode);
       // No dim styling should be applied - that's up to the user
@@ -456,7 +456,7 @@ describe("Button", () => {
     it("string children measure correctly", () => {
       const node = Button({ children: "Hello" });
 
-      const textNode = node.children?.[0];
+      const textNode = node.resolveChildren()[0];
       assert.ok(textNode?.measure);
 
       const size = textNode.measure(100, 100);

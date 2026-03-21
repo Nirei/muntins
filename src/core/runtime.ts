@@ -9,7 +9,7 @@ export { Show, type ShowProps } from "./runtime/Show.ts";
 export { For, type ForProps } from "./runtime/For.ts";
 
 // Node
-export { type Node, type Ref, createRef } from "./runtime/Node.ts";
+export { Node, type NodeInit, type Ref, createRef } from "./runtime/Node.ts";
 
 // App / Context
 export {
@@ -39,15 +39,7 @@ export {
 } from "./runtime/focus.ts";
 
 // Tree
-export {
-  buildPathToRoot,
-  isNodeInSubtree,
-  hitTest,
-  resolveNodeStyle,
-  resolveNodeChildren,
-  flattenNodes,
-  nodeToLayoutNode,
-} from "./runtime/tree.ts";
+export { hitTest } from "./runtime/tree.ts";
 
 // Paint
 export { computeInheritedStyle, paintTree } from "./runtime/paint.ts";

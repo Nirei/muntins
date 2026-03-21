@@ -21,7 +21,7 @@ import {
     createEffect
 } from "../signals.ts";
 import { type WrapMode, measureText } from "../text.ts";
-import type { Node, Ref } from "./Node.ts";
+import { Node, type Ref } from "./Node.ts";
 
 /** Props for Text component. */
 export interface TextProps extends Partial<ReactiveTextStyle> {
@@ -73,7 +73,7 @@ export function Text(props: TextProps): Node {
   const getWrap = (): WrapMode =>
     (typeof wrap === "function" ? wrap() : wrap) ?? "wrap";
 
-  const node: Node = {
+  const node = new Node({
     style: DEFAULT_FLEX_STYLE,
     focusable,
     autoFocus,
@@ -85,8 +85,8 @@ export function Text(props: TextProps): Node {
     onHover,
     onActivate,
     activate: onActivate
-      ? function (this: Node) {
-          const event: ActivateEvent = { type: "activate", target: this };
+      ? () => {
+          const event: ActivateEvent = { type: "activate", target: node };
           onActivate(event);
         }
       : undefined,
@@ -137,7 +137,7 @@ export function Text(props: TextProps): Node {
         clip,
       );
     },
-  };
+  });
 
   if (ref) {
     ref.current = node;

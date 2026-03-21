@@ -13,7 +13,6 @@ export interface FocusScope {
 }
 import { Box } from "./Box.ts";
 import type { Node, Ref } from "./Node.ts";
-import { isNodeInSubtree, resolveNodeChildren } from "./tree.ts";
 
 /** Internal type for nodes that may have a focus scope attached */
 interface NodeWithFocusScope extends Node {
@@ -45,7 +44,7 @@ export function collectFocusableInScope(node: Node, scope: FocusScope): void {
     scope.focusableNodes.push(node);
   }
 
-  for (const child of resolveNodeChildren(node)) {
+  for (const child of node.resolveChildren()) {
     collectFocusableInScope(child, scope);
   }
 }
@@ -123,16 +122,13 @@ export function cleanupSubtreeState(
   subtreeRoot: Node,
 ): void {
   const focused = app.focusedNode();
-  if (focused && isNodeInSubtree(focused, subtreeRoot)) {
+  if (focused?.isInSubtree(subtreeRoot)) {
     app.setFocusedNode(null);
   }
 
   unregisterSubtreeFocusables(app, subtreeRoot);
 
-  if (
-    app.hoverState.currentNode &&
-    isNodeInSubtree(app.hoverState.currentNode, subtreeRoot)
-  ) {
+  if (app.hoverState.currentNode?.isInSubtree(subtreeRoot)) {
     if (app.hoverState.currentNode.onHover) {
       app.hoverState.currentNode.onHover(false);
     }
@@ -398,7 +394,7 @@ function collectAllFocusables(node: Node): Node[] {
     result.push(node);
   }
 
-  for (const child of resolveNodeChildren(node)) {
+  for (const child of node.resolveChildren()) {
     result.push(...collectAllFocusables(child));
   }
 

@@ -14,7 +14,6 @@ import { handleEvent } from "./events.ts";
 import { type FocusScope, initializeFocus } from "./focus.ts";
 import type { Node } from "./Node.ts";
 import { type FlushState, doFlush, scheduleFlush, scheduleRelayout } from "./pipeline.ts";
-import { nodeToLayoutNode } from "./tree.ts";
 
 /**
  * Configuration for mounting an application.
@@ -185,9 +184,10 @@ export class App {
       this.root = App.withContext(ctx, () => component());
 
       // Attach pending portal children to root
+      const rootChildren = (this.root.children as Node[] ?? []);
+      if (!this.root.children) this.root.children = rootChildren;
       for (const children of this.pendingPortalAttachments) {
-        if (!this.root.children) this.root.children = [];
-        this.root.children.push(...children);
+        rootChildren.push(...children);
         for (const child of children) {
           child._parent = this.root;
         }
@@ -197,7 +197,7 @@ export class App {
       initializeFocus(this);
 
       buffer.clear();
-      const layoutNode = nodeToLayoutNode(this.root);
+      const layoutNode = this.root.toLayoutNode();
       const layoutResult = computeLayout(layoutNode, stdout.columns, stdout.rows);
       this.layoutResult = layoutResult;
 

@@ -66,7 +66,7 @@ export { Show, type ShowProps } from "./runtime/Show.ts";
 export { For, type ForProps } from "./runtime/For.ts";
 
 // Runtime - Node
-export { type Node, type Ref, createRef } from "./runtime/Node.ts";
+export { Node, type Ref, createRef } from "./runtime/Node.ts";
 
 // Runtime - App / Context
 export {
