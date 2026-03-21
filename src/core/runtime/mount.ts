@@ -51,6 +51,7 @@ export interface LayoutInfo {
  */
 function doFlush(state: RuntimeState): void {
   const fs = state.flushState;
+  if (!fs.active) return;
   fs.scheduled = false;
   fs.lastFlushTime = performance.now();
 
@@ -208,6 +209,8 @@ function unmountState(state: RuntimeState, cleanupHandlers?: () => void): void {
   const { options } = state;
   const { stdout } = options;
 
+  state.flushState.active = false;
+
   if (cleanupHandlers) {
     cleanupHandlers();
   }
@@ -246,6 +249,7 @@ export function mount(component: () => Node, options?: MountOptions): App {
     rootDispose: undefined as unknown as () => void,
     layoutResult: null,
     flushState: {
+      active: true,
       scheduled: false,
       lastFlushTime: 0,
       timeout: null,

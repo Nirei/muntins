@@ -41,6 +41,7 @@ export interface FocusScope {
  * State for throttled buffer flushing.
  */
 export interface FlushState {
+  active: boolean;
   scheduled: boolean;
   lastFlushTime: number;
   timeout: ReturnType<typeof setTimeout> | null;

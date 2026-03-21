@@ -25,6 +25,8 @@ class VirtualScreen {
   private cells: string[][];
   private cursorX = 0;
   private cursorY = 0;
+  private savedCursorX = 0;
+  private savedCursorY = 0;
   private rawOutput = "";
   width: number;
   height: number;
@@ -37,6 +39,10 @@ class VirtualScreen {
     );
   }
 
+  get cursor(): { x: number; y: number } {
+    return { x: this.cursorX, y: this.cursorY };
+  }
+
   write(data: string): void {
     this.rawOutput += data;
 
@@ -47,7 +53,8 @@ class VirtualScreen {
         let j = i + 2;
 
         // Handle optional ? for private mode sequences
-        if (data[j] === "?") {
+        const isPrivate = data[j] === "?";
+        if (isPrivate) {
           j++;
         }
 
@@ -81,10 +88,21 @@ class VirtualScreen {
               }
             }
           }
+        } else if (isPrivate && params === "1049" && command === "h") {
+          // Enter alternate screen — save cursor position
+          this.savedCursorX = this.cursorX;
+          this.savedCursorY = this.cursorY;
+        } else if (isPrivate && params === "1049" && command === "l") {
+          // Exit alternate screen — restore cursor position
+          this.cursorX = this.savedCursorX;
+          this.cursorY = this.savedCursorY;
         }
         // Skip other sequences (SGR, cursor visibility, etc.)
 
         i = j;
+      } else if (data[i] === "\x1b") {
+        // Skip other ESC sequences (consume ESC + next char)
+        i += 2;
       } else if (data[i] >= " " || data[i] === "\t") {
         // Printable character
         if (this.cursorX < this.width && this.cursorY < this.height) {
@@ -182,6 +200,69 @@ function emitKeypress(
 function nextTick(): Promise<void> {
   return new Promise((resolve) => queueMicrotask(resolve));
 }
+
+describe("cursor position", () => {
+  it("restores cursor to pre-mount row after unmount", () => {
+    const { stdin, stdout, screen } = createMockStreams();
+
+    // Simulate cursor at row 10 (not at the top of the screen)
+    stdout.write("\x1b[11;1H");
+
+    const app = mount(() => Text({ content: "Hello" }), { stdin, stdout });
+
+    // After mount, cursor has moved somewhere in the TUI
+    // After unmount, cursor should be back at row 10
+    app.unmount();
+
+    assert.strictEqual(
+      screen.cursor.y,
+      10,
+      `cursor should be restored to row 10 after unmount, got row ${screen.cursor.y}`,
+    );
+  });
+
+  it("does not flush after unmount triggered by event handler", async () => {
+    const { stdin, stdout, screen } = createMockStreams();
+
+    // Simulate cursor at row 10 before the TUI starts
+    stdout.write("\x1b[11;1H");
+
+    // Use a reactive signal so the first flush renders "A" into the front buffer.
+    // When the event handler updates it to "B" and then unmounts, the spurious
+    // post-unmount doFlush would see front="A" vs back="B" and emit cursor-
+    // positioning sequences onto the main screen — moving the cursor away from row 10.
+    const [label, setLabel] = createSignal("A");
+
+    const appRef = { current: null as ReturnType<typeof mount> | null };
+    const app = mount(
+      () =>
+        Box({
+          focusable: true,
+          autoFocus: true,
+          onKeyPress: () => {
+            setLabel("B"); // dirty the front/back diff before unmounting
+            appRef.current?.unmount();
+            return true;
+          },
+          children: [Text({ content: label })],
+        }),
+      { stdin, stdout, fpsLimit: 0 },
+    );
+    appRef.current = app;
+
+    // Trigger unmount via event handler — this exercises the handleEvent bug path
+    emitKeypress(stdin, "q", { name: "q" });
+
+    // fpsLimit:0 schedules flushes via queueMicrotask; wait for that microtask to run
+    await nextTick();
+
+    assert.strictEqual(
+      screen.cursor.y,
+      10,
+      `cursor should be restored to row 10 after event-triggered unmount, got row ${screen.cursor.y}`,
+    );
+  });
+});
 
 describe("integration", () => {
   describe("render pipeline", () => {
