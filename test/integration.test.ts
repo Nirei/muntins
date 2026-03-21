@@ -221,6 +221,62 @@ describe("cursor position", () => {
     );
   });
 
+  it("unmounts immediately when Esc is pressed with mouse mode", async () => {
+    // Create mock streams without readline.emitKeypressEvents — mouse mode
+    // uses UnifiedParser which reads raw data, not readline keypress events.
+    const stdin = Object.assign(new EventEmitter(), {
+      isTTY: true,
+      setRawMode: () => stdin,
+      read: () => null,
+      resume: () => {},
+      pause: () => {},
+    }) as unknown as NodeJS.ReadStream;
+
+    const screen = new VirtualScreen(80, 24);
+    const stdout = Object.assign(new EventEmitter(), {
+      isTTY: true,
+      columns: 80,
+      rows: 24,
+      write: (data: string) => {
+        screen.write(data);
+        return true;
+      },
+    }) as unknown as NodeJS.WriteStream;
+
+    let unmounted = false;
+    const appRef = { current: null as ReturnType<typeof mount> | null };
+    const app = mount(
+      () =>
+        Box({
+          focusable: true,
+          autoFocus: true,
+          onKeyPress: (key) => {
+            if (key.name === "escape") {
+              appRef.current?.unmount();
+              unmounted = true;
+              return true;
+            }
+            return false;
+          },
+          children: [Text({ content: "Hello" })],
+        }),
+      { stdin, stdout, mouse: true },
+    );
+    appRef.current = app;
+
+    // Send raw Esc byte — this is what the terminal sends when Esc is pressed
+    stdin.emit("data", Buffer.from("\x1b"));
+
+    // The UnifiedParser should resolve the standalone Esc within a short timeout,
+    // not wait for the next input event
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    assert.ok(
+      unmounted,
+      "App should unmount after Esc keypress without waiting for another input event",
+    );
+  });
+
   it("does not flush after unmount triggered by event handler", async () => {
     const { stdin, stdout, screen } = createMockStreams();
 
