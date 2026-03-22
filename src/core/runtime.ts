@@ -2,14 +2,21 @@
 // All implementation has moved to src/core/runtime/*.ts submodules.
 
 // Components
-export { Box, type BoxProps, type BoxChild } from "./runtime/Box.ts";
-export { Text, type TextProps } from "./runtime/Text.ts";
-export { Portal, type PortalProps } from "./runtime/Portal.ts";
-export { Show, type ShowProps } from "./runtime/Show.ts";
-export { For, type ForProps } from "./runtime/For.ts";
+export { Box, type BoxProps, type BoxChild } from "./components/Box.ts";
+export { Text, type TextProps } from "./components/Text.ts";
+export { Portal, type PortalProps } from "./components/Portal.ts";
+export { Show, type ShowProps } from "./components/Show.ts";
+export { For, type ForProps } from "./components/For.ts";
 
 // Node
-export { Node, type NodeInit, type Ref, createRef } from "./runtime/Node.ts";
+export {
+  Node,
+  type NodeInit,
+  type Ref,
+  createRef,
+  type LayoutSignals,
+  type LayoutInfo,
+} from "./runtime/Node.ts";
 
 // App / Context
 export {
@@ -20,45 +27,20 @@ export {
 } from "./runtime/App.ts";
 
 // Focus
+export { FocusManager } from "./runtime/FocusManager.ts";
+export type { FocusScope, FocusController } from "./runtime/FocusManager.ts";
 export {
-  type FocusScope,
-  type FocusController,
-  type FocusScopeProps,
-  type TabFocusProps,
   FocusScopeComponent,
-  TabFocus,
-  useFocus,
-  collectFocusableInScope,
-  focusNext,
-  focusPrev,
-  initializeFocus,
-  cleanupSubtreeState,
-  focusNode,
-  registerSubtreeFocusables,
-  unregisterSubtreeFocusables,
-} from "./runtime/focus.ts";
+  type FocusScopeProps,
+} from "./components/FocusScopeComponent.ts";
+export { TabFocus, type TabFocusProps } from "./components/TabFocus.ts";
+export { useFocus } from "./components/useFocus.ts";
 
-// Tree
-export { hitTest } from "./runtime/tree.ts";
+// Renderer
+export { Renderer } from "./runtime/Renderer.ts";
 
-// Paint
-export { computeInheritedStyle, paintTree } from "./runtime/paint.ts";
-
-// Binding
-export {
-  bindNodes,
-  updateAllLayoutSignals,
-  clearSubtreeLayoutSignals,
-} from "./runtime/binding.ts";
-
-// Events
-export { routeEvent, handleEvent } from "./runtime/events.ts";
-
-// Pipeline
-export type { FlushState } from "./runtime/pipeline.ts";
-
-// Layout signals
-export { type LayoutSignals, createLayoutSignals, type LayoutInfo } from "./runtime/binding.ts";
+// EventDispatcher
+export { EventDispatcher } from "./runtime/EventDispatcher.ts";
 
 // Pass-through re-exports from render.ts
 export {

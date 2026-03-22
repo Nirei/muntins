@@ -26,6 +26,7 @@ import {
   DEFAULT_INHERITED_STYLE,
   DEFAULT_MOUNT_OPTIONS,
   type FocusController,
+  FocusManager,
   type FocusScope,
   For,
   type InheritedStyle,
@@ -36,16 +37,10 @@ import {
   TabFocus,
   Text,
   type WrapMode,
-  cleanupSubtreeState,
-  collectFocusableInScope,
   createRef,
   enterTuiMode,
   exitTuiMode,
   flushFrame,
-  focusNext,
-  focusPrev,
-  hitTest,
-  initializeFocus,
   lineDisplayWidth,
   measureText,
   truncateLine,
@@ -2583,7 +2578,7 @@ describe("hit testing", () => {
       children: [],
     };
 
-    assert.strictEqual(hitTest(node, layout, 5, 0), node);
+    assert.strictEqual(node.hitTest(layout, 5, 0), node);
   });
 
   it("returns null for point outside", () => {
@@ -2598,7 +2593,7 @@ describe("hit testing", () => {
       children: [],
     };
 
-    assert.strictEqual(hitTest(node, layout, 15, 0), null);
+    assert.strictEqual(node.hitTest(layout, 15, 0), null);
   });
 
   it("returns deepest child", () => {
@@ -2626,7 +2621,7 @@ describe("hit testing", () => {
       ],
     };
 
-    assert.strictEqual(hitTest(parent, layout, 7, 5), child);
+    assert.strictEqual(parent.hitTest(layout, 7, 5), child);
   });
 
   it("prefers later children (z-order)", () => {
@@ -2665,7 +2660,7 @@ describe("hit testing", () => {
     };
 
     // Point in overlap region should hit child2
-    assert.strictEqual(hitTest(parent, layout, 7, 3), child2);
+    assert.strictEqual(parent.hitTest(layout, 7, 3), child2);
   });
 });
 
@@ -2967,7 +2962,7 @@ describe("collectFocusableInScope", () => {
     });
     const scope = createTestScope([]);
 
-    collectFocusableInScope(root, scope);
+    FocusManager.collectFocusableInScope(root, scope);
 
     assert.deepStrictEqual(scope.focusableNodes, [a, b]);
   });
@@ -2977,7 +2972,7 @@ describe("collectFocusableInScope", () => {
     const outer = Box({ children: [Box({ children: [inner] })] });
     const scope = createTestScope([]);
 
-    collectFocusableInScope(outer, scope);
+    FocusManager.collectFocusableInScope(outer, scope);
 
     assert.deepStrictEqual(scope.focusableNodes, [inner]);
   });
@@ -2995,7 +2990,7 @@ describe("collectFocusableInScope", () => {
     const root = Box({ children: [outer, nestedBox] });
     const scope = createTestScope([]);
 
-    collectFocusableInScope(root, scope);
+    FocusManager.collectFocusableInScope(root, scope);
 
     // Should only collect outer, not inner
     assert.deepStrictEqual(scope.focusableNodes, [outer]);
@@ -3008,7 +3003,7 @@ describe("focusNext", () => {
     const state = createTestState(Box({ children: [a] }));
     const scope = createTestScope([a]);
 
-    focusNext(state, scope);
+    state.focus.focusNext(scope);
 
     assert.strictEqual(state.focusedNode(), a);
     assert.strictEqual(scope.focusedIndex, 0);
@@ -3022,7 +3017,7 @@ describe("focusNext", () => {
     scope.focusedIndex = 0;
     state.setFocusedNode(a);
 
-    focusNext(state, scope);
+    state.focus.focusNext(scope);
 
     assert.strictEqual(state.focusedNode(), b);
     assert.strictEqual(scope.focusedIndex, 1);
@@ -3036,7 +3031,7 @@ describe("focusNext", () => {
     scope.focusedIndex = 1;
     state.setFocusedNode(b);
 
-    focusNext(state, scope);
+    state.focus.focusNext(scope);
 
     assert.strictEqual(state.focusedNode(), a);
     assert.strictEqual(scope.focusedIndex, 0);
@@ -3050,7 +3045,7 @@ describe("focusPrev", () => {
     const state = createTestState(Box({ children: [a, b] }));
     const scope = createTestScope([a, b]);
 
-    focusPrev(state, scope);
+    state.focus.focusPrev(scope);
 
     assert.strictEqual(state.focusedNode(), b);
     assert.strictEqual(scope.focusedIndex, 1);
@@ -3064,7 +3059,7 @@ describe("focusPrev", () => {
     scope.focusedIndex = 1;
     state.setFocusedNode(b);
 
-    focusPrev(state, scope);
+    state.focus.focusPrev(scope);
 
     assert.strictEqual(state.focusedNode(), a);
     assert.strictEqual(scope.focusedIndex, 0);
@@ -3078,7 +3073,7 @@ describe("focusPrev", () => {
     scope.focusedIndex = 0;
     state.setFocusedNode(a);
 
-    focusPrev(state, scope);
+    state.focus.focusPrev(scope);
 
     assert.strictEqual(state.focusedNode(), b);
     assert.strictEqual(scope.focusedIndex, 1);
@@ -3098,7 +3093,7 @@ describe("focus scope nesting", () => {
     state.setFocusedNode(childNode);
 
     // At end of child scope, should escape to parent
-    focusNext(state, childScope);
+    state.focus.focusNext(childScope);
 
     assert.strictEqual(state.focusedNode(), parentNode);
     assert.strictEqual(childScope.focusedIndex, -1); // cleared
@@ -3113,7 +3108,7 @@ describe("focus scope nesting", () => {
     state.setFocusedNode(node);
 
     // Should wrap, not escape
-    focusNext(state, scope);
+    state.focus.focusNext(scope);
 
     assert.strictEqual(state.focusedNode(), node);
     assert.strictEqual(scope.focusedIndex, 0);
@@ -3139,15 +3134,15 @@ describe("focus scope nesting", () => {
     state.setFocusedNode(child1);
 
     // Tab to second child
-    focusNext(state, childScope);
+    state.focus.focusNext(childScope);
     assert.strictEqual(state.focusedNode(), child2, "Should move to child2");
 
     // Tab to third child
-    focusNext(state, childScope);
+    state.focus.focusNext(childScope);
     assert.strictEqual(state.focusedNode(), child3, "Should move to child3");
 
     // Tab again - should wrap since trap is true
-    focusNext(state, childScope);
+    state.focus.focusNext(childScope);
     assert.strictEqual(
       state.focusedNode(),
       child1,
@@ -3160,7 +3155,7 @@ describe("focus scope nesting", () => {
     );
 
     // Continue cycling - should stay in child scope
-    focusNext(state, childScope);
+    state.focus.focusNext(childScope);
     assert.strictEqual(
       state.focusedNode(),
       child2,
@@ -3176,7 +3171,7 @@ describe("autoFocus", () => {
     const root = Box({ children: [a, b] });
     const state = createTestState(root);
 
-    initializeFocus(state);
+    state.focus.initialize(state.root);
 
     assert.strictEqual(state.focusedNode(), b);
     assert.strictEqual(state.rootScope.focusedIndex, 1);
@@ -3188,7 +3183,7 @@ describe("autoFocus", () => {
     const root = Box({ children: [a, b] });
     const state = createTestState(root);
 
-    initializeFocus(state);
+    state.focus.initialize(state.root);
 
     assert.strictEqual(state.focusedNode(), a);
     assert.strictEqual(state.rootScope.focusedIndex, 0);

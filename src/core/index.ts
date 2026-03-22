@@ -58,12 +58,12 @@ export {
   teardownTerminal,
 } from "./input.ts";
 
-// Runtime - Components
-export { Box, type BoxProps, type BoxChild } from "./runtime/Box.ts";
-export { Text, type TextProps } from "./runtime/Text.ts";
-export { Portal, type PortalProps } from "./runtime/Portal.ts";
-export { Show, type ShowProps } from "./runtime/Show.ts";
-export { For, type ForProps } from "./runtime/For.ts";
+// Components
+export { Box, type BoxProps, type BoxChild } from "./components/Box.ts";
+export { Text, type TextProps } from "./components/Text.ts";
+export { Portal, type PortalProps } from "./components/Portal.ts";
+export { Show, type ShowProps } from "./components/Show.ts";
+export { For, type ForProps } from "./components/For.ts";
 
 // Runtime - Node
 export { Node, type Ref, createRef } from "./runtime/Node.ts";
@@ -76,14 +76,13 @@ export {
 } from "./runtime/App.ts";
 
 // Runtime - Focus
+export type { FocusController } from "./runtime/FocusManager.ts";
 export {
-  type FocusController,
-  type FocusScopeProps,
-  type TabFocusProps,
   FocusScopeComponent,
-  TabFocus,
-  useFocus,
-} from "./runtime/focus.ts";
+  type FocusScopeProps,
+} from "./components/FocusScopeComponent.ts";
+export { TabFocus, type TabFocusProps } from "./components/TabFocus.ts";
+export { useFocus } from "./components/useFocus.ts";
 
 
 // Render (pass-through)

@@ -1,7 +1,7 @@
 import { DEFAULT_FLEX_STYLE } from "../layout.ts";
 import { onCleanup } from "../signals.ts";
-import { App } from "./App.ts";
-import { Node } from "./Node.ts";
+import { App } from "../runtime/App.ts";
+import { Node } from "../runtime/Node.ts";
 
 /** Props for Portal component. */
 export interface PortalProps {

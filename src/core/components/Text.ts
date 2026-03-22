@@ -16,12 +16,12 @@ import {
     type ReactiveTextStyle,
     renderText
 } from "../render.ts";
-import { App } from "./App.ts";
+import { App } from "../runtime/App.ts";
 import {
     createEffect
 } from "../signals.ts";
 import { type WrapMode, measureText } from "../text.ts";
-import { Node, type Ref } from "./Node.ts";
+import { Node, type Ref } from "../runtime/Node.ts";
 
 /** Props for Text component. */
 export interface TextProps extends Partial<ReactiveTextStyle> {

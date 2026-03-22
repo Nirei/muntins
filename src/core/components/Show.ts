@@ -1,9 +1,7 @@
 import { DEFAULT_FLEX_STYLE } from "../layout.ts";
 import { createEffect, createRoot, onCleanup } from "../signals.ts";
-import { App } from "./App.ts";
-import { clearSubtreeLayoutSignals } from "./binding.ts";
-import { cleanupSubtreeState, registerSubtreeFocusables } from "./focus.ts";
-import { Node } from "./Node.ts";
+import { App } from "../runtime/App.ts";
+import { Node } from "../runtime/Node.ts";
 
 /** Props for Show component. */
 export interface ShowProps<T> {
@@ -39,10 +37,10 @@ export function Show<T>(props: ShowProps<T>): Node {
   const disposeChild = () => {
     if (currentDispose) {
       if (ctx && currentChild) {
-        cleanupSubtreeState(ctx.app, currentChild);
+        ctx.app.cleanupSubtreeState(currentChild);
       }
       if (currentChild) {
-        clearSubtreeLayoutSignals(currentChild);
+        currentChild.clearLayoutSignals();
       }
       currentDispose();
       currentDispose = null;
@@ -60,7 +58,7 @@ export function Show<T>(props: ShowProps<T>): Node {
     currentChild = node;
 
     if (ctx) {
-      registerSubtreeFocusables(ctx.app, node);
+      ctx.app.focus.registerSubtreeFocusables(node);
     }
 
     return dispose;

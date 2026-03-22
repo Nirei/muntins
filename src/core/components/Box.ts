@@ -55,7 +55,7 @@ import {
   onCleanup,
 } from "../signals.ts";
 import { type WrapMode, measureText } from "../text.ts";
-import { Node, type Ref } from "./Node.ts";
+import { Node, type Ref } from "../runtime/Node.ts";
 import { Text } from "./Text.ts";
 
 /** Child element that Box can accept - Node, string, or reactive string. */

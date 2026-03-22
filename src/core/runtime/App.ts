@@ -1,19 +1,15 @@
-import { Buffer } from "../buffer.ts";
-import { createInputParser } from "../input.ts";
-import { computeLayout, type LayoutResult } from "../layout.ts";
-import type { ClipRect, InheritedStyle } from "../render.ts";
+import { createInputParser, type InputEvent } from "../input.ts";
+import type { LayoutResult } from "../layout.ts";
 import {
-  DEFAULT_INHERITED_STYLE,
   enterTuiMode,
   exitTuiMode,
 } from "../render.ts";
 import type { Accessor, Setter } from "../signals.ts";
-import { createRoot, createSignal } from "../signals.ts";
-import { bindNodes, clearSubtreeLayoutSignals } from "./binding.ts";
-import { handleEvent } from "./events.ts";
-import { type FocusScope, initializeFocus } from "./focus.ts";
+import { batch, createRoot } from "../signals.ts";
+import { EventDispatcher } from "./EventDispatcher.ts";
+import { type FocusScope, FocusManager } from "./FocusManager.ts";
 import type { Node } from "./Node.ts";
-import { type FlushState, doFlush, scheduleFlush, scheduleRelayout } from "./pipeline.ts";
+import { Renderer } from "./Renderer.ts";
 
 /**
  * Configuration for mounting an application.
@@ -38,10 +34,6 @@ export const DEFAULT_MOUNT_OPTIONS: Required<MountOptions> = {
   fpsLimit: 240,
 };
 
-interface HoverState {
-  currentNode: Node | null;
-}
-
 /**
  * Runtime context threaded through component construction via closures.
  * Supports multiple concurrent mount() calls.
@@ -54,28 +46,20 @@ export interface RuntimeContext {
 /**
  * A mounted terminal UI application.
  *
- * Owns the component tree and coordinates subsystems: rendering pipeline,
- * input handling, and focus management. Created via `App.mount()`.
+ * Owns the component tree and coordinates subsystems (Mediator pattern):
+ * - FocusManager: focus state and navigation
+ * - Renderer: render cycle (layout, bind, paint, flush)
+ * - EventDispatcher: event routing and hover tracking
  *
- * @example
- * ```ts
- * const app = App.mount(() => Box({ children: [Text({ content: "hello" })] }));
- * // later...
- * app.unmount();
- * ```
+ * Created via `App.mount()`.
  */
 export class App {
   private static activeContext: RuntimeContext | null = null;
 
-  /** Get the current active context, or null if outside a mount. */
   static getActiveContext(): RuntimeContext | null {
     return App.activeContext;
   }
 
-  /**
-   * Execute a function within a runtime context.
-   * The context is set during the callback and restored after.
-   */
   static withContext<T>(ctx: RuntimeContext, fn: () => T): T {
     const prev = App.activeContext;
     App.activeContext = ctx;
@@ -86,10 +70,6 @@ export class App {
     }
   }
 
-  /**
-   * Get the current runtime context.
-   * Throws if called outside of a mounted component.
-   */
   static getContext(): RuntimeContext {
     if (!App.activeContext) {
       throw new Error("must be called within a mounted component");
@@ -97,87 +77,79 @@ export class App {
     return App.activeContext;
   }
 
-  /**
-   * Mount an application to the terminal.
-   *
-   * Creates the component tree, sets up input handling, and starts the
-   * render loop. Returns an App instance with an unmount() method.
-   *
-   * @param component - Function that returns the root node
-   * @param options - Optional mount configuration
-   * @returns App instance
-   */
   static mount(component: () => Node, options?: MountOptions): App {
     return new App(component, options);
   }
 
   root!: Node;
   rootDispose!: () => void;
-  layoutResult: LayoutResult | null = null;
-  flushState!: FlushState;
-  relayoutScheduled = false;
   options!: Required<MountOptions>;
   stdin!: NodeJS.ReadStream;
   inputParser!: { destroy: () => void };
-  focusedNode!: Accessor<Node | null>;
-  setFocusedNode!: Setter<Node | null>;
-  rootScope!: FocusScope;
-  hoverState: HoverState = { currentNode: null };
-  terminalFocused = true;
+  readonly focus: FocusManager;
+  readonly renderer: Renderer;
+  readonly events: EventDispatcher;
   pendingPortalAttachments: Node[][] = [];
+
+  // Backward-compat accessors during migration
+  get focusedNode(): Accessor<Node | null> {
+    return this.focus.focusedNode;
+  }
+  get setFocusedNode(): Setter<Node | null> {
+    return (this.focus as unknown as { setFocusedNode: Setter<Node | null> })
+      .setFocusedNode;
+  }
+  get rootScope(): FocusScope {
+    return this.focus.rootScope;
+  }
+  get layoutResult(): LayoutResult | null {
+    return this.renderer.layoutResult;
+  }
+  set layoutResult(value: LayoutResult | null) {
+    this.renderer.layoutResult = value;
+  }
+  get hoverState() {
+    return (this.events as unknown as Record<string, { currentNode: Node | null }>).hoverState;
+  }
+  set hoverState(value: { currentNode: Node | null }) {
+    (this.events as unknown as Record<string, { currentNode: Node | null }>).hoverState = value;
+  }
+  get terminalFocused(): boolean {
+    return this.events.terminalFocused;
+  }
+  set terminalFocused(value: boolean) {
+    this.events.terminalFocused = value;
+  }
 
   private unmounted = false;
   private removeSignalHandlers: (() => void) | null = null;
 
-  /**
-   * Mount an application to the terminal.
-   *
-   * Creates the component tree, sets up input handling, and starts the
-   * render loop.
-   *
-   * @param component - Function that returns the root node
-   * @param options - Optional mount configuration
-   */
   constructor(component: () => Node, options?: MountOptions) {
     const opts: Required<MountOptions> = { ...DEFAULT_MOUNT_OPTIONS, ...options };
     const { stdin, stdout } = opts;
 
-    const [focusedNode, setFocusedNode] = createSignal<Node | null>(null);
-
-    const buffer = new Buffer(stdout.columns, stdout.rows);
-
     this.options = opts;
     this.stdin = stdin;
-    this.focusedNode = focusedNode;
-    this.setFocusedNode = setFocusedNode;
-    this.rootScope = {
-      parent: null,
-      focusableNodes: [],
-      focusedIndex: -1,
-      trap: false,
-    };
-    this.flushState = {
-      active: true,
-      scheduled: false,
-      lastFlushTime: 0,
-      timeout: null,
-      buffer,
-      stdout,
-      fpsLimit: opts.fpsLimit,
-    };
+    this.focus = new FocusManager();
+    this.renderer = new Renderer(stdout, opts.fpsLimit, () => this.root);
+    this.events = new EventDispatcher(
+      this.focus,
+      () => this.root,
+      () => this.renderer.layoutResult,
+    );
 
     enterTuiMode(stdout, { alternateScreen: opts.alternateScreen });
 
     this.inputParser = createInputParser(
       stdin,
       stdout,
-      (event) => handleEvent(this, event),
+      (event) => this.handleEvent(event),
       { mouse: opts.mouse },
     );
 
     const ctx: RuntimeContext = {
       app: this,
-      currentScope: this.rootScope,
+      currentScope: this.focus.rootScope,
     };
 
     this.rootDispose = createRoot((dispose) => {
@@ -194,66 +166,64 @@ export class App {
       }
       this.pendingPortalAttachments.length = 0;
 
-      initializeFocus(this);
-
-      buffer.clear();
-      const layoutNode = this.root.toLayoutNode();
-      const layoutResult = computeLayout(layoutNode, stdout.columns, stdout.rows);
-      this.layoutResult = layoutResult;
-
-      const rootClipAccessor: Accessor<ClipRect> = () => ({
-        x: 0,
-        y: 0,
-        width: stdout.columns,
-        height: stdout.rows,
-      });
-      const rootInheritedAccessor: Accessor<InheritedStyle> = () =>
-        DEFAULT_INHERITED_STYLE;
-
-      bindNodes(
-        this.root,
-        layoutResult,
-        rootInheritedAccessor,
-        rootClipAccessor,
-      );
+      this.focus.initialize(this.root);
+      this.renderer.bind(this.root);
 
       return dispose;
     });
 
-    doFlush(this);
+    this.renderer.flush();
     this.setupSignalHandlers();
   }
 
-  /** Clean up the application and restore the terminal. */
   unmount(): void {
     if (this.unmounted) return;
     this.unmounted = true;
 
-    this.flushState.active = false;
+    this.renderer.shutdown();
 
     if (this.removeSignalHandlers) {
       this.removeSignalHandlers();
     }
 
-    if (this.flushState.timeout) {
-      clearTimeout(this.flushState.timeout);
-      this.flushState.timeout = null;
-    }
-
     this.rootDispose();
-    clearSubtreeLayoutSignals(this.root);
+    this.root.clearLayoutSignals();
     this.inputParser.destroy();
     exitTuiMode(this.options.stdout, { alternateScreen: this.options.alternateScreen });
   }
 
-  /** Schedule a flush to repaint the screen. */
-  scheduleFlush(): void {
-    scheduleFlush(this);
+  /**
+   * Clean up focus and hover state when a subtree is being disposed.
+   * Facade that coordinates cleanup across subsystems.
+   */
+  cleanupSubtreeState(subtreeRoot: Node): void {
+    this.focus.cleanupFocus(subtreeRoot);
+    this.events.cleanupHover(subtreeRoot);
   }
 
-  /** Schedule a relayout for when Show/For create new children. */
+  scheduleFlush(): void {
+    this.renderer.scheduleFlush();
+  }
+
   scheduleRelayout(): void {
-    scheduleRelayout(this);
+    this.renderer.scheduleRelayout();
+  }
+
+  /**
+   * Handle incoming input events (Mediator coordination).
+   * Resize → renderer, others → event dispatcher + schedule repaint.
+   */
+  private handleEvent(event: InputEvent): void {
+    if (event.type === "resize") {
+      this.renderer.handleResize(event.width, event.height);
+      return;
+    }
+
+    batch(() => {
+      this.events.routeEvent(event);
+    });
+
+    this.renderer.scheduleFlush();
   }
 
   private setupSignalHandlers(): void {

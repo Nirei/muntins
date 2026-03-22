@@ -5,9 +5,10 @@ import type {
   MouseEvent,
   ScrollEvent,
 } from "../input.ts";
-import type { FlexStyle, LayoutNode } from "../layout.ts";
+import type { FlexStyle, LayoutNode, LayoutResult } from "../layout.ts";
 import type { ClipRect, InheritableBool, InheritedStyle } from "../render.ts";
-import type { LayoutSignals } from "./binding.ts";
+import { resolveInheritable } from "../render.ts";
+import type { Accessor } from "../signals.ts";
 
 /**
  * A mutable reference to a node.
@@ -27,6 +28,33 @@ export interface Ref {
  */
 export function createRef(): Ref {
   return { current: null };
+}
+
+/**
+ * Layout information for reactive layout access via refs.
+ * All values are integers representing terminal cells.
+ */
+export interface LayoutInfo {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  screenX: number;
+  screenY: number;
+}
+
+/**
+ * Layout signals for reactive layout coordinates.
+ * Created during node binding and updated on resize/relayout.
+ */
+export interface LayoutSignals {
+  x: Accessor<number>;
+  y: Accessor<number>;
+  width: Accessor<number>;
+  height: Accessor<number>;
+  screenX: Accessor<number>;
+  screenY: Accessor<number>;
+  setLayout: (result: LayoutResult) => void;
 }
 
 type InheritableProps = {
@@ -128,6 +156,38 @@ export class Node {
   }
 
   /**
+   * Resolve inherited style by merging this node's inheritable props
+   * with the parent's inherited style.
+   */
+  resolveInheritedStyle(parentStyle: InheritedStyle): InheritedStyle {
+    const props = this._inheritableProps;
+    if (!props) {
+      return parentStyle;
+    }
+
+    return {
+      color: resolveInheritable(props.color, parentStyle.color),
+      backgroundColor: resolveInheritable(
+        props.backgroundColor,
+        parentStyle.backgroundColor,
+      ),
+      borderColor: resolveInheritable(
+        props.borderColor,
+        parentStyle.borderColor,
+      ),
+      bold: resolveInheritable(props.bold, parentStyle.bold),
+      dim: resolveInheritable(props.dim, parentStyle.dim),
+      italic: resolveInheritable(props.italic, parentStyle.italic),
+      underline: resolveInheritable(props.underline, parentStyle.underline),
+      strikethrough: resolveInheritable(
+        props.strikethrough,
+        parentStyle.strikethrough,
+      ),
+      inverse: resolveInheritable(props.inverse, parentStyle.inverse),
+    };
+  }
+
+  /**
    * Build path from this node to root by following _parent pointers.
    * First element is this node, last is root.
    */
@@ -190,5 +250,84 @@ export class Node {
       child.flatten(nodes);
     }
     return nodes;
+  }
+
+  /** Clear layout signals for this node and its entire subtree. */
+  clearLayoutSignals(): void {
+    this._layout = undefined;
+
+    for (const child of this.resolveChildren()) {
+      child.clearLayoutSignals();
+    }
+  }
+
+  /**
+   * Find the deepest node containing a point using screen coordinates.
+   * Returns this node if the point is within bounds but no child matches.
+   */
+  hitTest(layout: LayoutResult, x: number, y: number): Node | null {
+    const { screenX, screenY, width, height } = layout;
+
+    if (
+      x < screenX ||
+      x >= screenX + width ||
+      y < screenY ||
+      y >= screenY + height
+    ) {
+      return null;
+    }
+
+    const children = this.resolveChildren();
+    const childLayouts = layout.children ?? [];
+
+    const { hit } = Node.hitTestChildren(children, childLayouts, 0, x, y);
+    return hit ?? this;
+  }
+
+  private static hitTestChildren(
+    children: Node[],
+    layoutChildren: LayoutResult[],
+    startIndex: number,
+    x: number,
+    y: number,
+  ): { hit: Node | null; consumed: number } {
+    let consumed = 0;
+    let lastHit: Node | null = null;
+
+    for (const child of children) {
+      const childStyle = child.resolveStyle();
+
+      if (childStyle.display === "none") {
+        consumed++;
+        continue;
+      }
+
+      if (childStyle.display === "contents") {
+        const grandchildren = child.resolveChildren();
+        const result = Node.hitTestChildren(
+          grandchildren,
+          layoutChildren,
+          startIndex + consumed,
+          x,
+          y,
+        );
+        consumed += result.consumed;
+        if (result.hit) {
+          lastHit = result.hit;
+        }
+        continue;
+      }
+
+      const childLayout = layoutChildren[startIndex + consumed];
+      consumed++;
+      if (!childLayout) continue;
+
+      const hit = child.hitTest(childLayout, x, y);
+      if (hit) {
+        lastHit = hit;
+      }
+    }
+
+    return { hit: lastHit, consumed };
   }
 }

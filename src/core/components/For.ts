@@ -1,9 +1,7 @@
 import { DEFAULT_FLEX_STYLE } from "../layout.ts";
 import { createEffect, createRoot, createSignal, onCleanup } from "../signals.ts";
-import { App } from "./App.ts";
-import { clearSubtreeLayoutSignals } from "./binding.ts";
-import { cleanupSubtreeState, registerSubtreeFocusables } from "./focus.ts";
-import { Node } from "./Node.ts";
+import { App } from "../runtime/App.ts";
+import { Node } from "../runtime/Node.ts";
 
 /** Props for For component. */
 export interface ForProps<T> {
@@ -49,10 +47,10 @@ export function For<T>(props: ForProps<T>): Node {
 
   const disposeEntry = (entry: ForItemEntry<T>) => {
     if (ctx) {
-      cleanupSubtreeState(ctx.app, entry.node);
+      ctx.app.cleanupSubtreeState(entry.node);
     }
     // Clear layout signals for the removed subtree
-    clearSubtreeLayoutSignals(entry.node);
+    entry.node.clearLayoutSignals();
     entry.node._parent = undefined;
     entry.dispose();
   };
@@ -82,7 +80,7 @@ export function For<T>(props: ForProps<T>): Node {
         }
 
         if (ctx) {
-          registerSubtreeFocusables(ctx.app, node);
+          ctx.app.focus.registerSubtreeFocusables(node);
         }
 
         return dispose;
