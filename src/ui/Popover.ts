@@ -46,55 +46,12 @@ export interface PopoverProps {
   style?: Partial<FlexStyle>;
 }
 
-/**
- * Find the layout result for a specific node by traversing both trees in parallel.
- * Returns undefined if the node is not found or if layout hasn't been computed yet.
- */
-function findNodeLayout(
+function searchChildren(
   targetNode: Node,
-  node: Node,
+  children: Node[],
+  childLayouts: import("../core/layout.ts").LayoutResult[],
   layout: import("../core/layout.ts").LayoutResult,
 ): import("../core/layout.ts").LayoutResult | undefined {
-  if (node === targetNode) {
-    return layout;
-  }
-
-  const children =
-    typeof node.children === "function"
-      ? (node.children as () => Node[])()
-      : (node.children ?? []);
-  const childLayouts = layout.children ?? [];
-
-  const style = typeof node.style === "function" ? node.style() : node.style;
-  if (style.display === "contents") {
-    let layoutIndex = 0;
-    for (const child of children) {
-      const childStyle =
-        typeof child.style === "function" ? child.style() : child.style;
-
-      if (childStyle.display === "contents") {
-        const result = findNodeLayout(targetNode, child, {
-          ...layout,
-          children: childLayouts.slice(layoutIndex),
-        });
-        if (result) return result;
-        const grandchildren =
-          typeof child.children === "function"
-            ? (child.children as () => Node[])()
-            : (child.children ?? []);
-        layoutIndex += countLayoutNodes(grandchildren);
-      } else {
-        const childLayout = childLayouts[layoutIndex];
-        if (childLayout) {
-          const result = findNodeLayout(targetNode, child, childLayout);
-          if (result) return result;
-        }
-        layoutIndex++;
-      }
-    }
-    return undefined;
-  }
-
   let layoutIndex = 0;
   for (const child of children) {
     const childStyle =
@@ -120,8 +77,29 @@ function findNodeLayout(
       layoutIndex++;
     }
   }
-
   return undefined;
+}
+
+/**
+ * Find the layout result for a specific node by traversing both trees in parallel.
+ * Returns undefined if the node is not found or if layout hasn't been computed yet.
+ */
+function findNodeLayout(
+  targetNode: Node,
+  node: Node,
+  layout: import("../core/layout.ts").LayoutResult,
+): import("../core/layout.ts").LayoutResult | undefined {
+  if (node === targetNode) {
+    return layout;
+  }
+
+  const children =
+    typeof node.children === "function"
+      ? (node.children as () => Node[])()
+      : (node.children ?? []);
+  const childLayouts = layout.children ?? [];
+
+  return searchChildren(targetNode, children, childLayouts, layout);
 }
 
 /**

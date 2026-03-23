@@ -11,7 +11,6 @@ export {
 
 // Form controls
 export { Switch, type SwitchProps } from "./Switch.ts";
-export { Checkbox, type CheckboxProps } from "./Checkbox.ts";
 export {
   RadioGroup,
   type RadioGroupProps,

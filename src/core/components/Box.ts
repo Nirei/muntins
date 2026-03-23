@@ -36,6 +36,7 @@ import {
   type ReactiveTextStyle,
   enterTuiMode,
   exitTuiMode,
+  fillClippedRect,
   flushFrame,
   getBorderStyleName,
   intersectClipRect,
@@ -184,26 +185,8 @@ export function Box(props: BoxProps): Node {
               inherited.backgroundColor,
             );
 
-            // Fill area with background color if specified
             if (backgroundColor !== undefined) {
-              const fillX = Math.max(x, clip.x);
-              const fillY = Math.max(y, clip.y);
-              const fillRight = Math.min(x + width, clip.x + clip.width);
-              const fillBottom = Math.min(y + height, clip.y + clip.height);
-              const fillWidth = fillRight - fillX;
-              const fillHeight = fillBottom - fillY;
-              if (fillWidth > 0 && fillHeight > 0) {
-                buffer.fillRect(
-                  fillX,
-                  fillY,
-                  fillWidth,
-                  fillHeight,
-                  " ",
-                  DEFAULT_COLOR,
-                  bg,
-                  0,
-                );
-              }
+              fillClippedRect(buffer, x, y, width, height, clip, DEFAULT_COLOR, bg, 0);
             }
 
             const borderFlags = getBorderFlags();

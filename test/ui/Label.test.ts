@@ -12,7 +12,7 @@ import {
   useFocus,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
-import { Checkbox } from "../../src/ui/Checkbox.ts";
+import { Switch } from "../../src/ui/Switch.ts";
 import { Label } from "../../src/ui/Label.ts";
 
 // Helper to create mock stdin/stdout for mount tests
@@ -267,18 +267,18 @@ describe("Label", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
 
-      const checkboxRef = createRef();
+      const switchRef = createRef();
       let labelNode!: ReturnType<typeof Label>;
       let activated = false;
 
       const app = App.mount(
         () => {
-          labelNode = Label({ children: "Enable feature", for: checkboxRef });
+          labelNode = Label({ children: "Enable feature", for: switchRef });
           return Box({
             children: [
-              Checkbox({
+              Switch({
                 checked: false,
-                ref: checkboxRef,
+                ref: switchRef,
                 onChange: () => {
                   activated = true;
                 },

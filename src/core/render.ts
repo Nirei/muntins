@@ -361,6 +361,28 @@ function computeModifiers(
   return mods;
 }
 
+export function fillClippedRect(
+  buffer: Buffer,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  clip: ClipRect,
+  fg: Color,
+  bg: Color,
+  modifiers: number,
+): void {
+  const fillX = Math.max(x, clip.x);
+  const fillY = Math.max(y, clip.y);
+  const fillRight = Math.min(x + width, clip.x + clip.width);
+  const fillBottom = Math.min(y + height, clip.y + clip.height);
+  const fillWidth = fillRight - fillX;
+  const fillHeight = fillBottom - fillY;
+  if (fillWidth > 0 && fillHeight > 0) {
+    buffer.fillRect(fillX, fillY, fillWidth, fillHeight, " ", fg, bg, modifiers);
+  }
+}
+
 /**
  * Renders text into the buffer with styling and wrapping/truncation.
  * Fills the entire area with background color first to clear any stale content.
@@ -393,25 +415,7 @@ export function renderText(
   const modifiers = computeModifiers(props, inherited);
   const wrapValue = props.wrap ?? "wrap";
 
-  // Fill the entire text area with background color first (clears stale content)
-  const fillX = Math.max(x, clip.x);
-  const fillY = Math.max(y, clip.y);
-  const fillRight = Math.min(x + width, clip.x + clip.width);
-  const fillBottom = Math.min(y + height, clip.y + clip.height);
-  const fillWidth = fillRight - fillX;
-  const fillHeight = fillBottom - fillY;
-  if (fillWidth > 0 && fillHeight > 0) {
-    buffer.fillRect(
-      fillX,
-      fillY,
-      fillWidth,
-      fillHeight,
-      " ",
-      fg,
-      bg,
-      modifiers,
-    );
-  }
+  fillClippedRect(buffer, x, y, width, height, clip, fg, bg, modifiers);
 
   const lines = text.split("\n");
   const displayLines =

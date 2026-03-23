@@ -89,16 +89,8 @@ export class Renderer {
     );
     this.layoutResult = layoutResult;
 
-    const rootClipAccessor: Accessor<ClipRect> = () => ({
-      x: 0,
-      y: 0,
-      width: this.stdout.columns,
-      height: this.stdout.rows,
-    });
-    const rootInheritedAccessor: Accessor<InheritedStyle> = () =>
-      DEFAULT_INHERITED_STYLE;
-
-    this.bindNodes(root, layoutResult, rootInheritedAccessor, rootClipAccessor);
+    const { clip, inherited } = this.createRootAccessors();
+    this.bindNodes(root, layoutResult, inherited, clip);
   }
 
   /** Handle terminal resize: resize buffer, recompute layout, update signals. */
@@ -123,6 +115,21 @@ export class Renderer {
       clearTimeout(this.timeout);
       this.timeout = null;
     }
+  }
+
+  private createRootAccessors(): {
+    clip: Accessor<ClipRect>;
+    inherited: Accessor<InheritedStyle>;
+  } {
+    return {
+      clip: () => ({
+        x: 0,
+        y: 0,
+        width: this.stdout.columns,
+        height: this.stdout.rows,
+      }),
+      inherited: () => DEFAULT_INHERITED_STYLE,
+    };
   }
 
   private doFlush(): void {
@@ -176,22 +183,8 @@ export class Renderer {
 
     this.updateAllLayoutSignals(root, layoutResult);
 
-    const rootClipAccessor: Accessor<ClipRect> = () => ({
-      x: 0,
-      y: 0,
-      width: this.stdout.columns,
-      height: this.stdout.rows,
-    });
-    const rootInheritedAccessor: Accessor<InheritedStyle> = () =>
-      DEFAULT_INHERITED_STYLE;
-
-    this.bindNodes(
-      root,
-      layoutResult,
-      rootInheritedAccessor,
-      rootClipAccessor,
-      true,
-    );
+    const { clip, inherited } = this.createRootAccessors();
+    this.bindNodes(root, layoutResult, inherited, clip, true);
 
     this.scheduleFlush();
   }

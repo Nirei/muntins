@@ -28,14 +28,14 @@ export interface LabelProps {
  *
  * @example
  * ```typescript
- * const checkboxRef = createRef();
+ * const switchRef = createRef();
  *
  * Box({
  *   flexDirection: "row",
  *   gap: 1,
  *   children: [
- *     Checkbox({ ref: checkboxRef, checked, onChange }),
- *     Label({ children: "I agree", for: checkboxRef }),
+ *     Switch({ ref: switchRef, checked, onChange }),
+ *     Label({ children: "I agree", for: switchRef }),
  *   ],
  * });
  * ```

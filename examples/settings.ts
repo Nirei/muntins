@@ -5,8 +5,7 @@
  * - Input: single-line text input (Username)
  * - Textarea: multi-line text input (Bio)
  * - RadioGroup: exclusive selection (Theme)
- * - Checkbox: boolean toggle (Notifications)
- * - Switch: on/off toggle (Sound)
+ * - Switch: on/off toggle (Notifications, Sound)
  * - Select: dropdown selection (Country)
  * - Button: actions (Cancel, Save)
  * - Separator: visual dividers
@@ -25,7 +24,6 @@ import {
   App,
   Box,
   Button,
-  Checkbox,
   type Color,
   Input,
   Label,
@@ -181,20 +179,20 @@ function SettingsPanel() {
               FormRow({
                 label: "Notifications",
                 children: (() => {
-                  const checkboxRef = createRef();
+                  const switchRef = createRef();
                   return Box({
                     flexDirection: "row",
                     gap: 1,
                     alignItems: "center",
                     children: [
-                      Checkbox({
-                        ref: checkboxRef,
+                      Switch({
+                        ref: switchRef,
                         checked: notifications,
                         onChange: setNotifications,
                       }),
                       Label({
                         children: "Enable notifications",
-                        for: checkboxRef,
+                        for: switchRef,
                         style: { dim: true },
                       }),
                     ],
