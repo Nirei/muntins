@@ -344,12 +344,17 @@ export function distribute(total: number, weights: number[]): number[] {
   if (sum === 0) return weights.map(() => 0);
   if (total <= 0) return weights.map(() => 0);
 
-  const result = weights.map((w) => Math.floor((w / sum) * total));
+  const exact = weights.map((w) => (w / sum) * total);
+  const result = exact.map((v) => Math.floor(v));
 
   let remainder = total - result.reduce((a, b) => a + b, 0);
-  for (let i = 0; i < result.length && remainder > 0; i++) {
-    result[i]++;
-    remainder--;
+  if (remainder > 0) {
+    const fractional = exact.map((v, i) => ({ fraction: v - result[i], i }));
+    fractional.sort((a, b) => b.fraction - a.fraction);
+    for (let j = 0; j < fractional.length && remainder > 0; j++) {
+      result[fractional[j].i]++;
+      remainder--;
+    }
   }
 
   return result;

@@ -733,10 +733,10 @@ describe("flex distribution", () => {
 
     // Total 30 needs to fit in 20, overflow = 10
     // Weights: 10*1=10, 20*1=20, total=30
-    // Item 1 shrinks: 10/30 * 10 = 3.33 -> 4 (gets remainder)
-    // Item 2 shrinks: 20/30 * 10 = 6.66 -> 6
-    assert.strictEqual(result.children[0].width, 6); // 10 - 4
-    assert.strictEqual(result.children[1].width, 14); // 20 - 6
+    // Item 1 shrinks: 10/30 * 10 = 3.33 -> 3
+    // Item 2 shrinks: 20/30 * 10 = 6.66 -> 7 (largest fractional part gets remainder)
+    assert.strictEqual(result.children[0].width, 7); // 10 - 3
+    assert.strictEqual(result.children[1].width, 13); // 20 - 7
   });
 
   it("shrink removes exact overflow amount", () => {
@@ -2569,5 +2569,46 @@ describe("display contents", () => {
     assert.strictEqual(result.children[0].y, 0);
     assert.strictEqual(result.children[1].y, 20);
     assert.strictEqual(result.children[2].y, 40);
+  });
+});
+
+describe("distribute", () => {
+  it("gives remainder to items with largest fractional parts", () => {
+    // Distributing 1 among weights [3, 20]:
+    // Header: 3/23 * 1 = 0.130 → floor 0, fraction 0.130
+    // Content: 20/23 * 1 = 0.869 → floor 0, fraction 0.869
+    // Remainder (1) should go to content (largest fraction), not header
+    const result = distribute(1, [3, 20]);
+    assert.deepStrictEqual(result, [0, 1]);
+  });
+});
+
+describe("flex shrink with padding", () => {
+  it("shrinks the larger child rather than the small padded child", () => {
+    // A column container with two children that overflow by 1 row.
+    // The small child (header=3) should keep its size, while the large
+    // child (content=20) absorbs the shrink.
+    const node: LayoutNode = {
+      style: { flexDirection: "column" },
+      children: [
+        {
+          style: { paddingTop: 1, paddingBottom: 1 },
+          children: [{ style: { width: 10, height: 1 } }],
+        },
+        {
+          style: { flexDirection: "column", paddingBottom: 1 },
+          children: Array.from({ length: 10 }, () => ({
+            style: { width: 10, height: 1 },
+          })),
+        },
+      ],
+    };
+
+    // Available height = 22, children need 3 + 20 = 23 → overflow 1
+    const result = computeLayout(node, 50, 22);
+
+    // Header should keep height 3 (padding preserved, text has room)
+    assert.strictEqual(result.children[0].height, 3,
+      `Header should be 3 rows (padTop:1 + text:1 + padBot:1), got ${result.children[0].height}`);
   });
 });

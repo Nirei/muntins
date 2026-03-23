@@ -1637,4 +1637,113 @@ describe("integration", () => {
       app.unmount();
     });
   });
+
+  describe("text inside box with backgroundColor", () => {
+    it("renders text inside a box with backgroundColor", () => {
+      const { stdin, stdout, screen } = createMockStreams();
+
+      const cardBg = { type: "palette" as const, index: 236 };
+
+      const app = App.mount(
+        () =>
+          Box({
+            flexDirection: "column",
+            width: 52,
+            border: true,
+            borderStyle: "round" as const,
+            children: [
+              Box({
+                paddingStart: 2,
+                paddingEnd: 2,
+                paddingTop: 1,
+                paddingBottom: 1,
+                backgroundColor: cardBg,
+                children: [Text({ content: "Settings", bold: true })],
+              }),
+              Box({
+                flexDirection: "column",
+                paddingStart: 2,
+                paddingEnd: 2,
+                paddingBottom: 1,
+                children: [Text({ content: "Content here" })],
+              }),
+            ],
+          }),
+        { stdin, stdout },
+      );
+
+      assert.ok(
+        screen.contains("Settings"),
+        `Screen should contain 'Settings'. Row 0: '${screen.getRow(0)}', Row 1: '${screen.getRow(1)}', Row 2: '${screen.getRow(2)}', Row 3: '${screen.getRow(3)}'`,
+      );
+
+      app.unmount();
+    });
+
+    it("renders header text in a centered card layout (settings pattern)", () => {
+      const { stdin, stdout, screen } = createMockStreams();
+
+      const cardBg = { type: "palette" as const, index: 236 };
+
+      const app = App.mount(
+        () =>
+          Box({
+            flexGrow: 1,
+            children: [
+              Box({
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                flexGrow: 1,
+                children: [
+                  Box({
+                    flexDirection: "column",
+                    width: 52,
+                    border: true,
+                    borderStyle: "round" as const,
+                    children: [
+                      Box({
+                        paddingStart: 2,
+                        paddingEnd: 2,
+                        paddingTop: 1,
+                        paddingBottom: 1,
+                        backgroundColor: cardBg,
+                        children: [Text({ content: "Settings", bold: true })],
+                      }),
+                      Box({
+                        flexDirection: "column",
+                        paddingStart: 2,
+                        paddingEnd: 2,
+                        paddingBottom: 1,
+                        gap: 1,
+                        children: [
+                          Text({ content: "Row 1" }),
+                          Text({ content: "Row 2" }),
+                          Text({ content: "Row 3" }),
+                          Text({ content: "Row 4" }),
+                          Text({ content: "Row 5" }),
+                          Text({ content: "Row 6" }),
+                          Text({ content: "Row 7" }),
+                          Text({ content: "Row 8" }),
+                          Text({ content: "Row 9" }),
+                          Text({ content: "Row 10" }),
+                        ],
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+            ],
+          }),
+        { stdin, stdout },
+      );
+
+      assert.ok(
+        screen.contains("Settings"),
+        `Screen should contain 'Settings'. Rows:\n${Array.from({ length: 24 }, (_, i) => `  ${i}: '${screen.getRow(i)}'`).join("\n")}`,
+      );
+
+      app.unmount();
+    });
+  });
 });
