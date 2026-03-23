@@ -92,14 +92,6 @@ export interface ActivateEvent extends Event {
   readonly target: EventTarget;
 }
 
-// Type aliases for backwards compatibility (input parsing returns Input types)
-/** @deprecated Use KeyInput for parsing, KeyEvent for dispatch */
-export type KeyEventLegacy = KeyInput;
-/** @deprecated Use MouseInput for parsing, MouseEvent for dispatch */
-export type MouseEventLegacy = MouseInput;
-/** @deprecated Use ScrollInput for parsing, ScrollEvent for dispatch */
-export type ScrollEventLegacy = ScrollInput;
-
 /** Terminal resize event */
 export interface ResizeEvent {
   type: "resize";
