@@ -60,7 +60,7 @@ function Scrollbar(props: {
     const scrollTop = props.scrollTop();
 
     if (contentHeight <= viewportHeight) {
-      return THUMB_CHAR.repeat(viewportHeight).split("").join("\n");
+      return "";
     }
 
     const thumbHeight = Math.max(

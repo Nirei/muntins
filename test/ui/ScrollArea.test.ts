@@ -173,7 +173,45 @@ describe("ScrollArea", () => {
       assert.strictEqual(style.width, 40);
     });
 
-    it("renders scrollbar with track and thumb characters", () => {
+    it("renders scrollbar with track and thumb characters when content overflows", () => {
+      const { app, node } = mountScrollArea({
+        height: 3,
+        children: [
+          Text({ content: "1\n2\n3\n4\n5\n6" }),
+        ],
+      });
+
+      // Get the scrollbar node (second child)
+      const scrollbar = node.resolveChildren()?.[1];
+      assert.ok(scrollbar, "Scrollbar should exist");
+      assert.ok(scrollbar.render, "Scrollbar should have render function");
+
+      // Render to a buffer
+      const buffer = new RenderBuffer(1, 3);
+      scrollbar.render(
+        0,
+        0,
+        1,
+        3,
+        buffer,
+        DEFAULT_INHERITED_STYLE,
+        DEFAULT_CLIP,
+      );
+
+      // Should render scrollbar characters when content overflows
+      const content =
+        buffer.getSymbol(0, 0) +
+        buffer.getSymbol(0, 1) +
+        buffer.getSymbol(0, 2);
+      assert.ok(
+        content.includes("\u2503") || content.includes("\u2502"),
+        "Should render scrollbar characters when content overflows",
+      );
+
+      app.unmount();
+    });
+
+    it("hides scrollbar when content fits viewport", () => {
       const node = ScrollArea({
         height: 3,
         children: [
@@ -200,15 +238,14 @@ describe("ScrollArea", () => {
         DEFAULT_CLIP,
       );
 
-      // Should render thumb characters when content fits
+      // When content fits viewport, scrollbar should be empty
       const content =
         buffer.getSymbol(0, 0) +
         buffer.getSymbol(0, 1) +
         buffer.getSymbol(0, 2);
-      // When content fits viewport, full thumb is shown
       assert.ok(
-        content.includes("\u2503") || content.includes("\u2502"),
-        "Should render scrollbar characters",
+        !content.includes("\u2503") && !content.includes("\u2502"),
+        "Scrollbar should be empty when content fits viewport",
       );
     });
   });

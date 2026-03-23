@@ -2255,6 +2255,54 @@ describe("integration", () => {
       app.unmount();
     });
 
+    it("centers content vertically through TabFocus wrapper", () => {
+      const { stdin, stdout, screen } = createMockStreams();
+
+      const app = App.mount(
+        () =>
+          TabFocus({
+            children: [
+              Box({
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                flexGrow: 1,
+                children: [Text({ content: "CENTERED" })],
+              }),
+            ],
+          }),
+        { stdin, stdout },
+      );
+
+      // "CENTERED" should be vertically centered (~row 11), not at the top
+      const row0 = screen.getRow(0);
+      assert.ok(
+        !row0.includes("CENTERED"),
+        `Text should be centered, not at row 0. Row 0: '${row0}'`,
+      );
+      assert.ok(screen.contains("CENTERED"), "Text should be visible somewhere");
+
+      app.unmount();
+    });
+
+    it("hides scrollbar when content fits viewport", () => {
+      const { stdin, stdout, screen } = createMockStreams();
+
+      const app = App.mount(
+        () => Text({ content: "short content" }),
+        { stdin, stdout },
+      );
+
+      // When content fits the viewport, no scrollbar should be visible
+      const content = screen.getContent();
+      assert.ok(
+        !content.includes("\u2502") && !content.includes("\u2503"),
+        "Scrollbar characters should not appear when content fits viewport",
+      );
+
+      app.unmount();
+    });
+
     it("does not wrap in ScrollArea when scroll: false", () => {
       const { stdin, stdout, screen } = createMockStreams();
 

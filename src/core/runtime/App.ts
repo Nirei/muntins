@@ -160,6 +160,23 @@ export class App {
       let rootNode = App.withContext(ctx, () => component());
 
       if (opts.scroll) {
+        // Inject minHeight so the user's root fills the viewport height.
+        // Without this, intermediate wrappers (e.g. TabFocus) that lack
+        // flexGrow won't stretch vertically, breaking centering.
+        // Only when the user hasn't set an explicit height.
+        const origStyle = rootNode.style;
+        rootNode.style = () => {
+          const base =
+            typeof origStyle === "function" ? origStyle() : origStyle;
+          if (base.height === "auto") {
+            return {
+              ...base,
+              minHeight: Math.max(base.minHeight, stdout.rows),
+            };
+          }
+          return base;
+        };
+
         rootNode = App.withContext(ctx, () =>
           ScrollArea({
             height: () => stdout.rows,
