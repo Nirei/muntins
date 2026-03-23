@@ -613,6 +613,28 @@ describe("Buffer class", () => {
       buf.resize(10, 10);
       assert.strictEqual(buf.getSymbol(5, 5), "X");
     });
+
+    it("resize forces full redraw on next flush", () => {
+      const buf = new Buffer(5, 5);
+
+      // Write content and sync front buffer
+      buf.set(0, 0, "A", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      buf.flush();
+
+      // Resize — terminal still has old content but buffer is fresh
+      buf.resize(5, 3);
+
+      // Write only to cell (0,0), leaving (1,0) as a space
+      buf.set(0, 0, "B", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      const output = buf.flush();
+
+      // Both "B" and the blank space at (1,0) must be output to
+      // overwrite whatever the terminal had before the resize.
+      assert.ok(output.includes("B"), "should output the painted cell");
+      // Count total cells emitted: all 5*3=15 cells should be output
+      // since front was invalidated. Check that spaces are emitted too.
+      assert.ok(output.includes(" "), "should output spaces to clear stale terminal content");
+    });
   });
 });
 

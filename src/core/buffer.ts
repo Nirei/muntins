@@ -665,7 +665,7 @@ export class Buffer {
 
   /**
    * Resize the buffer. Reinitializes all cells (no content preservation).
-   * Resets cursor tracking.
+   * Resets cursor tracking and invalidates front buffer to force full redraw.
    */
   resize(width: number, height: number): void {
     if (width === this._width && height === this._height) return;
@@ -677,9 +677,7 @@ export class Buffer {
     this.front = this.allocateCells(size);
     this.back = this.allocateCells(size);
 
-    // Reset cursor tracking (position unknown after resize)
-    this._cursorX = -1;
-    this._cursorY = -1;
+    this.invalidateFront();
   }
 
   /**
@@ -694,17 +692,24 @@ export class Buffer {
 
   /**
    * Reset for full redraw. Use when terminal state is unknown.
-   * Clears the front buffer so next flush will output everything.
+   * Invalidates the front buffer so next flush will output everything.
    */
   forceFullRedraw(): void {
+    this.invalidateFront();
+  }
+
+  /**
+   * Mark every front-buffer cell as stale so the next flush outputs all cells.
+   * Uses a sentinel symbol ("\x00") that can never match real rendered content,
+   * ensuring the diff treats every cell as changed.
+   */
+  private invalidateFront(): void {
     for (const cell of this.front) {
-      cell.symbol = " ";
-      cell.fg = COLOR_DEFAULT;
-      cell.bg = COLOR_DEFAULT;
-      cell.modifiers = 0;
+      cell.symbol = "\x00";
     }
 
-    // Reset style tracking (forces SGR reset on next render)
+    this._cursorX = -1;
+    this._cursorY = -1;
     this._styleFg = COLOR_DEFAULT;
     this._styleBg = COLOR_DEFAULT;
     this._styleModifiers = 0;

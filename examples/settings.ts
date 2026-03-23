@@ -191,7 +191,7 @@ function SettingsPanel() {
                         onChange: setNotifications,
                       }),
                       Label({
-                        children: "Enable notifications",
+                        children: () => (notifications() ? "Enabled" : "Disabled"),
                         for: switchRef,
                         style: { dim: true },
                       }),
@@ -215,7 +215,7 @@ function SettingsPanel() {
                         onChange: setSound,
                       }),
                       Label({
-                        children: () => (sound() ? "On" : "Off"),
+                        children: () => (sound() ? "Enabled" : "Disabled"),
                         for: switchRef,
                         style: { dim: true },
                       }),
