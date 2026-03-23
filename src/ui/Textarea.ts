@@ -22,7 +22,7 @@ import {
   untrack,
 } from "../core/signals.ts";
 import { displayWidthToPosition, textLength } from "../core/text.ts";
-import { ScrollArea } from "./ScrollArea.ts";
+import { ScrollArea } from "../core/components/ScrollArea.ts";
 
 /**
  * Props for the Textarea component.

@@ -2572,6 +2572,31 @@ describe("display contents", () => {
   });
 });
 
+describe("flexShrink: 0 prevents shrinking in overflow container", () => {
+  it("child with flexShrink: 0 retains intrinsic height when it overflows parent", () => {
+    // Simulates ScrollArea's clip box (column, height=24) with a content box
+    // that has flexShrink: 0 and intrinsic height > 24.
+    const node: LayoutNode = {
+      style: { flexDirection: "column", height: 24 },
+      children: [
+        {
+          style: { flexDirection: "column", flexShrink: 0, gap: 1, paddingTop: 1, paddingBottom: 1 },
+          children: Array.from({ length: 30 }, () => ({
+            style: { width: 10, height: 1 },
+          })),
+        },
+      ],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Content box intrinsic: paddingTop(1) + 30 items + 29 gaps + paddingBottom(1) = 61
+    // flexShrink: 0 means it keeps its full intrinsic size and overflows the parent
+    const contentBox = result.children[0];
+    assert.strictEqual(contentBox.height, 61,
+      `Content box with flexShrink:0 should keep intrinsic height (61). Got ${contentBox.height}`);
+  });
+});
+
 describe("distribute", () => {
   it("gives remainder to items with largest fractional parts", () => {
     // Distributing 1 among weights [3, 20]:

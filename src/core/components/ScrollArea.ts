@@ -1,10 +1,12 @@
 // ScrollArea component - scrollable container with scrollbar
 
-import type { KeyEvent, ScrollEvent } from "../core/input.ts";
-import type { FlexStyle } from "../core/layout.ts";
-import type { Node, Ref } from "../core/runtime.ts";
-import { App, Box, Text, createRef } from "../core/runtime.ts";
-import { createEffect, createSignal, resolve } from "../core/signals.ts";
+import type { KeyEvent, ScrollEvent } from "../input.ts";
+import type { FlexStyle } from "../layout.ts";
+import { App } from "../runtime/App.ts";
+import { type Node, type Ref, createRef } from "../runtime/Node.ts";
+import { createEffect, createSignal, resolve } from "../signals.ts";
+import { Box } from "./Box.ts";
+import { Text } from "./Text.ts";
 
 // Unicode box drawing characters for scrollbar
 const TRACK_CHAR = "\u2502"; // Light vertical (|)
@@ -22,6 +24,9 @@ export interface ScrollAreaProps {
 
   /** Fixed width of the scroll area (optional, defaults to auto) */
   width?: number | (() => number);
+
+  /** Minimum height for the content area. Enables flexGrow inside ScrollArea. */
+  minHeight?: number | (() => number);
 
   /** Content to scroll */
   children: Node | Node[];
@@ -205,47 +210,20 @@ export function ScrollArea(props: ScrollAreaProps): Node {
     ? props.children
     : [props.children];
 
-  const estimateContentHeight = (): number => {
-    let height = 0;
-    const countHeight = (node: Node): number => {
-      if (node.measure) {
-        const size = node.measure(1000, 1000);
-        return size.height;
-      }
-      const children = node.resolveChildren();
-      if (children.length > 0) {
-        let total = 0;
-        for (const child of children) {
-          total += countHeight(child);
-        }
-        return total;
-      }
-      return 1;
-    };
-
-    for (const child of children) {
-      height += countHeight(child);
-    }
-    return height;
-  };
-
-  // Estimate content height by calling measure() on children.
-  // This is called in an effect so it tracks reactive dependencies
-  // (e.g., Textarea's value signal) and re-runs when content changes.
-  createEffect(() => {
-    setContentHeight(estimateContentHeight());
-  });
-
   const contentRef = createRef();
 
   const contentBox = Box({
     flexDirection: "column",
+    flexShrink: 0,
     marginTop: () => -getScrollTop(),
+    ...(props.minHeight !== undefined ? { minHeight: props.minHeight } : {}),
     ref: contentRef,
     children,
   });
 
-  // Also update from actual layout when available (more accurate)
+  // When layout is available (after bind), use the accurate layout height.
+  // Node._layout is reactive, so this effect re-runs when _layout transitions
+  // from undefined to LayoutSignals and whenever the layout height changes.
   createEffect(() => {
     const node = contentRef.current;
     if (node?._layout) {
@@ -268,6 +246,7 @@ export function ScrollArea(props: ScrollAreaProps): Node {
     children: [
       Box({
         flexGrow: 1,
+        flexDirection: "column",
         overflow: "hidden",
         maxHeight: props.height,
         children: [contentBox],

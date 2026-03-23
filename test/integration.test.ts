@@ -16,6 +16,12 @@ import {
   onCleanup,
 } from "../src/index.ts";
 import { Input } from "../src/ui/Input.ts";
+import { Separator } from "../src/ui/Separator.ts";
+import { Switch } from "../src/ui/Switch.ts";
+import { RadioGroup } from "../src/ui/Radiogroup.ts";
+import { Label } from "../src/ui/Label.ts";
+import { Textarea } from "../src/ui/Textarea.ts";
+import { Select } from "../src/ui/Select.ts";
 
 /**
  * Virtual terminal screen that simulates a real terminal.
@@ -1798,6 +1804,475 @@ describe("integration", () => {
         screen.contains("Profile"),
         `Screen should contain 'Profile'. Rows:\n${Array.from({ length: 24 }, (_, i) => `  ${i}: '${screen.getRow(i)}'`).join("\n")}`,
       );
+
+      app.unmount();
+    });
+  });
+
+  describe("root scroll", () => {
+    it("scrolls overflowing content instead of crushing it", () => {
+      const { stdin, stdout, screen } = createMockStreams();
+
+      const app = App.mount(
+        () =>
+          Box({
+            flexDirection: "column",
+            children: Array.from({ length: 30 }, (_, i) =>
+              Text({ content: `Line ${i + 1}` }),
+            ),
+          }),
+        { stdin, stdout },
+      );
+
+      // First lines should be visible
+      assert.ok(screen.contains("Line 1"), "Line 1 should be visible");
+      assert.ok(screen.contains("Line 2"), "Line 2 should be visible");
+
+      // Lines beyond viewport should NOT be visible (clipped by scroll)
+      assert.ok(!screen.contains("Line 25"), "Line 25 should be off-screen initially");
+
+      app.unmount();
+    });
+
+    it("scrolling reaches the very bottom of complex content", async () => {
+      // Reproduce settings-like structure with padding, borders, gaps, margins
+      // that estimateContentHeight() might undercount
+      const stdin = Object.assign(new EventEmitter(), {
+        isTTY: true,
+        setRawMode: () => stdin,
+        read: () => null,
+        resume: () => {},
+        pause: () => {},
+      }) as unknown as NodeJS.ReadStream;
+
+      const screen = new VirtualScreen(80, 24);
+      const stdout = Object.assign(new EventEmitter(), {
+        isTTY: true,
+        columns: 80,
+        rows: 24,
+        write: (data: string) => {
+          screen.write(data);
+          return true;
+        },
+      }) as unknown as NodeJS.WriteStream;
+
+      const [val, setVal] = createSignal("test");
+
+      const appRef = { current: null as App | null };
+      const app = App.mount(
+        () =>
+          Box({
+            flexGrow: 1,
+            focusable: true,
+            onKeyPress: (key) => {
+              if (key.name === "escape") { appRef.current?.unmount(); return true; }
+              return false;
+            },
+            children: [
+              TabFocus({
+                children: [
+                  Box({
+                    flexDirection: "column",
+                    alignItems: "center",
+                    flexGrow: 1,
+                    children: [
+                      Box({
+                        flexDirection: "column",
+                        width: 52,
+                        border: true,
+                        borderStyle: "round" as const,
+                        children: [
+                          // Header with padding
+                          Box({
+                            paddingStart: 2, paddingEnd: 2,
+                            paddingTop: 1, paddingBottom: 1,
+                            children: [Text({ content: "Header", bold: true })],
+                          }),
+                          // Content with padding, gaps, and nested borders
+                          Box({
+                            flexDirection: "column",
+                            paddingStart: 2, paddingEnd: 2, paddingBottom: 1,
+                            gap: 1,
+                            children: [
+                              // Section with margin
+                              Box({
+                                flexDirection: "column", marginTop: 1,
+                                children: [
+                                  Text({ content: "Section 1" }),
+                                  Separator({ style: { marginTop: 0 } }),
+                                ],
+                              }),
+                              // Rows with bordered inputs
+                              Box({
+                                flexDirection: "row", gap: 2,
+                                children: [
+                                  Box({ width: 14, children: [Text({ content: "Field 1" })] }),
+                                  Box({ border: "single", children: [Input({ value: val, onChange: setVal, width: 28 })] }),
+                                ],
+                              }),
+                              Box({
+                                flexDirection: "row", gap: 2,
+                                children: [
+                                  Box({ width: 14, children: [Text({ content: "Field 2" })] }),
+                                  Box({ border: "single", children: [Textarea({ value: val, onChange: setVal, width: 28, maxHeight: 3 })] }),
+                                ],
+                              }),
+                              Box({
+                                flexDirection: "column", marginTop: 1,
+                                children: [
+                                  Text({ content: "Section 2" }),
+                                  Separator({ style: { marginTop: 0 } }),
+                                ],
+                              }),
+                              Text({ content: "Row A" }),
+                              Text({ content: "Row B" }),
+                              Text({ content: "Row C" }),
+                              Box({
+                                flexDirection: "column", marginTop: 1,
+                                children: [
+                                  Text({ content: "Section 3" }),
+                                  Separator({ style: { marginTop: 0 } }),
+                                ],
+                              }),
+                              Text({ content: "Row D" }),
+                              Text({ content: "Row E" }),
+                              // Bottom buttons — these MUST be reachable
+                              Box({
+                                flexDirection: "row", justifyContent: "flex-end",
+                                gap: 2, marginTop: 2,
+                                children: [
+                                  Box({ border: "single", children: [Text({ content: " Cancel " })] }),
+                                  Box({ border: "single", children: [Text({ content: " Save " })] }),
+                                ],
+                              }),
+                            ],
+                          }),
+                        ],
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+            ],
+          }),
+        { stdin, stdout, mouse: true },
+      );
+      appRef.current = app;
+
+      // Scroll all the way down (more events than content height to hit the max)
+      for (let i = 0; i < 60; i++) {
+        stdin.emit("data", Buffer.from("\x1b[<65;40;12M"));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      assert.ok(
+        screen.contains("Save"),
+        `After scrolling to bottom, "Save" button must be reachable. Rows:\n${Array.from({ length: 24 }, (_, i) => `  ${i}: '${screen.getRow(i)}'`).join("\n")}`,
+      );
+
+      app.unmount();
+    });
+
+    it("settings app scrolls with mouse wheel", async () => {
+      // Exact reproduction of the settings example structure
+      const stdin = Object.assign(new EventEmitter(), {
+        isTTY: true,
+        setRawMode: () => stdin,
+        read: () => null,
+        resume: () => {},
+        pause: () => {},
+      }) as unknown as NodeJS.ReadStream;
+
+      const screen = new VirtualScreen(80, 24);
+      const stdout = Object.assign(new EventEmitter(), {
+        isTTY: true,
+        columns: 80,
+        rows: 24,
+        write: (data: string) => {
+          screen.write(data);
+          return true;
+        },
+      }) as unknown as NodeJS.WriteStream;
+
+      const [username, setUsername] = createSignal("johndoe");
+      const [bio, setBio] = createSignal("Software developer\nLoves building TUIs");
+      const [theme, setTheme] = createSignal<"light" | "dark" | "system">("dark");
+      const [notifications, setNotifications] = createSignal(true);
+      const [sound, setSound] = createSignal(false);
+      const [country, setCountry] = createSignal("us");
+
+      function SectionHeader(title: string) {
+        return Box({
+          flexDirection: "column",
+          gap: 0,
+          marginTop: 1,
+          children: [
+            Text({ content: title, bold: true }),
+            Separator({ style: { marginTop: 0 } }),
+          ],
+        });
+      }
+
+      function FormRow(props: { label: string; children: ReturnType<typeof Box>; alignTop?: boolean }) {
+        return Box({
+          flexDirection: "row",
+          gap: 2,
+          alignItems: props.alignTop ? "flex-start" : "center",
+          children: [
+            Box({ width: 14, children: [Label({ children: props.label })] }),
+            props.children,
+          ],
+        });
+      }
+
+      const appRef = { current: null as App | null };
+      const app = App.mount(
+        () =>
+          Box({
+            flexGrow: 1,
+            focusable: true,
+            onKeyPress: (key) => {
+              if (key.name === "escape") { appRef.current?.unmount(); return true; }
+              return false;
+            },
+            children: [
+              TabFocus({
+                children: [
+                  Box({
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexGrow: 1,
+                    children: [
+                      Box({
+                        flexDirection: "column",
+                        width: 52,
+                        border: true,
+                        borderStyle: "round" as const,
+                        children: [
+                          Box({
+                            paddingStart: 2, paddingEnd: 2, paddingTop: 1, paddingBottom: 1,
+                            children: [Text({ content: "Settings", bold: true })],
+                          }),
+                          Box({
+                            flexDirection: "column",
+                            paddingStart: 2, paddingEnd: 2, paddingBottom: 1,
+                            gap: 1,
+                            children: [
+                              SectionHeader("Profile"),
+                              FormRow({
+                                label: "Username",
+                                children: Box({
+                                  border: "single",
+                                  children: [Input({ value: username, onChange: setUsername, width: 28, autoFocus: true })],
+                                }),
+                              }),
+                              FormRow({
+                                label: "Bio", alignTop: true,
+                                children: Box({
+                                  border: "single",
+                                  children: [Textarea({ value: bio, onChange: setBio, width: 28, maxHeight: 3 })],
+                                }),
+                              }),
+                              SectionHeader("Preferences"),
+                              FormRow({
+                                label: "Theme",
+                                children: RadioGroup({
+                                  value: theme, onChange: setTheme, direction: "row",
+                                  options: [
+                                    { value: "light" as const, label: "Light" },
+                                    { value: "dark" as const, label: "Dark" },
+                                    { value: "system" as const, label: "System" },
+                                  ],
+                                }),
+                              }),
+                              FormRow({
+                                label: "Notifications",
+                                children: Box({
+                                  flexDirection: "row", gap: 1, alignItems: "center",
+                                  children: [
+                                    Switch({ checked: notifications, onChange: setNotifications }),
+                                    Label({ children: "Enabled" }),
+                                  ],
+                                }),
+                              }),
+                              FormRow({
+                                label: "Sound",
+                                children: Box({
+                                  flexDirection: "row", gap: 1, alignItems: "center",
+                                  children: [
+                                    Switch({ checked: sound, onChange: setSound }),
+                                    Label({ children: "Disabled" }),
+                                  ],
+                                }),
+                              }),
+                              SectionHeader("Region"),
+                              FormRow({
+                                label: "Country",
+                                children: Select({
+                                  value: country, onChange: setCountry,
+                                  options: [
+                                    { value: "us", label: "United States" },
+                                    { value: "uk", label: "United Kingdom" },
+                                  ],
+                                  renderTrigger: (props) => Box({
+                                    border: "single", width: 22,
+                                    children: [Text({ content: () => ` ${props.label()}` })],
+                                  }),
+                                  renderOption: (props) => Text({ content: () => `  ${props.option.label}` }),
+                                }),
+                              }),
+                              Box({
+                                flexDirection: "row", justifyContent: "flex-end", gap: 2, marginTop: 2,
+                                children: [
+                                  Box({ border: "single", children: [Text({ content: " Cancel " })] }),
+                                  Box({ border: "single", children: [Text({ content: " Save " })] }),
+                                ],
+                              }),
+                            ],
+                          }),
+                        ],
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+            ],
+          }),
+        { stdin, stdout, mouse: true },
+      );
+      appRef.current = app;
+
+      // Settings header should be visible
+      assert.ok(screen.contains("Settings"), "Settings header should be visible");
+
+      // Send mouse wheel-down events to scroll past viewport
+      for (let i = 0; i < 24; i++) {
+        stdin.emit("data", Buffer.from("\x1b[<65;40;12M"));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      assert.ok(
+        !screen.contains("Settings"),
+        `After scrolling 24 lines, "Settings" header should be off-screen. Rows:\n${Array.from({ length: 24 }, (_, i) => `  ${i}: '${screen.getRow(i)}'`).join("\n")}`,
+      );
+
+      app.unmount();
+    });
+
+    it("mouse wheel scrolls when mouse mode is enabled", async () => {
+      // Mouse mode uses UnifiedParser which reads raw data, not readline
+      const stdin = Object.assign(new EventEmitter(), {
+        isTTY: true,
+        setRawMode: () => stdin,
+        read: () => null,
+        resume: () => {},
+        pause: () => {},
+      }) as unknown as NodeJS.ReadStream;
+
+      const screen = new VirtualScreen(80, 24);
+      const stdout = Object.assign(new EventEmitter(), {
+        isTTY: true,
+        columns: 80,
+        rows: 24,
+        write: (data: string) => {
+          screen.write(data);
+          return true;
+        },
+      }) as unknown as NodeJS.WriteStream;
+
+      const app = App.mount(
+        () =>
+          Box({
+            flexGrow: 1,
+            focusable: true,
+            autoFocus: true,
+            children: [
+              TabFocus({
+                children: [
+                  Box({
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexGrow: 1,
+                    children: [
+                      Box({
+                        flexDirection: "column",
+                        width: 52,
+                        border: true,
+                        children: Array.from({ length: 30 }, (_, i) =>
+                          Text({ content: `Row ${String(i + 1).padStart(2, "0")}` }),
+                        ),
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+            ],
+          }),
+        { stdin, stdout, mouse: true },
+      );
+
+      assert.ok(screen.contains("Row 01"), "Row 01 should be visible initially");
+
+      // Send 24 mouse wheel-down events (SGR encoding: button 65 = scroll down)
+      for (let i = 0; i < 24; i++) {
+        stdin.emit("data", Buffer.from("\x1b[<65;40;12M"));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      assert.ok(
+        !screen.contains("Row 01"),
+        `After scrolling down 24 lines, Row 01 should be off-screen. Rows:\n${Array.from({ length: 24 }, (_, i) => `  ${i}: '${screen.getRow(i)}'`).join("\n")}`,
+      );
+
+      app.unmount();
+    });
+
+    it("preserves flexGrow and centering when content fits", () => {
+      const { stdin, stdout, screen } = createMockStreams();
+
+      const app = App.mount(
+        () =>
+          Box({
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            flexGrow: 1,
+            children: [Text({ content: "Centered" })],
+          }),
+        { stdin, stdout },
+      );
+
+      // "Centered" should not be at row 0 — it should be vertically centered
+      const row0 = screen.getRow(0);
+      assert.ok(
+        !row0.includes("Centered"),
+        `Text should be centered, not at row 0. Row 0: '${row0}'`,
+      );
+      assert.ok(screen.contains("Centered"), "Text should be visible somewhere");
+
+      app.unmount();
+    });
+
+    it("does not wrap in ScrollArea when scroll: false", () => {
+      const { stdin, stdout, screen } = createMockStreams();
+
+      const app = App.mount(
+        () =>
+          Box({
+            flexDirection: "column",
+            children: Array.from({ length: 30 }, (_, i) =>
+              Text({ content: `Line ${i + 1}` }),
+            ),
+          }),
+        { stdin, stdout, scroll: false },
+      );
+
+      // Without scroll wrapping, content gets flex-shrunk or overflows
+      // but no scrollbar column should be present
+      // Line 1 should still render (it's at the top)
+      assert.ok(screen.contains("Line 1"), "Line 1 should be visible");
 
       app.unmount();
     });

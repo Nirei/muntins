@@ -770,6 +770,7 @@ describe("Textarea", () => {
           stdout: mockStdout as unknown as NodeJS.WriteStream,
           fpsLimit: 0,
           mouse: mouseEnabled,
+          scroll: false,
         },
       );
 
@@ -1062,6 +1063,7 @@ describe("Textarea", () => {
           stdout: mockStdout as unknown as NodeJS.WriteStream,
           fpsLimit: 0,
           mouse: true,
+          scroll: false,
         },
       );
 
@@ -1125,6 +1127,7 @@ describe("Textarea", () => {
           stdout: mockStdout as unknown as NodeJS.WriteStream,
           fpsLimit: 0,
           mouse: true,
+          scroll: false,
         },
       );
 
@@ -1197,6 +1200,7 @@ describe("Textarea", () => {
           stdout: mockStdout as unknown as NodeJS.WriteStream,
           fpsLimit: 0,
           mouse: true,
+          scroll: false,
         },
       );
 
@@ -1290,6 +1294,7 @@ describe("Textarea", () => {
           stdout: mockStdout as unknown as NodeJS.WriteStream,
           fpsLimit: 0,
           mouse: true,
+          scroll: false,
         },
       );
 
@@ -1358,6 +1363,7 @@ describe("Textarea", () => {
           stdout: mockStdout as unknown as NodeJS.WriteStream,
           fpsLimit: 0,
           mouse: true,
+          scroll: false,
         },
       );
 

@@ -10,7 +10,7 @@ import {
   createRef,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
-import { ScrollArea } from "../../src/ui/ScrollArea.ts";
+import { ScrollArea } from "../../src/core/components/ScrollArea.ts";
 
 // Helper to create mock stdin for mount tests
 function createMockStdin() {
@@ -119,6 +119,21 @@ function scrollEvent(direction: "up" | "down", x = 0, y = 0) {
   };
 }
 
+function mountScrollArea(props: Omit<Parameters<typeof ScrollArea>[0], 'children'> & { children: Parameters<typeof ScrollArea>[0]['children'] }) {
+  const stdin = createMockStdin();
+  const stdout = createMockStdout();
+  let scrollNode: ReturnType<typeof ScrollArea> | undefined;
+  const app = App.mount(
+    () => {
+      scrollNode = ScrollArea(props);
+      return scrollNode;
+    },
+    { stdin: stdin as unknown as NodeJS.ReadStream, stdout: stdout as unknown as NodeJS.WriteStream, scroll: false },
+  );
+  if (!scrollNode) throw new Error("ScrollArea was not created during mount");
+  return { app, node: scrollNode, stdin, stdout };
+}
+
 describe("ScrollArea", () => {
   describe("rendering", () => {
     it("creates node with correct structure", () => {
@@ -201,7 +216,7 @@ describe("ScrollArea", () => {
   describe("keyboard handling", () => {
     it("up arrow scrolls up by 1", () => {
       let scrollValue = 5;
-      const node = ScrollArea({
+      const { app, node } = mountScrollArea({
         height: 5,
         scrollTop: () => scrollValue,
         onScroll: (v) => {
@@ -219,11 +234,12 @@ describe("ScrollArea", () => {
       const result = node.onKeyPress(keyEvent("up"));
       assert.strictEqual(result, true, "Should consume the event");
       assert.strictEqual(scrollValue, 4, "Should scroll up by 1");
+      app.unmount();
     });
 
     it("down arrow scrolls down by 1", () => {
       let scrollValue = 0;
-      const node = ScrollArea({
+      const { app, node } = mountScrollArea({
         height: 5,
         scrollTop: () => scrollValue,
         onScroll: (v) => {
@@ -241,11 +257,12 @@ describe("ScrollArea", () => {
       const result = node.onKeyPress(keyEvent("down"));
       assert.strictEqual(result, true, "Should consume the event");
       assert.strictEqual(scrollValue, 1, "Should scroll down by 1");
+      app.unmount();
     });
 
     it("page up scrolls up by viewport height", () => {
       let scrollValue = 10;
-      const node = ScrollArea({
+      const { app, node } = mountScrollArea({
         height: 5,
         scrollTop: () => scrollValue,
         onScroll: (v) => {
@@ -263,11 +280,12 @@ describe("ScrollArea", () => {
       const result = node.onKeyPress(keyEvent("pageup"));
       assert.strictEqual(result, true, "Should consume the event");
       assert.strictEqual(scrollValue, 5, "Should scroll up by viewport height");
+      app.unmount();
     });
 
     it("page down scrolls down by viewport height", () => {
       let scrollValue = 0;
-      const node = ScrollArea({
+      const { app, node } = mountScrollArea({
         height: 5,
         scrollTop: () => scrollValue,
         onScroll: (v) => {
@@ -289,11 +307,12 @@ describe("ScrollArea", () => {
         5,
         "Should scroll down by viewport height",
       );
+      app.unmount();
     });
 
     it("home scrolls to top", () => {
       let scrollValue = 10;
-      const node = ScrollArea({
+      const { app, node } = mountScrollArea({
         height: 5,
         scrollTop: () => scrollValue,
         onScroll: (v) => {
@@ -310,11 +329,12 @@ describe("ScrollArea", () => {
       const result = node.onKeyPress(keyEvent("home"));
       assert.strictEqual(result, true, "Should consume the event");
       assert.strictEqual(scrollValue, 0, "Should scroll to top");
+      app.unmount();
     });
 
     it("end scrolls to bottom", () => {
       let scrollValue = 0;
-      const node = ScrollArea({
+      const { app, node } = mountScrollArea({
         height: 5,
         scrollTop: () => scrollValue,
         onScroll: (v) => {
@@ -331,11 +351,12 @@ describe("ScrollArea", () => {
         5,
         "Should scroll to bottom (content 10 - viewport 5)",
       );
+      app.unmount();
     });
 
     it("other keys do not trigger scrolling", () => {
       let scrollValue = 5;
-      const node = ScrollArea({
+      const { app, node } = mountScrollArea({
         height: 5,
         scrollTop: () => scrollValue,
         onScroll: (v) => {
@@ -348,13 +369,14 @@ describe("ScrollArea", () => {
       const result = node.onKeyPress(keyEvent("a"));
       assert.strictEqual(result, false, "Should not consume the event");
       assert.strictEqual(scrollValue, 5, "Should not change scroll position");
+      app.unmount();
     });
   });
 
   describe("scroll bounds", () => {
     it("scroll does not go below 0", () => {
       let scrollValue = 0;
-      const node = ScrollArea({
+      const { app, node } = mountScrollArea({
         height: 5,
         scrollTop: () => scrollValue,
         onScroll: (v) => {
@@ -366,12 +388,13 @@ describe("ScrollArea", () => {
       assert.ok(node.onKeyPress);
       node.onKeyPress(keyEvent("up"));
       assert.strictEqual(scrollValue, 0, "Should stay at 0");
+      app.unmount();
     });
 
     it("scroll does not exceed max scroll", () => {
       // Content is 10 lines, viewport is 5, max scroll is 5
       let scrollValue = 5;
-      const node = ScrollArea({
+      const { app, node } = mountScrollArea({
         height: 5,
         scrollTop: () => scrollValue,
         onScroll: (v) => {
@@ -384,13 +407,14 @@ describe("ScrollArea", () => {
       node.onKeyPress(keyEvent("down"));
       // Should stay at max scroll (5) since we're already at the bottom
       assert.strictEqual(scrollValue, 5, "Should stay at max scroll");
+      app.unmount();
     });
   });
 
   describe("mouse scroll", () => {
     it("scroll wheel down scrolls content down", () => {
       let scrollValue = 0;
-      const node = ScrollArea({
+      const { app, node } = mountScrollArea({
         height: 5,
         scrollTop: () => scrollValue,
         onScroll: (v) => {
@@ -402,11 +426,12 @@ describe("ScrollArea", () => {
       assert.ok(node.onScroll);
       node.onScroll(scrollEvent("down"));
       assert.strictEqual(scrollValue, 1, "Should scroll down by 1");
+      app.unmount();
     });
 
     it("scroll wheel up scrolls content up", () => {
       let scrollValue = 5;
-      const node = ScrollArea({
+      const { app, node } = mountScrollArea({
         height: 5,
         scrollTop: () => scrollValue,
         onScroll: (v) => {
@@ -418,6 +443,7 @@ describe("ScrollArea", () => {
       assert.ok(node.onScroll);
       node.onScroll(scrollEvent("up"));
       assert.strictEqual(scrollValue, 4, "Should scroll up by 1");
+      app.unmount();
     });
   });
 
@@ -425,7 +451,7 @@ describe("ScrollArea", () => {
     it("controlled scrollTop prop is respected", () => {
       const [scrollPos, setScrollPos] = createSignal(3);
 
-      const node = ScrollArea({
+      const { app, node } = mountScrollArea({
         height: 5,
         scrollTop: scrollPos,
         children: [Text({ content: "Content" })],
@@ -454,11 +480,12 @@ describe("ScrollArea", () => {
         -7,
         "marginTop should update reactively",
       );
+      app.unmount();
     });
 
     it("onScroll callback fires on scroll position change", () => {
       const scrollPositions: number[] = [];
-      const node = ScrollArea({
+      const { app, node } = mountScrollArea({
         height: 5,
         onScroll: (pos) => scrollPositions.push(pos),
         children: [Text({ content: "1\n2\n3\n4\n5\n6\n7\n8\n9\n10" })],
@@ -474,54 +501,59 @@ describe("ScrollArea", () => {
         [1, 2, 3],
         "Should fire callback for each scroll",
       );
+      app.unmount();
     });
   });
 
   describe("focus", () => {
     it("is focusable by default", () => {
-      const node = ScrollArea({
+      const { app, node } = mountScrollArea({
         height: 5,
         children: [Text({ content: "Content" })],
       });
 
       assert.strictEqual(node.focusable, true);
+      app.unmount();
     });
 
     it("focusable: false makes it not focusable", () => {
-      const node = ScrollArea({
+      const { app, node } = mountScrollArea({
         height: 5,
         focusable: false,
         children: [Text({ content: "Content" })],
       });
 
       assert.strictEqual(node.focusable, false);
+      app.unmount();
     });
 
     it("autoFocus prop is passed through", () => {
-      const node = ScrollArea({
+      const { app, node } = mountScrollArea({
         height: 5,
         autoFocus: true,
         children: [Text({ content: "Content" })],
       });
 
       assert.strictEqual(node.autoFocus, true);
+      app.unmount();
     });
 
     it("ref is bound to the node", () => {
       const ref = createRef();
-      const node = ScrollArea({
+      const { app, node } = mountScrollArea({
         height: 5,
         ref,
         children: [Text({ content: "Content" })],
       });
 
       assert.strictEqual(ref.current, node);
+      app.unmount();
     });
   });
 
   describe("style overrides", () => {
     it("applies style overrides", () => {
-      const node = ScrollArea({
+      const { app, node } = mountScrollArea({
         height: 5,
         children: [Text({ content: "Content" })],
         style: { marginTop: 2, paddingStart: 1 },
@@ -531,13 +563,14 @@ describe("ScrollArea", () => {
         typeof node.style === "function" ? node.style() : node.style;
       assert.strictEqual(style.marginTop, 2);
       assert.strictEqual(style.paddingStart, 1);
+      app.unmount();
     });
   });
 
   describe("scrollbar appearance", () => {
     it("scrollbar uses track character for empty space", () => {
       // When content is larger than viewport and scrolled partially
-      const node = ScrollArea({
+      const { app, node } = mountScrollArea({
         height: 5,
         children: [Text({ content: "1\n2\n3\n4\n5\n6\n7\n8\n9\n10" })],
       });
@@ -567,12 +600,13 @@ describe("ScrollArea", () => {
       // With 10 lines content and 5 lines viewport, we should have both
       assert.ok(hasThumb, "Should have thumb character");
       assert.ok(hasTrack, "Should have track character");
+      app.unmount();
     });
 
     it("scrollbar thumb position changes with scroll offset", () => {
       const [scrollPos, setScrollPos] = createSignal(0);
 
-      const node = ScrollArea({
+      const { app, node } = mountScrollArea({
         height: 5,
         scrollTop: scrollPos,
         children: [Text({ content: "1\n2\n3\n4\n5\n6\n7\n8\n9\n10" })],
@@ -612,6 +646,7 @@ describe("ScrollArea", () => {
         bottomThumbPos > topThumbPos,
         "Thumb should move down when scrolled",
       );
+      app.unmount();
     });
   });
 

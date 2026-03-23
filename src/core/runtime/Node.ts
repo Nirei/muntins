@@ -9,6 +9,7 @@ import type { FlexStyle, LayoutNode, LayoutResult } from "../layout.ts";
 import type { ClipRect, InheritableBool, InheritedStyle } from "../render.ts";
 import { resolveInheritable } from "../render.ts";
 import type { Accessor } from "../signals.ts";
+import { createSignal } from "../signals.ts";
 
 /**
  * A mutable reference to a node.
@@ -137,9 +138,21 @@ export class Node {
 
   activate?: () => void;
 
-  _layout?: LayoutSignals;
+  private _layoutGet: Accessor<LayoutSignals | undefined>;
+  private _layoutSet: (v: LayoutSignals | undefined) => void;
+
+  get _layout(): LayoutSignals | undefined {
+    return this._layoutGet();
+  }
+
+  set _layout(value: LayoutSignals | undefined) {
+    this._layoutSet(value);
+  }
 
   constructor(init: NodeInit) {
+    const [get, set] = createSignal<LayoutSignals | undefined>(undefined);
+    this._layoutGet = get;
+    this._layoutSet = set;
     Object.assign(this, init);
   }
 

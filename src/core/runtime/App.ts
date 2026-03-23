@@ -1,3 +1,4 @@
+import { ScrollArea } from "../components/ScrollArea.ts";
 import { createInputParser, type InputEvent } from "../input.ts";
 import type { LayoutResult } from "../layout.ts";
 import {
@@ -21,6 +22,8 @@ export interface MountOptions {
   alternateScreen?: boolean;
   /** Max renders per second. Default: 240. Set to 0 for unlimited. */
   fpsLimit?: number;
+  /** Wrap root in a ScrollArea so content scrolls when it exceeds the terminal. Default: true. */
+  scroll?: boolean;
 }
 
 /**
@@ -32,6 +35,7 @@ export const DEFAULT_MOUNT_OPTIONS: Required<MountOptions> = {
   mouse: false,
   alternateScreen: true,
   fpsLimit: 240,
+  scroll: true,
 };
 
 /**
@@ -153,7 +157,20 @@ export class App {
     };
 
     this.rootDispose = createRoot((dispose) => {
-      this.root = App.withContext(ctx, () => component());
+      let rootNode = App.withContext(ctx, () => component());
+
+      if (opts.scroll) {
+        rootNode = App.withContext(ctx, () =>
+          ScrollArea({
+            height: () => stdout.rows,
+            minHeight: () => stdout.rows,
+            focusable: false,
+            children: [rootNode],
+          }),
+        );
+      }
+
+      this.root = rootNode;
 
       // Attach pending portal children to root
       const rootChildren = (this.root.children as Node[] ?? []);
