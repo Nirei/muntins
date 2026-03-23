@@ -90,6 +90,7 @@ export function Switch(props: SwitchProps): Node {
       Text({
         content: () => (isChecked() ? " ■" : "■ "),
         dim: isDisabled,
+        inverse: true
       }),
     ],
   });
