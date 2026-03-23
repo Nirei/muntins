@@ -1745,5 +1745,61 @@ describe("integration", () => {
 
       app.unmount();
     });
+
+    it("renders SectionHeader text when content overflows", () => {
+      const { stdin, stdout, screen } = createMockStreams();
+
+      // Reproduce SectionHeader pattern: column box with Text + Separator-like element
+      function SectionHeader(title: string) {
+        return Box({
+          flexDirection: "column",
+          gap: 0,
+          marginTop: 1,
+          children: [
+            Text({ content: title, bold: true }),
+            Box({ border: { top: true }, height: 1, alignSelf: "stretch" }),
+          ],
+        });
+      }
+
+      const app = App.mount(
+        () =>
+          Box({
+            flexDirection: "column",
+            width: 40,
+            height: 20,
+            children: [
+              SectionHeader("Profile"),
+              Text({ content: "Field 1" }),
+              Text({ content: "Field 2" }),
+              SectionHeader("Preferences"),
+              Text({ content: "Field 3" }),
+              Text({ content: "Field 4" }),
+              Text({ content: "Field 5" }),
+              Text({ content: "Field 6" }),
+              Text({ content: "Field 7" }),
+              Text({ content: "Field 8" }),
+              Text({ content: "Field 9" }),
+              Text({ content: "Field 10" }),
+              Text({ content: "Field 11" }),
+              Text({ content: "Field 12" }),
+              Text({ content: "Field 13" }),
+              Text({ content: "Field 14" }),
+              Text({ content: "Field 15" }),
+              Text({ content: "Field 16" }),
+              Text({ content: "Field 17" }),
+              Text({ content: "Field 18" }),
+            ],
+          }),
+        { stdin, stdout },
+      );
+
+      assert.ok(
+        screen.contains("Profile"),
+        `Screen should contain 'Profile'. Rows:\n${Array.from({ length: 24 }, (_, i) => `  ${i}: '${screen.getRow(i)}'`).join("\n")}`,
+      );
+
+      app.unmount();
+    });
   });
 });

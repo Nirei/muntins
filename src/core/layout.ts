@@ -169,6 +169,11 @@ interface LayoutBox {
   width: number;
   height: number;
 
+  // Automatic minimum sizes (CSS min-width:auto / min-height:auto).
+  // Prevents flex items from shrinking below their content.
+  autoMinWidth: number;
+  autoMinHeight: number;
+
   // Absolute screen position (set by finalizePositions)
   screenX: number;
   screenY: number;
@@ -220,6 +225,8 @@ function buildLayoutTree(
     y: 0,
     width: 0,
     height: 0,
+    autoMinWidth: 0,
+    autoMinHeight: 0,
     screenX: 0,
     screenY: 0,
     children: [],
@@ -332,8 +339,62 @@ function getHeightPaddingBorder(style: FlexStyle): number {
 }
 
 /**
+ * Compute automatic minimum sizes for a layout box (CSS min-width:auto / min-height:auto).
+ * Must be called bottom-up so children's autoMin values are already set.
+ *
+ * For leaf nodes (with measure): the minimum is the intrinsic measured size.
+ * For containers: padding + border + children's minimums along the main axis.
+ */
+function computeAutoMin(box: LayoutBox): void {
+  if (box.node.measure) {
+    box.autoMinWidth = box.width;
+    box.autoMinHeight = box.height;
+    return;
+  }
+
+  const style = box.style;
+  const hPB = getWidthPaddingBorder(style);
+  const vPB = getHeightPaddingBorder(style);
+
+  const visible: LayoutBox[] = [];
+  for (const child of box.children) {
+    if (child.style.display === "none" || child.style.position === "absolute") continue;
+    visible.push(child);
+  }
+
+  if (visible.length === 0) {
+    box.autoMinWidth = hPB;
+    box.autoMinHeight = vPB;
+    return;
+  }
+
+  const isRow = style.flexDirection === "row";
+  let mainSum = 0;
+  let crossMax = 0;
+
+  for (let i = 0; i < visible.length; i++) {
+    const child = visible[i];
+    const cs = child.style;
+    const childMainMin = isRow ? child.autoMinWidth : child.autoMinHeight;
+    const childCrossMin = isRow ? child.autoMinHeight : child.autoMinWidth;
+    const mainMargin = getMainMargin(cs, isRow);
+    const crossMargin = getCrossMargin(cs, isRow);
+    mainSum += childMainMin + mainMargin + (i > 0 ? style.gap : 0);
+    crossMax = Math.max(crossMax, childCrossMin + crossMargin);
+  }
+
+  if (isRow) {
+    box.autoMinWidth = hPB + mainSum;
+    box.autoMinHeight = vPB + crossMax;
+  } else {
+    box.autoMinWidth = hPB + crossMax;
+    box.autoMinHeight = vPB + mainSum;
+  }
+}
+
+/**
  * Distributes a total amount proportionally among weights using integer arithmetic.
- * Remainder is distributed to the first items.
+ * Remainder goes to items with the largest fractional parts.
  *
  * @param total - Total amount to distribute
  * @param weights - Array of weights (e.g., flexGrow values)
@@ -557,6 +618,7 @@ function resolveIntrinsicSize(box: LayoutBox): void {
 
     // Clamp to min/max and return early
     clampBoxSize(box);
+    computeAutoMin(box);
     return;
   }
 
@@ -577,6 +639,9 @@ function resolveIntrinsicSize(box: LayoutBox): void {
 
   // 5. Clamp to min/max
   clampBoxSize(box);
+
+  // 6. Compute automatic minimum (bottom-up, children already computed)
+  computeAutoMin(box);
 }
 
 function distributeGrowForLine(
@@ -611,7 +676,7 @@ function distributeGrowForLine(
   }
 }
 
-// Shrink is weighted by flexShrink * baseSize.
+// Shrink is weighted by flexShrink * baseSize, clamped to automatic minimums.
 function distributeShrinkForLine(
   items: LayoutBox[],
   overflow: number,
@@ -621,25 +686,32 @@ function distributeShrinkForLine(
 
   const shrinkChildren: LayoutBox[] = [];
   const weights: number[] = [];
+  const effectiveMins: number[] = [];
 
   for (const child of items) {
     if (child.style.flexShrink > 0) {
       const baseSize = isRow ? child.width : child.height;
-      const weight = child.style.flexShrink * baseSize;
+      const explicitMin = isRow ? child.style.minWidth : child.style.minHeight;
+      const autoMin = isRow ? child.autoMinWidth : child.autoMinHeight;
+      const effectiveMin = Math.max(explicitMin, autoMin);
+      const shrinkable = Math.max(0, baseSize - effectiveMin);
+      const weight = child.style.flexShrink * shrinkable;
       shrinkChildren.push(child);
       weights.push(weight);
+      effectiveMins.push(effectiveMin);
     }
   }
 
   if (shrinkChildren.length === 0) return;
 
-  const shrinkAmounts = distribute(overflow, weights);
+  const totalShrinkable = weights.reduce((a, b) => a + b, 0);
+  const clampedOverflow = Math.min(overflow, totalShrinkable);
+  const shrinkAmounts = distribute(clampedOverflow, weights);
 
   for (let i = 0; i < shrinkChildren.length; i++) {
     const child = shrinkChildren[i];
     const baseSize = isRow ? child.width : child.height;
-    const minSize = isRow ? child.style.minWidth : child.style.minHeight;
-    const newSize = Math.max(baseSize - shrinkAmounts[i], minSize);
+    const newSize = Math.max(baseSize - shrinkAmounts[i], effectiveMins[i]);
 
     if (isRow) {
       child.width = newSize;
