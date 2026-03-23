@@ -704,7 +704,3 @@ export function resolve<T>(value: MaybeAccessor<T> | undefined): T | undefined;
 export function resolve<T>(value: T | Accessor<T> | undefined): T | undefined {
   return typeof value === "function" ? (value as Accessor<T>)() : value;
 }
-
-// Export state constants and Computation for tests (internal use)
-export { Clean, Check, Dirty };
-export type { Computation };

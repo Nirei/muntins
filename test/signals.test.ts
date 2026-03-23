@@ -1,10 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import {
-  Check,
-  Clean,
-  type Computation,
-  Dirty,
   batch,
   createEffect,
   createMemo,
@@ -14,32 +10,6 @@ import {
   onMount,
   untrack,
 } from "../src/core/signals.ts";
-
-describe("signals core types", () => {
-  it("state constants are ordered Clean < Check < Dirty", () => {
-    assert.ok(Clean < Check);
-    assert.ok(Check < Dirty);
-  });
-
-  it("Computation can be created with all required fields", () => {
-    const node: Computation = {
-      fn: undefined,
-      value: 42,
-      state: Clean,
-      sources: null,
-      observers: null,
-      owner: null,
-      children: [],
-      cleanups: [],
-      mounts: [],
-      effect: false,
-    };
-
-    assert.strictEqual(node.value, 42);
-    assert.strictEqual(node.state, Clean);
-    assert.deepStrictEqual(node.children, []);
-  });
-});
 
 describe("createSignal", () => {
   it("returns getter and setter", () => {
