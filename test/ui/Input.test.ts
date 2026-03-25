@@ -141,6 +141,21 @@ function createMockStdout(cols = 80, rows = 24) {
   };
 }
 
+// Helper to create a mouse press event
+function mousePress(x: number, y: number, target: object = {}) {
+  return {
+    type: "mouse" as const,
+    action: "press" as const,
+    button: 0,
+    x,
+    y,
+    ctrl: false,
+    alt: false,
+    shift: false,
+    target,
+  };
+}
+
 // Helper to create a basic key event
 function keyEvent(
   name: string,
@@ -768,6 +783,74 @@ describe("Input", () => {
       assert.strictEqual(buffer.getSymbol(0, 0), "a");
       assert.strictEqual(buffer.getSymbol(1, 0), "b");
       assert.strictEqual(buffer.getSymbol(2, 0), "c");
+    });
+  });
+
+  describe("mouse click", () => {
+    it("moves cursor to clicked position", () => {
+      const [value, setValue] = createSignal("hello");
+      let received = "";
+      const node = Input({
+        value,
+        onChange: (v) => {
+          received = v;
+          setValue(v);
+        },
+        width: 10,
+      });
+
+      renderInput(node, 10, 1);
+
+      assert.ok(node.onMousePress);
+      node.onMousePress(mousePress(2, 0, node));
+
+      assert.ok(node.onKeyPress);
+      node.onKeyPress(keyEvent("X", "X"));
+      assert.strictEqual(received, "heXllo");
+    });
+
+    it("clicking at column 0 moves cursor to start", () => {
+      const [value, setValue] = createSignal("hello");
+      let received = "";
+      const node = Input({
+        value,
+        onChange: (v) => {
+          received = v;
+          setValue(v);
+        },
+        width: 10,
+      });
+
+      renderInput(node, 10, 1);
+
+      assert.ok(node.onMousePress);
+      node.onMousePress(mousePress(0, 0, node));
+
+      assert.ok(node.onKeyPress);
+      node.onKeyPress(keyEvent("X", "X"));
+      assert.strictEqual(received, "Xhello");
+    });
+
+    it("clicking past end of text moves cursor to end", () => {
+      const [value, setValue] = createSignal("hi");
+      let received = "";
+      const node = Input({
+        value,
+        onChange: (v) => {
+          received = v;
+          setValue(v);
+        },
+        width: 10,
+      });
+
+      renderInput(node, 10, 1);
+
+      assert.ok(node.onMousePress);
+      node.onMousePress(mousePress(8, 0, node));
+
+      assert.ok(node.onKeyPress);
+      node.onKeyPress(keyEvent("X", "X"));
+      assert.strictEqual(received, "hiX");
     });
   });
 

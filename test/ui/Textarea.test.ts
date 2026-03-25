@@ -83,6 +83,21 @@ function createMockStdout(cols = 80, rows = 24) {
   };
 }
 
+// Helper to create a mouse press event
+function mousePress(x: number, y: number, target: object = {}) {
+  return {
+    type: "mouse" as const,
+    action: "press" as const,
+    button: 0,
+    x,
+    y,
+    ctrl: false,
+    alt: false,
+    shift: false,
+    target,
+  };
+}
+
 // Helper to create a basic key event
 function keyEvent(
   name: string,
@@ -1472,6 +1487,100 @@ describe("Textarea", () => {
 
       // Columns 6+ should be empty (clipped)
       assert.strictEqual(buffer.getSymbol(6, 0), " ");
+    });
+  });
+
+  describe("mouse click", () => {
+    it("moves cursor to clicked position on first line", () => {
+      const [value, setValue] = createSignal("hello\nworld");
+      let received = "";
+      const node = Textarea({
+        value,
+        onChange: (v) => {
+          received = v;
+          setValue(v);
+        },
+      });
+
+      const buffer = new RenderBuffer(40, 5);
+      assert.ok(node.render);
+      node.render(0, 0, 40, 5, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+
+      assert.ok(node.onMousePress);
+      node.onMousePress(mousePress(3, 0, node));
+
+      assert.ok(node.onKeyPress);
+      node.onKeyPress(keyEvent("X", "X"));
+      assert.strictEqual(received, "helXlo\nworld");
+    });
+
+    it("moves cursor to clicked position on second line", () => {
+      const [value, setValue] = createSignal("hello\nworld");
+      let received = "";
+      const node = Textarea({
+        value,
+        onChange: (v) => {
+          received = v;
+          setValue(v);
+        },
+      });
+
+      const buffer = new RenderBuffer(40, 5);
+      assert.ok(node.render);
+      node.render(0, 0, 40, 5, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+
+      assert.ok(node.onMousePress);
+      node.onMousePress(mousePress(2, 1, node));
+
+      assert.ok(node.onKeyPress);
+      node.onKeyPress(keyEvent("X", "X"));
+      assert.strictEqual(received, "hello\nwoXrld");
+    });
+
+    it("clicking past line end moves cursor to end of that line", () => {
+      const [value, setValue] = createSignal("hi\nworld");
+      let received = "";
+      const node = Textarea({
+        value,
+        onChange: (v) => {
+          received = v;
+          setValue(v);
+        },
+      });
+
+      const buffer = new RenderBuffer(40, 5);
+      assert.ok(node.render);
+      node.render(0, 0, 40, 5, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+
+      assert.ok(node.onMousePress);
+      node.onMousePress(mousePress(15, 0, node));
+
+      assert.ok(node.onKeyPress);
+      node.onKeyPress(keyEvent("X", "X"));
+      assert.strictEqual(received, "hiX\nworld");
+    });
+
+    it("clicking below text moves cursor to last line", () => {
+      const [value, setValue] = createSignal("hello\nworld");
+      let received = "";
+      const node = Textarea({
+        value,
+        onChange: (v) => {
+          received = v;
+          setValue(v);
+        },
+      });
+
+      const buffer = new RenderBuffer(40, 5);
+      assert.ok(node.render);
+      node.render(0, 0, 40, 5, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+
+      assert.ok(node.onMousePress);
+      node.onMousePress(mousePress(2, 3, node));
+
+      assert.ok(node.onKeyPress);
+      node.onKeyPress(keyEvent("X", "X"));
+      assert.strictEqual(received, "hello\nwoXrld");
     });
   });
 

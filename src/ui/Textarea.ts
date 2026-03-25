@@ -7,7 +7,7 @@ import {
   graphemeDisplayWidth,
   graphemes,
 } from "../core/buffer.ts";
-import { type KeyEvent, isPrintable } from "../core/input.ts";
+import { type KeyEvent, type MouseEvent, isPrintable } from "../core/input.ts";
 import { DEFAULT_FLEX_STYLE, type FlexStyle } from "../core/layout.ts";
 import { isInClipRect } from "../core/render.ts";
 import { Node } from "../core/runtime.ts";
@@ -124,6 +124,22 @@ function posToCharIndex(text: string, graphemePos: number): number {
 }
 
 /**
+ * Convert a display column to a grapheme position within a line.
+ * Clicking on a wide character positions the cursor before it.
+ */
+function displayColumnToGraphemePos(line: string, displayCol: number): number {
+  let width = 0;
+  let pos = 0;
+  for (const grapheme of graphemes(line)) {
+    const gw = graphemeDisplayWidth(grapheme);
+    if (width + gw > displayCol) return pos;
+    width += gw;
+    pos++;
+  }
+  return pos;
+}
+
+/**
  * A multi-line text input field with cursor navigation and editing support.
  *
  * The textarea is intentionally unstyled - it renders text with no default
@@ -184,6 +200,8 @@ export function Textarea(props: TextareaProps): Node {
     ctx?.app.focusedNode ?? null;
 
   let focusableNode: Node;
+  let lastScreenX = 0;
+  let lastScreenY = 0;
 
   createEffect(() => {
     const val = getValue();
@@ -369,6 +387,23 @@ export function Textarea(props: TextareaProps): Node {
     return false;
   };
 
+  const handleMousePress = (event: MouseEvent): void => {
+    if (isDisabled()) return;
+
+    const val = getValue();
+    const lines = val.split("\n");
+
+    const relCol = event.x - lastScreenX;
+    const relRow = event.y - lastScreenY;
+
+    const displayCol = isMultiline ? relCol : relCol + scrollLeft();
+    const row = Math.max(0, Math.min(relRow, lines.length - 1));
+    const line = lines[row];
+    const col = displayColumnToGraphemePos(line, Math.max(0, displayCol));
+
+    setCursorPos(lineColToPos(val, { line: row, column: col }));
+  };
+
   const isFocused = (): boolean => {
     if (!focusedNodeAccessor) return false;
     return focusedNodeAccessor() === focusableNode;
@@ -402,6 +437,9 @@ export function Textarea(props: TextareaProps): Node {
       inherited: InheritedStyle,
       clip: ClipRect,
     ) {
+      lastScreenX = x;
+      lastScreenY = y;
+
       const val = getValue();
       const placeholder = getPlaceholder();
       const disabled = isDisabled();
@@ -459,6 +497,7 @@ export function Textarea(props: TextareaProps): Node {
       focusable: props.focusable ?? true,
       autoFocus: props.autoFocus,
       onKeyPress: handleKeyPress,
+      onMousePress: handleMousePress,
       ...props.style,
       children: [
         ScrollArea({
@@ -478,6 +517,7 @@ export function Textarea(props: TextareaProps): Node {
       focusable: props.focusable ?? true,
       autoFocus: props.autoFocus,
       onKeyPress: handleKeyPress,
+      onMousePress: handleMousePress,
     });
   }
 
