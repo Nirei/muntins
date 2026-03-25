@@ -23,8 +23,6 @@ export {
   Select,
   type SelectProps,
   type SelectOption,
-  type SelectTriggerRenderProps,
-  type SelectOptionRenderProps,
 } from "./Select.ts";
 
 // Feedback

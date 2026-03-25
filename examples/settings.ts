@@ -234,35 +234,15 @@ function SettingsPanel() {
                   onChange: setCountry,
                   placeholder: "Select country",
                   options: [
-                    { value: "us", label: "United States" },
-                    { value: "uk", label: "United Kingdom" },
-                    { value: "ca", label: "Canada" },
                     { value: "au", label: "Australia" },
-                    { value: "de", label: "Germany" },
+                    { value: "ca", label: "Canada" },
                     { value: "fr", label: "France" },
+                    { value: "de", label: "Germany" },
                     { value: "jp", label: "Japan" },
+                    { value: "uk", label: "United Kingdom" },
+                    { value: "us", label: "United States" },
                   ],
-                  renderTrigger: (props) =>
-                    Box({
-                      border: "single",
-                      borderColor: subtle,
-                      width: 22,
-                      children: [
-                        Text({
-                          content: () =>
-                            ` ${props.label()}${props.open() ? " ▲" : " ▼"}`,
-                          dim: props.disabled,
-                        }),
-                      ],
-                    }),
-                  renderOption: (props) =>
-                    Text({
-                      content: () =>
-                        props.highlighted()
-                          ? `> ${props.option.label}`
-                          : `  ${props.option.label}`,
-                      bold: props.selected,
-                    }),
+                  style: { width: 22 },
                 }),
               }),
 

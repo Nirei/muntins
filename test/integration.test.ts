@@ -2115,11 +2115,7 @@ describe("integration", () => {
                                     { value: "us", label: "United States" },
                                     { value: "uk", label: "United Kingdom" },
                                   ],
-                                  renderTrigger: (props) => Box({
-                                    border: "single", width: 22,
-                                    children: [Text({ content: () => ` ${props.label()}` })],
-                                  }),
-                                  renderOption: (props) => Text({ content: () => `  ${props.option.label}` }),
+                                  style: { width: 22 },
                                 }),
                               }),
                               Box({

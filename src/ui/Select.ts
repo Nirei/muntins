@@ -16,26 +16,6 @@ export interface SelectOption<T> {
 }
 
 /**
- * Props passed to the renderTrigger function.
- * All values are accessors to support reactivity.
- */
-export interface SelectTriggerRenderProps {
-  label: () => string;
-  open: () => boolean;
-  disabled: () => boolean;
-}
-
-/**
- * Props passed to the renderOption function.
- * highlighted and selected are accessors to support reactivity.
- */
-export interface SelectOptionRenderProps<T> {
-  option: SelectOption<T>;
-  highlighted: () => boolean;
-  selected: () => boolean;
-}
-
-/**
  * Props for the Select component.
  */
 export interface SelectProps<T> {
@@ -54,12 +34,6 @@ export interface SelectProps<T> {
   /** Disable the select */
   disabled?: MaybeAccessor<boolean>;
 
-  /** Render function for trigger - controls all styling */
-  renderTrigger?: (props: SelectTriggerRenderProps) => Node;
-
-  /** Render function for option - controls all styling */
-  renderOption?: (props: SelectOptionRenderProps<T>) => Node;
-
   /** Focus control */
   focusable?: boolean;
   autoFocus?: boolean;
@@ -70,29 +44,9 @@ export interface SelectProps<T> {
 }
 
 /**
- * Default trigger renderer - shows selected label with dropdown indicator.
- */
-function defaultRenderTrigger(props: SelectTriggerRenderProps): Node {
-  return Text({
-    content: () => props.label() + (props.open() ? " ▲" : " ▼"),
-    dim: props.disabled,
-  });
-}
-
-/**
- * Default option renderer - shows option label.
- */
-function defaultRenderOption<T>(props: SelectOptionRenderProps<T>): Node {
-  return Text({
-    content: props.option.label,
-  });
-}
-
-/**
  * A dropdown selection component for choosing one option from a list.
  *
- * Uses Popover for the floating dropdown. The component is intentionally
- * unstyled - use renderTrigger and renderOption for custom styling.
+ * Uses Popover for the floating dropdown.
  *
  * @example
  * ```typescript
@@ -105,27 +59,6 @@ function defaultRenderOption<T>(props: SelectOptionRenderProps<T>): Node {
  *     { value: "us", label: "United States" },
  *     { value: "uk", label: "United Kingdom" },
  *   ],
- * });
- *
- * // With custom styling
- * Select({
- *   value: country,
- *   onChange: setCountry,
- *   options: countries,
- *   renderTrigger: (props) =>
- *     Box({
- *       border: "single",
- *       padding: 1,
- *       children: [
- *         Text({ content: props.label + (props.open ? " ▲" : " ▼") }),
- *       ],
- *     }),
- *   renderOption: (props) =>
- *     Text({
- *       content: props.option.label,
- *       inverse: props.highlighted,
- *       bold: props.selected,
- *     }),
  * });
  * ```
  */
@@ -142,9 +75,6 @@ export function Select<T>(props: SelectProps<T>): Node {
     const opt = props.options.find((o) => o.value === val);
     return opt?.label ?? getPlaceholder();
   };
-
-  const renderTrigger = props.renderTrigger ?? defaultRenderTrigger;
-  const renderOption = props.renderOption ?? defaultRenderOption;
 
   const handleKeyPress = (key: KeyEvent): boolean | undefined => {
     if (isDisabled()) return false;
@@ -216,16 +146,15 @@ export function Select<T>(props: SelectProps<T>): Node {
     content: () =>
       Box({
         flexDirection: "column",
+        backgroundColor: { type: "default" },
+        paddingStart: 2,
+        paddingEnd: 1,
         focusable: false,
         children: props.options.map((opt, index) =>
           Box({
             onMousePress: handleOptionMousePress(index),
             children: [
-              renderOption({
-                option: opt,
-                highlighted: () => highlightedIndex() === index,
-                selected: () => getValue() === opt.value,
-              }),
+              Text({ content: opt.label }),
             ],
           }),
         ),
@@ -237,13 +166,16 @@ export function Select<T>(props: SelectProps<T>): Node {
         autoFocus: props.autoFocus,
         onKeyPress: handleKeyPress,
         onMousePress: handleTriggerMousePress,
+        flexGrow: 1,
+        flexDirection: "row",
+        justifyContent: "space-between",
+        border: "single",
+        paddingStart: 1,
+        paddingEnd: 1,
         ...props.style,
         children: [
-          renderTrigger({
-            label: selectedLabel,
-            open: isOpen,
-            disabled: isDisabled,
-          }),
+          Text({ content: selectedLabel, dim: isDisabled }),
+          Text({ content: () => (isOpen() ? "▲" : "▼"), dim: isDisabled }),
         ],
       });
 

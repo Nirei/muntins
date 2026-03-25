@@ -690,119 +690,6 @@ describe("Select", () => {
     });
   });
 
-  describe("custom renderers", () => {
-    it("renderTrigger controls trigger appearance", () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
-
-      const app = App.mount(
-        () =>
-          Box({
-            children: [
-              Select({
-                value: "us",
-                options: testOptions,
-                // Note: props.label is now an accessor
-                renderTrigger: (props) =>
-                  Text({ content: () => `[${props.label()}]` }),
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-          fpsLimit: 0,
-        },
-      );
-
-      // Custom format should be used
-      assert.ok(mockStdout.written.includes("[USA]"));
-      app.unmount();
-    });
-
-    it("renderOption controls option appearance", async () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
-
-      const app = App.mount(
-        () =>
-          Box({
-            height: 10,
-            children: [
-              Select({
-                value: "us",
-                options: testOptions,
-                autoFocus: true,
-                renderOption: (props) =>
-                  Text({
-                    content: `>${props.option.label}<`,
-                  }),
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-          fpsLimit: 0,
-        },
-      );
-
-      // Open dropdown
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
-      await nextRender();
-
-      // Custom format should be used (no spaces to avoid ANSI escape issues)
-      assert.ok(mockStdout.written.includes(">UK<"));
-      app.unmount();
-    });
-
-    it("renderOption receives highlighted and selected state", async () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
-      const states: Array<{ highlighted: boolean; selected: boolean }> = [];
-
-      const app = App.mount(
-        () =>
-          Box({
-            height: 10,
-            children: [
-              Select({
-                value: "uk",
-                options: testOptions,
-                autoFocus: true,
-                renderOption: (props) => {
-                  // Note: highlighted and selected are accessors
-                  states.push({
-                    highlighted: props.highlighted(),
-                    selected: props.selected(),
-                  });
-                  return Text({ content: props.option.label });
-                },
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-          fpsLimit: 0,
-        },
-      );
-
-      // Open dropdown (highlighted should match selected: uk at index 1)
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
-      await nextRender();
-
-      // Find uk option state (selected and highlighted)
-      const ukState = states.find(
-        (s, i) => states.indexOf(s) % 3 === 1 && s.selected === true,
-      );
-      assert.ok(ukState?.highlighted === true);
-      assert.ok(ukState?.selected === true);
-
-      app.unmount();
-    });
-  });
-
   describe("focus", () => {
     it("is focusable by default", () => {
       const mockStdin = createMockStdin();
@@ -887,6 +774,48 @@ describe("Select", () => {
 
       // Should render without error (style applied)
       assert.ok(mockStdout.written.includes("USA"));
+      app.unmount();
+    });
+
+    it("default trigger places arrow at end of box", () => {
+      const mockStdin = createMockStdin();
+      const parentWidth = 30;
+      const mockStdout = createMockStdout(parentWidth, 24);
+
+      const app = App.mount(
+        () =>
+          Box({
+            width: parentWidth,
+            children: [
+              Select({
+                value: "us",
+                options: testOptions,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+        },
+      );
+
+      const buffer = app.renderer.buffer;
+
+      // Row 0 is the top border. Row 1 has the content.
+      // Col 0 is left border. Col 1 is paddingStart. Content starts at col 2.
+      assert.strictEqual(buffer.getSymbol(2, 1), "U");
+      assert.strictEqual(buffer.getSymbol(3, 1), "S");
+      assert.strictEqual(buffer.getSymbol(4, 1), "A");
+
+      // Arrow "▼" should be one space from the right border
+      assert.strictEqual(
+        buffer.getSymbol(parentWidth - 3, 1),
+        "▼",
+        "Arrow should be one space from the right edge",
+      );
+      assert.strictEqual(buffer.getSymbol(parentWidth - 2, 1), " ");
+
       app.unmount();
     });
   });
@@ -1044,10 +973,11 @@ describe("Select", () => {
       mockStdin.emit("data", Buffer.from("\r"));
       await nextRender();
 
-      // The trigger is at row 0, dropdown starts at row 1
-      // Options are: USA (y=1), UK (y=2), Canada (y=3)
-      // SGR protocol is 1-indexed, so UK is at SGR row 3
-      mockStdin.emit("data", Buffer.from("\x1b[<0;1;3M"));
+      // Trigger has border (rows 0-2), dropdown starts at row 3
+      // Options are: USA (y=3), UK (y=4), Canada (y=5)
+      // Popover has paddingStart:2, so click at x=3 (SGR col 4) to hit option text
+      // SGR protocol is 1-indexed, so UK is at SGR row 5
+      mockStdin.emit("data", Buffer.from("\x1b[<0;4;5M"));
       await nextRender();
 
       assert.strictEqual(
