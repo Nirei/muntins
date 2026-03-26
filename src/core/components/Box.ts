@@ -69,6 +69,13 @@ export interface BoxProps extends Partial<ReactiveFlexStyle> {
   border?: BorderProp | (() => BorderProp);
   borderColor?: InheritableColor | (() => InheritableColor);
   borderStyle?: BorderStyleName | (() => BorderStyleName);
+  color?: InheritableColor | (() => InheritableColor);
+  bold?: InheritableBool | (() => InheritableBool);
+  dim?: InheritableBool | (() => InheritableBool);
+  italic?: InheritableBool | (() => InheritableBool);
+  underline?: InheritableBool | (() => InheritableBool);
+  strikethrough?: InheritableBool | (() => InheritableBool);
+  inverse?: InheritableBool | (() => InheritableBool);
   focusable?: boolean;
   autoFocus?: boolean;
   ref?: Ref;
@@ -95,6 +102,13 @@ export function Box(props: BoxProps): Node {
     border,
     borderColor,
     borderStyle,
+    color,
+    bold,
+    dim,
+    italic,
+    underline,
+    strikethrough,
+    inverse,
     focusable,
     autoFocus,
     ref,
@@ -166,6 +180,13 @@ export function Box(props: BoxProps): Node {
     _inheritableProps: {
       backgroundColor,
       borderColor,
+      color,
+      bold,
+      dim,
+      italic,
+      underline,
+      strikethrough,
+      inverse,
     },
 
     render:
