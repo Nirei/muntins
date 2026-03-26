@@ -125,36 +125,24 @@ function SettingsPanel() {
 
               FormRow({
                 label: "Username",
-                children: Box({
-                  border: "single",
-                  borderColor: subtle,
-                  children: [
-                    Input({
-                      value: username,
-                      onChange: setUsername,
-                      width: 28,
-                      placeholder: "Enter username",
-                      autoFocus: true,
-                    }),
-                  ],
+                children: Input({
+                  value: username,
+                  onChange: setUsername,
+                  width: 28,
+                  placeholder: "Enter username",
+                  autoFocus: true,
                 }),
               }),
 
               FormRow({
                 label: "Bio",
                 alignTop: true,
-                children: Box({
-                  border: "single",
-                  borderColor: subtle,
-                  children: [
-                    Textarea({
-                      value: bio,
-                      onChange: setBio,
-                      width: 28,
-                      maxHeight: 3,
-                      placeholder: "Tell us about yourself",
-                    }),
-                  ],
+                children: Textarea({
+                  value: bio,
+                  onChange: setBio,
+                  width: 28,
+                  maxHeight: 3,
+                  placeholder: "Tell us about yourself",
                 }),
               }),
 

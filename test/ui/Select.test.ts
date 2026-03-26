@@ -802,19 +802,17 @@ describe("Select", () => {
 
       const buffer = app.renderer.buffer;
 
-      // Row 0 is the top border. Row 1 has the content.
-      // Col 0 is left border. Col 1 is paddingStart. Content starts at col 2.
-      assert.strictEqual(buffer.getSymbol(2, 1), "U");
-      assert.strictEqual(buffer.getSymbol(3, 1), "S");
-      assert.strictEqual(buffer.getSymbol(4, 1), "A");
+      // paddingStart: 1 from input fallback, paddingEnd: 1. No border. Content at col 1, row 0.
+      assert.strictEqual(buffer.getSymbol(1, 0), "U");
+      assert.strictEqual(buffer.getSymbol(2, 0), "S");
+      assert.strictEqual(buffer.getSymbol(3, 0), "A");
 
-      // Arrow "▼" should be one space from the right border
+      // Arrow "▼" should be one space from the right edge (paddingEnd: 1)
       assert.strictEqual(
-        buffer.getSymbol(parentWidth - 3, 1),
+        buffer.getSymbol(parentWidth - 2, 0),
         "▼",
         "Arrow should be one space from the right edge",
       );
-      assert.strictEqual(buffer.getSymbol(parentWidth - 2, 1), " ");
 
       app.unmount();
     });
@@ -973,11 +971,10 @@ describe("Select", () => {
       mockStdin.emit("data", Buffer.from("\r"));
       await nextRender();
 
-      // Trigger has border (rows 0-2), dropdown starts at row 3
-      // Options are: USA (y=3), UK (y=4), Canada (y=5)
-      // Popover has paddingStart:2, so click at x=3 (SGR col 4) to hit option text
-      // SGR protocol is 1-indexed, so UK is at SGR row 5
-      mockStdin.emit("data", Buffer.from("\x1b[<0;4;5M"));
+      // Trigger has no border, 1 row. Dropdown starts at row 1.
+      // Options with paddingStart:1: USA (y=1), UK (y=2), Canada (y=3)
+      // SGR is 1-indexed, so UK is at SGR row 3, col 2
+      mockStdin.emit("data", Buffer.from("\x1b[<0;2;3M"));
       await nextRender();
 
       assert.strictEqual(

@@ -4,6 +4,7 @@ import type { FlexStyle } from "../core/layout.ts";
 import type { BoxChild, Node } from "../core/runtime.ts";
 import { Box, Portal } from "../core/runtime.ts";
 import { type MaybeAccessor, onCleanup, resolve } from "../core/signals.ts";
+import { theme } from "../core/theme.ts";
 
 /**
  * Position options for Toast placement on screen.
@@ -23,7 +24,7 @@ export interface ToastProps {
   /** Toast content */
   children: BoxChild | BoxChild[];
 
-  /** Duration in ms before auto-dismiss. Default: 3000. 0 = no auto-dismiss */
+  /** Duration in ms before auto-dismiss. Default from theme. 0 = no auto-dismiss */
   duration?: number;
 
   /** Called when toast should be dismissed */
@@ -101,7 +102,7 @@ function getPositionStyle(position: ToastPosition): Partial<FlexStyle> {
  */
 export function Toast(props: ToastProps): Node {
   const getPosition = () => resolve(props.position) ?? "bottom-right";
-  const duration = props.duration ?? 3000;
+  const duration = props.duration ?? (theme('toast').duration as number);
 
   if (duration !== 0) {
     const timer = setTimeout(() => {

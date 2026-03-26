@@ -1481,11 +1481,11 @@ describe("integration", () => {
       emitKeypress(stdin, "a", { name: "a" });
       await nextTick();
 
-      // The 'a' should be visible at position 0, cursor at position 1
+      // The 'a' should be visible at position 1 (paddingStart: 1 from theme)
       assert.strictEqual(
-        screen.getChar(0, 0),
+        screen.getChar(1, 0),
         "a",
-        `After typing 'a': position 0 should be 'a', got '${screen.getChar(0, 0)}'`,
+        `After typing 'a': position 1 should be 'a', got '${screen.getChar(1, 0)}'`,
       );
 
       // Type 'b'
@@ -1494,14 +1494,14 @@ describe("integration", () => {
 
       // Both 'a' and 'b' should be visible
       assert.strictEqual(
-        screen.getChar(0, 0),
+        screen.getChar(1, 0),
         "a",
-        `After typing 'b': position 0 should still be 'a', got '${screen.getChar(0, 0)}'`,
+        `After typing 'b': position 1 should still be 'a', got '${screen.getChar(1, 0)}'`,
       );
       assert.strictEqual(
-        screen.getChar(1, 0),
+        screen.getChar(2, 0),
         "b",
-        `After typing 'b': position 1 should be 'b', got '${screen.getChar(1, 0)}'`,
+        `After typing 'b': position 2 should be 'b', got '${screen.getChar(2, 0)}'`,
       );
 
       // Type 'c'
@@ -1509,7 +1509,7 @@ describe("integration", () => {
       await nextTick();
 
       assert.strictEqual(
-        screen.getRow(0).substring(0, 3),
+        screen.getRow(0).substring(1, 4),
         "abc",
         "Should show 'abc'",
       );
@@ -1538,45 +1538,45 @@ describe("integration", () => {
 
       await nextTick();
 
-      // Initial: cursor should be at position 0 (empty input)
+      // Initial: cursor should be at position 1 (paddingStart: 1 from theme)
       let inversePositions = screen.getInversePositions(0);
       assert.deepStrictEqual(
         inversePositions,
-        [0],
-        `Initial: cursor should be at position 0, got ${JSON.stringify(inversePositions)}`,
+        [1],
+        `Initial: cursor should be at position 1, got ${JSON.stringify(inversePositions)}`,
       );
 
-      // Type 'a' - cursor should move to position 1
+      // Type 'a' - cursor should move to position 2
       emitKeypress(stdin, "a", { name: "a" });
       await nextTick();
 
       inversePositions = screen.getInversePositions(0);
       assert.deepStrictEqual(
         inversePositions,
-        [1],
-        `After 'a': cursor should be at position 1 only, got ${JSON.stringify(inversePositions)}`,
+        [2],
+        `After 'a': cursor should be at position 2 only, got ${JSON.stringify(inversePositions)}`,
       );
 
-      // Type 'b' - cursor should move to position 2
+      // Type 'b' - cursor should move to position 3
       emitKeypress(stdin, "b", { name: "b" });
       await nextTick();
 
       inversePositions = screen.getInversePositions(0);
       assert.deepStrictEqual(
         inversePositions,
-        [2],
-        `After 'ab': cursor should be at position 2 only, got ${JSON.stringify(inversePositions)}`,
+        [3],
+        `After 'ab': cursor should be at position 3 only, got ${JSON.stringify(inversePositions)}`,
       );
 
-      // Type 'c' - cursor should move to position 3
+      // Type 'c' - cursor should move to position 4
       emitKeypress(stdin, "c", { name: "c" });
       await nextTick();
 
       inversePositions = screen.getInversePositions(0);
       assert.deepStrictEqual(
         inversePositions,
-        [3],
-        `After 'abc': cursor should be at position 3 only, got ${JSON.stringify(inversePositions)}`,
+        [4],
+        `After 'abc': cursor should be at position 4 only, got ${JSON.stringify(inversePositions)}`,
       );
 
       app.unmount();

@@ -109,3 +109,13 @@ export {
   wrapLine,
   truncateLine,
 } from "./text.ts";
+
+// Theme (generic infrastructure — UI layer provides defaults and re-exports)
+export {
+  theme,
+  setTheme,
+  resolveTheme,
+  parseColor,
+  styleFallback,
+} from "./theme.ts";
+export type { Theme, ColorString } from "./theme.ts";

@@ -1,5 +1,7 @@
 // Public API exports
 
+export { theme, setTheme, styleFallback } from "../core/theme.ts";
+
 // Basic components
 export { Label, type LabelProps } from "./Label.ts";
 export { Button, type ButtonProps } from "./Button.ts";

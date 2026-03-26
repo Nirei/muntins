@@ -5,6 +5,7 @@ import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
 import { type MaybeAccessor, createSignal, resolve } from "../core/signals.ts";
+import { styleFallback, theme } from "../core/theme.ts";
 import { Popover } from "./Popover.ts";
 
 /**
@@ -146,9 +147,7 @@ export function Select<T>(props: SelectProps<T>): Node {
     content: () =>
       Box({
         flexDirection: "column",
-        backgroundColor: { type: "default" },
-        paddingStart: 2,
-        paddingEnd: 1,
+        ...styleFallback(undefined, 'select--dropdown'),
         focusable: false,
         children: props.options.map((opt, index) =>
           Box({
@@ -169,13 +168,21 @@ export function Select<T>(props: SelectProps<T>): Node {
         flexGrow: 1,
         flexDirection: "row",
         justifyContent: "space-between",
-        border: "single",
-        paddingStart: 1,
-        paddingEnd: 1,
-        ...props.style,
+        ...styleFallback(props.style, 'select--trigger', 'input'),
         children: [
-          Text({ content: selectedLabel, dim: isDisabled }),
-          Text({ content: () => (isOpen() ? "▲" : "▼"), dim: isDisabled }),
+          Text({
+            content: selectedLabel,
+            dim: () => isDisabled() && (theme('select--disabled').dim as boolean),
+          }),
+          Text({
+            content: () => {
+              const t = theme('select--indicator');
+              return isOpen()
+                ? (t.openChar as string)
+                : (t.closedChar as string);
+            },
+            dim: () => isDisabled() && (theme('select--disabled').dim as boolean),
+          }),
         ],
       });
 

@@ -1,0 +1,26 @@
+{
+  "tokens": {
+    "mutedBg": "palette:236"
+  },
+  "switch": { "inverse": true, "checkedChar": " ■", "uncheckedChar": "■ " },
+  "switch--disabled": { "dim": true },
+  "radio-group": { "flexDirection": "column", "selectedChar": "●", "unselectedChar": "○" },
+  "radio-group--disabled": { "dim": true },
+  "select--dropdown": { "backgroundColor": "$mutedBg", "paddingStart": 1, "paddingEnd": 1 },
+  "select--indicator": { "openChar": "▲", "closedChar": "▼" },
+  "select--disabled": { "dim": true },
+  "textarea": { "width": 40 },
+  "textarea--cursor": { "inverse": true },
+  "textarea--placeholder": { "dim": true },
+  "textarea--disabled": { "dim": true },
+  "input": { "width": 20, "backgroundColor": "$mutedBg", "paddingStart": 1, "paddingEnd": 1 },
+  "progress": { "width": 20, "chars": [" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"] },
+  "spinner": { "interval": 80 },
+  "spinner--dots": { "frames": ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] },
+  "spinner--line": { "frames": ["-", "\\", "|", "/"] },
+  "spinner--arc": { "frames": ["◜", "◠", "◝", "◞", "◡", "◟"] },
+  "toast": { "duration": 3000 },
+  "drawer": { "side": "right", "size": 30 },
+  "menubar--separator": { "content": "──────────" },
+  "menubar--item": { "gap": 2 }
+}

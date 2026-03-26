@@ -5,6 +5,7 @@ import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
 import { type MaybeAccessor, resolve } from "../core/signals.ts";
+import { styleFallback, theme } from "../core/theme.ts";
 
 /**
  * Props for the Switch component.
@@ -30,10 +31,6 @@ export interface SwitchProps {
 
 /**
  * An on/off toggle control that renders as a 2-character track with a sliding indicator.
- *
- * Renders as:
- * - Off: `■ ` (indicator on left)
- * - On: ` ■` (indicator on right)
  *
  * The switch toggles on Enter or Space key press when focused.
  * When disabled, the switch is dimmed and does not respond to input.
@@ -85,12 +82,17 @@ export function Switch(props: SwitchProps): Node {
     onActivate: handleActivate,
     onKeyPress: handleKeyPress,
     onMousePress: handleMousePress,
-    ...props.style,
+    ...styleFallback(props.style, 'switch'),
     children: [
       Text({
-        content: () => (isChecked() ? " ■" : "■ "),
-        dim: isDisabled,
-        inverse: true
+        content: () => {
+          const t = theme('switch');
+          return isChecked()
+            ? (t.checkedChar as string)
+            : (t.uncheckedChar as string);
+        },
+        inverse: () => theme('switch').inverse as boolean,
+        dim: () => isDisabled() && (theme('switch--disabled').dim as boolean),
       }),
     ],
   });

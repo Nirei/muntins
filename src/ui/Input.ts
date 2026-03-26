@@ -3,6 +3,7 @@
 import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import type { MaybeAccessor } from "../core/signals.ts";
+import { theme } from "../core/theme.ts";
 import { Textarea } from "./Textarea.ts";
 
 /**
@@ -18,7 +19,7 @@ export interface InputProps {
   /** Placeholder text when empty */
   placeholder?: string | (() => string);
 
-  /** Input width in characters. Default: 20 */
+  /** Input width in characters. Default from theme. */
   width?: number | (() => number);
 
   /** Disable the input */
@@ -71,7 +72,7 @@ export function Input(props: InputProps): Node {
     value: props.value,
     onChange: props.onChange,
     placeholder: props.placeholder,
-    width: props.width ?? 20,
+    width: props.width ?? (theme('input').width as number),
     disabled: props.disabled,
     focusable: props.focusable,
     autoFocus: props.autoFocus,

@@ -10,6 +10,7 @@ import {
   createSignal,
   resolve,
 } from "../core/signals.ts";
+import { styleFallback, theme } from "../core/theme.ts";
 
 /**
  * An option in a RadioGroup.
@@ -49,7 +50,7 @@ export interface RadioGroupProps<T> {
   /** Render function for option - controls all styling */
   renderOption?: (props: RadioOptionRenderProps<T>) => Node;
 
-  /** Layout direction. Default: "column" */
+  /** Layout direction. Default from theme. */
   direction?: MaybeAccessor<"row" | "column">;
 
   /** Focus control */
@@ -71,12 +72,17 @@ function defaultRenderOption<T>(props: RadioOptionRenderProps<T>): Node {
     gap: 1,
     children: [
       Text({
-        content: () => (props.selected() ? "●" : "○"),
-        dim: props.disabled,
+        content: () => {
+          const t = theme('radio-group');
+          return props.selected()
+            ? (t.selectedChar as string)
+            : (t.unselectedChar as string);
+        },
+        dim: () => props.disabled() && (theme('radio-group--disabled').dim as boolean),
       }),
       Text({
         content: props.option.label,
-        dim: props.disabled,
+        dim: () => props.disabled() && (theme('radio-group--disabled').dim as boolean),
       }),
     ],
   });
@@ -87,10 +93,6 @@ function defaultRenderOption<T>(props: RadioOptionRenderProps<T>): Node {
  *
  * Arrow keys navigate between options and select automatically on focus,
  * following standard radio group behavior. Home/End jump to first/last option.
- *
- * Renders as:
- * - Unchecked: `○` (U+25CB WHITE CIRCLE)
- * - Checked: `●` (U+25CF BLACK CIRCLE)
  *
  * The default layout is column (vertical). Use `direction: "row"` for horizontal.
  * When disabled, all options are dimmed and input is ignored.
@@ -168,7 +170,8 @@ export function RadioGroup<T>(props: RadioGroupProps<T>): Node {
   };
 
   return Box({
-    flexDirection: () => resolve(props.direction) ?? "column",
+    flexDirection: () =>
+      resolve(props.direction) ?? (theme('radio-group').flexDirection as "row" | "column"),
     focusable: props.focusable ?? true,
     autoFocus: props.autoFocus,
     ref: props.ref,

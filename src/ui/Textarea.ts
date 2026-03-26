@@ -23,6 +23,7 @@ import {
 } from "../core/signals.ts";
 import { displayWidthToPosition, textLength } from "../core/text.ts";
 import { ScrollArea } from "../core/components/ScrollArea.ts";
+import { styleFallback, theme } from "../core/theme.ts";
 
 /**
  * Props for the Textarea component.
@@ -37,7 +38,7 @@ export interface TextareaProps {
   /** Placeholder text when empty */
   placeholder?: string | (() => string);
 
-  /** Width in characters. Default: 40 */
+  /** Width in characters. Default from theme. */
   width?: number | (() => number);
 
   /**
@@ -190,7 +191,7 @@ export function Textarea(props: TextareaProps): Node {
 
   const getValue = () => resolve(props.value) ?? "";
   const isDisabled = () => resolve(props.disabled) ?? false;
-  const getWidth = () => resolve(props.width) ?? 40;
+  const getWidth = () => resolve(props.width) ?? (theme('textarea').width as number);
   const getMaxHeight = () => resolve(props.maxHeight);
   const getPlaceholder = () => resolve(props.placeholder) ?? "";
   const isMultiline = props.multiline ?? true;
@@ -409,6 +410,20 @@ export function Textarea(props: TextareaProps): Node {
     return focusedNodeAccessor() === focusableNode;
   };
 
+  const themeStyle = styleFallback(props.style, 'textarea', 'input');
+
+  const getPadding = (side: 'paddingStart' | 'paddingEnd'): number => {
+    const val = themeStyle[side];
+    return ((typeof val === 'function' ? (val as () => number)() : val) as number) ?? 0;
+  };
+
+  const contentWidth = () => {
+    if (getMaxHeight() === undefined) return getWidth();
+    const ps = getPadding('paddingStart');
+    const pe = getPadding('paddingEnd');
+    return getWidth() - ps - pe - 1;
+  };
+
   const contentNode = new Node({
     style: () => {
       const val = getValue();
@@ -416,7 +431,7 @@ export function Textarea(props: TextareaProps): Node {
 
       return {
         ...DEFAULT_FLEX_STYLE,
-        width: getWidth(),
+        width: contentWidth(),
         height: lineCount,
         ...props.style,
       } as FlexStyle;
@@ -425,7 +440,7 @@ export function Textarea(props: TextareaProps): Node {
     measure(_availableWidth: number, _availableHeight: number) {
       const val = getValue();
       const lineCount = val.length === 0 ? 1 : val.split("\n").length;
-      return { width: getWidth(), height: lineCount };
+      return { width: contentWidth(), height: lineCount };
     },
 
     render(
@@ -448,6 +463,10 @@ export function Textarea(props: TextareaProps): Node {
       const fg = inherited.color;
       const bg = inherited.backgroundColor;
 
+      const cursorInverse = theme('textarea--cursor').inverse as boolean;
+      const placeholderDim = theme('textarea--placeholder').dim as boolean;
+      const disabledDim = theme('textarea--disabled').dim as boolean;
+
       const hScroll = isMultiline ? 0 : scrollLeft();
 
       if (val.length === 0 && placeholder.length > 0) {
@@ -460,11 +479,12 @@ export function Textarea(props: TextareaProps): Node {
           placeholder,
           fg,
           bg,
-          true, // dim
-          false, // no cursor
+          placeholderDim,
+          false,
           -1,
           hScroll,
           clip,
+          cursorInverse,
         );
         return;
       }
@@ -480,11 +500,12 @@ export function Textarea(props: TextareaProps): Node {
         val,
         fg,
         bg,
-        disabled,
+        disabled && disabledDim,
         showCursor,
         pos,
         hScroll,
         clip,
+        cursorInverse,
       );
     },
   });
@@ -493,16 +514,17 @@ export function Textarea(props: TextareaProps): Node {
 
   if (maxHeight !== undefined) {
     const boxProps: Record<string, unknown> = {
-      width: props.width ?? 40,
       focusable: props.focusable ?? true,
       autoFocus: props.autoFocus,
       onKeyPress: handleKeyPress,
       onMousePress: handleMousePress,
-      ...props.style,
+      ...themeStyle,
+      paddingEnd: 0,
+      width: getWidth(),
       children: [
         ScrollArea({
           height: maxHeight,
-          width: props.width ?? 40,
+          width: () => getWidth() - getPadding('paddingStart'),
           scrollTop: scrollTop,
           onScroll: setScrollTop,
           focusable: false,
@@ -512,12 +534,14 @@ export function Textarea(props: TextareaProps): Node {
     };
     focusableNode = Box(boxProps as Parameters<typeof Box>[0]);
   } else {
-    focusableNode = new Node({
-      ...contentNode,
+    focusableNode = Box({
       focusable: props.focusable ?? true,
       autoFocus: props.autoFocus,
       onKeyPress: handleKeyPress,
       onMousePress: handleMousePress,
+      ...themeStyle,
+      width: getWidth(),
+      children: [contentNode],
     });
   }
 
@@ -546,6 +570,7 @@ function renderTextareaContent(
   cursorPos: number,
   scrollLeft = 0,
   clip?: ClipRect,
+  cursorInverse = true,
 ): void {
   const lines = text.split("\n");
   let globalGraphemeIndex = 0;
@@ -570,7 +595,7 @@ function renderTextareaContent(
 
       if (isVisible) {
         let modifiers = dim ? DIM : 0;
-        if (showCursor && globalGraphemeIndex === cursorPos) {
+        if (showCursor && cursorInverse && globalGraphemeIndex === cursorPos) {
           modifiers |= INVERSE;
         }
 
@@ -607,7 +632,7 @@ function renderTextareaContent(
       const renderCol = displayCol - scrollLeft;
       const screenX = x + renderCol;
       if (renderCol >= 0 && inClip(screenX, screenY)) {
-        buffer.set(screenX, screenY, " ", fg, bg, INVERSE);
+        buffer.set(screenX, screenY, " ", fg, bg, cursorInverse ? INVERSE : 0);
       }
     }
 
@@ -627,7 +652,7 @@ function renderTextareaContent(
       const screenX = x + cursorCol;
       const screenY = y + cursorLineCol.line;
       if (cursorCol >= 0 && cursorCol < width && inClip(screenX, screenY)) {
-        buffer.set(screenX, screenY, " ", fg, bg, INVERSE);
+        buffer.set(screenX, screenY, " ", fg, bg, cursorInverse ? INVERSE : 0);
       }
     }
   }

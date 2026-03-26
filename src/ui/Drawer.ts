@@ -5,6 +5,7 @@ import type { FlexStyle } from "../core/layout.ts";
 import type { Node } from "../core/runtime.ts";
 import { Box, Portal, Show, TabFocus } from "../core/runtime.ts";
 import { type MaybeAccessor, resolve } from "../core/signals.ts";
+import { theme } from "../core/theme.ts";
 
 /** Which edge the drawer appears from */
 export type DrawerSide = "left" | "right" | "top" | "bottom";
@@ -19,7 +20,7 @@ export interface DrawerProps {
   /** Called when drawer should close (Escape key) */
   onClose?: () => void;
 
-  /** Which edge the drawer appears from. Default: "right" */
+  /** Which edge the drawer appears from. Default from theme. */
   side?: MaybeAccessor<DrawerSide>;
 
   /** Drawer content */
@@ -72,9 +73,10 @@ export interface DrawerProps {
  * ```
  */
 export function Drawer(props: DrawerProps): Node {
+  const t = () => theme('drawer');
   const isOpen = () => resolve(props.open) ?? false;
-  const getSide = () => resolve(props.side) ?? "right";
-  const getSize = () => resolve(props.size) ?? 30;
+  const getSide = () => resolve(props.side) ?? (t().side as DrawerSide);
+  const getSize = () => resolve(props.size) ?? (t().size as number);
 
   const handleKeyPress = (key: KeyEvent): boolean | undefined => {
     if (key.name === "escape") {

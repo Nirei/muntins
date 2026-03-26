@@ -5,6 +5,7 @@ import type { FlexStyle } from "../core/layout.ts";
 import type { BoxChild, Node, Ref } from "../core/runtime.ts";
 import { Box } from "../core/runtime.ts";
 import { type MaybeAccessor, resolve } from "../core/signals.ts";
+import { styleFallback } from "../core/theme.ts";
 
 /**
  * Props for the Button component.
@@ -95,7 +96,7 @@ export function Button(props: ButtonProps): Node {
     onActivate: handleActivate,
     onKeyPress: handleKeyPress,
     onMousePress: handleMousePress,
-    ...props.style,
+    ...styleFallback(props.style, 'button'),
     children: props.children,
   });
 }

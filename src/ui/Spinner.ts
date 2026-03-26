@@ -10,16 +10,10 @@ import {
   onCleanup,
   resolve,
 } from "../core/signals.ts";
+import { theme } from "../core/theme.ts";
 
 /** Spinner animation variant. */
 export type SpinnerVariant = "dots" | "line" | "arc";
-
-/** Frame sequences for each spinner variant. */
-const FRAMES: Record<SpinnerVariant, string[]> = {
-  dots: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
-  line: ["-", "\\", "|", "/"],
-  arc: ["◜", "◠", "◝", "◞", "◡", "◟"],
-};
 
 /**
  * Props for the Spinner component.
@@ -28,7 +22,7 @@ export interface SpinnerProps {
   /** Spinner style/frames. Default: "dots" */
   variant?: MaybeAccessor<SpinnerVariant>;
 
-  /** Animation interval in ms. Default: 80 */
+  /** Animation interval in ms. Default from theme. */
   interval?: MaybeAccessor<number>;
 
   /** Label shown next to spinner */
@@ -59,9 +53,14 @@ export interface SpinnerProps {
 export function Spinner(props: SpinnerProps): Node {
   const { variant, interval, label, style } = props;
 
-  // Get reactive values
   const getVariant = (): SpinnerVariant => resolve(variant) ?? "dots";
-  const getInterval = (): number => resolve(interval) ?? 80;
+  const getInterval = (): number =>
+    resolve(interval) ?? (theme('spinner').interval as number);
+
+  const getFrames = (): string[] => {
+    const key = `spinner--${getVariant()}`;
+    return theme(key).frames as string[];
+  };
 
   // Frame index signal for animation
   const [frameIndex, setFrameIndex] = createSignal(0);
@@ -70,7 +69,7 @@ export function Spinner(props: SpinnerProps): Node {
   createEffect(() => {
     const ms = getInterval();
     const intervalId = setInterval(() => {
-      const frames = FRAMES[getVariant()];
+      const frames = getFrames();
       setFrameIndex((prev) => (prev + 1) % frames.length);
     }, ms);
 
@@ -83,7 +82,7 @@ export function Spinner(props: SpinnerProps): Node {
   // Create spinner text node
   const spinnerText = Text({
     content: () => {
-      const frames = FRAMES[getVariant()];
+      const frames = getFrames();
       return frames[frameIndex() % frames.length];
     },
   });

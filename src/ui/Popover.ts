@@ -5,6 +5,7 @@ import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref, RuntimeContext } from "../core/runtime.ts";
 import { App, Box, Portal, Show, createRef } from "../core/runtime.ts";
 import { type MaybeAccessor, resolve } from "../core/signals.ts";
+import { styleFallback } from "../core/theme.ts";
 
 /**
  * Placement options for the popover relative to its trigger.
@@ -347,7 +348,7 @@ export function Popover(props: PopoverProps): Node {
                     onKeyPress: handleKeyPress,
                     onMousePress: () => {},
                     focusable: true,
-                    ...props.style,
+                    ...styleFallback(props.style, 'popover'),
                     children: props.content(),
                   }),
                 ],

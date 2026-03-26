@@ -5,25 +5,10 @@ import type { FlexStyle } from "../core/layout.ts";
 import type { Node } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
 import { type MaybeAccessor, resolve } from "../core/signals.ts";
+import { theme } from "../core/theme.ts";
 
 /** Number of sub-cell divisions per cell for smooth progress visualization. */
 const EIGHTHS_PER_CELL = 8;
-
-/**
- * Block characters for sub-cell precision, indexed by eighths (0-8).
- * Index 0 = empty (space), index 8 = full block.
- */
-const BLOCKS = [
-  " ", // 0/8
-  "\u258F", // ▏ 1/8
-  "\u258E", // ▎ 2/8
-  "\u258D", // ▍ 3/8
-  "\u258C", // ▌ 4/8
-  "\u258B", // ▋ 5/8
-  "\u258A", // ▊ 6/8
-  "\u2589", // ▉ 7/8
-  "\u2588", // █ 8/8
-];
 
 /**
  * Props for the Progress component.
@@ -32,7 +17,7 @@ export interface ProgressProps {
   /** Progress value from 0 to 100. */
   value: MaybeAccessor<number>;
 
-  /** Total width of the progress bar in cells. Default: 20 */
+  /** Total width of the progress bar in cells. Default from theme. */
   width?: MaybeAccessor<number>;
 
   /** Color of the filled portion (block characters). */
@@ -79,12 +64,13 @@ export function Progress(props: ProgressProps): Node {
   const { value, width, color, backgroundColor, style } = props;
 
   const getValue = (): number => clampValue(resolve(value) ?? 0);
-  const getWidth = (): number => resolve(width) ?? 20;
+  const getWidth = (): number => resolve(width) ?? (theme('progress').width as number);
 
   // Generate progress bar string reactively
   const getContent = (): string => {
     const barWidth = getWidth();
     const currentValue = getValue();
+    const blocks = theme('progress').chars as string[];
 
     // Calculate total eighths filled
     const totalEighths = Math.round(
@@ -94,10 +80,10 @@ export function Progress(props: ProgressProps): Node {
     const remainder = totalEighths % EIGHTHS_PER_CELL;
 
     // Build the bar string
-    const full = BLOCKS[8].repeat(fullCells);
-    const partial = remainder > 0 ? BLOCKS[remainder] : "";
+    const full = blocks[8].repeat(fullCells);
+    const partial = remainder > 0 ? blocks[remainder] : "";
     const emptyCount = barWidth - fullCells - (remainder > 0 ? 1 : 0);
-    const empty = BLOCKS[0].repeat(emptyCount);
+    const empty = blocks[0].repeat(emptyCount);
 
     return full + partial + empty;
   };

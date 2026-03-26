@@ -5,6 +5,7 @@ import type { FlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Show, Text } from "../core/runtime.ts";
 import { createSignal } from "../core/signals.ts";
+import { theme } from "../core/theme.ts";
 import { Popover } from "./Popover.ts";
 
 /**
@@ -90,7 +91,7 @@ function defaultRenderMenuItem(props: MenuItemRenderProps): Node {
   return Box({
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 2,
+    gap: () => theme('menubar--item').gap as number,
     children: [
       Text({ content: props.item.label }),
       Show({
@@ -105,7 +106,7 @@ function defaultRenderMenuItem(props: MenuItemRenderProps): Node {
  * Default renderer for separators.
  */
 function defaultRenderSeparator(): Node {
-  return Text({ content: "──────────" });
+  return Text({ content: () => theme('menubar--separator').content as string });
 }
 
 /**
