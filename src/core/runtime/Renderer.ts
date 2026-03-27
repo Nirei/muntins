@@ -258,7 +258,7 @@ export class Renderer {
         layoutResult.width,
         layoutResult.height,
         this.buffer,
-        nodeInherited,
+        inherited,
         clip,
       );
     }

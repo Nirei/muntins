@@ -32,6 +32,7 @@ import {
   type InheritedStyle,
   type LayoutInfo,
   Node,
+  Renderer,
   type RuntimeContext,
   Show,
   TabFocus,
@@ -263,6 +264,24 @@ describe("Box backgroundColor", () => {
     // Buffer cells at positions (1,1) through (3,2) should have the background
     const output = buffer.flush();
     assert.ok(output.length > 0, "should produce output");
+  });
+
+  it("Renderer paints root box background color", () => {
+    const bgColor: Color = { type: "rgb", r: 31, g: 36, b: 33 };
+    const root = Box({ backgroundColor: bgColor });
+
+    const stdout = {
+      columns: 10,
+      rows: 5,
+      write: () => true,
+    } as unknown as NodeJS.WriteStream;
+
+    const renderer = new Renderer(stdout, 0, () => root);
+    renderer.flush();
+
+    const cellBg = renderer.buffer.getBg(0, 0);
+    assert.deepStrictEqual(cellBg, bgColor,
+      "root box background color should be painted into the buffer");
   });
 
   it("reactive backgroundColor updates on signal change", () => {
