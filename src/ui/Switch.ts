@@ -91,8 +91,11 @@ export function Switch(props: SwitchProps): Node {
             ? (t.checkedChar as string)
             : (t.uncheckedChar as string);
         },
-        inverse: () => theme('switch').inverse as boolean,
-        dim: () => isDisabled() && (theme('switch--disabled').dim as boolean),
+        ...styleFallback(
+          undefined,
+          () => isDisabled() ? 'switch--disabled' : '',
+          () => isChecked() ? 'switch--checked' : 'switch--unchecked',
+        ),
       }),
     ],
   });

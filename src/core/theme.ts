@@ -173,10 +173,12 @@ export function setTheme(input: Record<string, unknown>): void {
  */
 export function styleFallback(
   instanceStyle: Record<string, unknown> | undefined,
-  ...themeKeys: string[]
+  ...themeKeys: (string | (() => string))[]
 ): Record<string, unknown> {
-  const slices = themeKeys.map(
-    (key) => () => (getTheme()[key] as Record<string, unknown>) ?? {},
+  const slices = themeKeys.map((key) =>
+    typeof key === "function"
+      ? () => (getTheme()[key()] as Record<string, unknown>) ?? {}
+      : () => (getTheme()[key] as Record<string, unknown>) ?? {},
   );
 
   // Collect all keys across all slices and instance style

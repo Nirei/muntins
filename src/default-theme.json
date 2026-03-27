@@ -1,19 +1,28 @@
 {
   "tokens": {
-    "mutedBg": "palette:236"
+    "bg": "#1f2421",
+    "primary": "#216869",
+    "accent": "#49a078",
+    "muted": "#9cc5a1",
+    "fg": "#dce1de",
+    "surface": "#2e3532",
+    "error": "#c45d5d"
   },
-  "switch": { "inverse": true, "checkedChar": " ■", "uncheckedChar": "■ " },
+  "root": { "backgroundColor": "$bg", "color": "$fg" },
+  "switch": { "checkedChar": " ■", "uncheckedChar": "■ " },
+  "switch--checked": { "color": "$accent", "inverse": true },
+  "switch--unchecked": { "color": "$error", "inverse": true },
   "switch--disabled": { "dim": true },
   "radio-group": { "flexDirection": "column", "selectedChar": "●", "unselectedChar": "○" },
   "radio-group--disabled": { "dim": true },
-  "select--dropdown": { "backgroundColor": "$mutedBg", "paddingStart": 1, "paddingEnd": 1 },
+  "select--dropdown": { "backgroundColor": "$surface", "paddingStart": 1, "paddingEnd": 1 },
   "select--indicator": { "openChar": "▲", "closedChar": "▼" },
   "select--disabled": { "dim": true },
   "textarea": { "width": 40 },
   "textarea--cursor": { "inverse": true },
   "textarea--placeholder": { "dim": true },
   "textarea--disabled": { "dim": true },
-  "input": { "width": 20, "backgroundColor": "$mutedBg", "paddingStart": 1, "paddingEnd": 1 },
+  "input": { "width": 20, "backgroundColor": "$surface", "paddingStart": 1, "paddingEnd": 1 },
   "progress": { "width": 20, "chars": [" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"] },
   "spinner": { "interval": 80 },
   "spinner--dots": { "frames": ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] },
@@ -22,5 +31,7 @@
   "toast": { "duration": 3000 },
   "drawer": { "side": "right", "size": 30 },
   "menubar--separator": { "content": "──────────" },
-  "menubar--item": { "gap": 2 }
+  "menubar--item": { "gap": 2 },
+  "button": { "backgroundColor": "$surface", "paddingStart": 1, "paddingEnd": 1 },
+  "button--hover": { "backgroundColor": "$primary" }
 }

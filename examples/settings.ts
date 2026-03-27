@@ -24,7 +24,6 @@ import {
   App,
   Box,
   Button,
-  type Color,
   Input,
   Label,
   RadioGroup,
@@ -37,13 +36,6 @@ import {
   createRef,
   createSignal,
 } from "../src/index.ts";
-
-// Color palette
-const subtle: Color = { type: "palette", index: 240 };
-const accent: Color = { type: "palette", index: 75 };
-const muted: Color = { type: "palette", index: 245 };
-const success: Color = { type: "palette", index: 114 };
-const cardBg: Color = { type: "palette", index: 236 };
 
 // Form state
 const [username, setUsername] = createSignal("johndoe");
@@ -62,7 +54,7 @@ function SectionHeader(title: string) {
     gap: 0,
     marginTop: 1,
     children: [
-      Text({ content: title, bold: true, color: accent }),
+      Text({ content: title, bold: true }),
       Separator({ style: { marginTop: 0 } }),
     ],
   });
@@ -100,7 +92,6 @@ function SettingsPanel() {
         width: 52,
         border: true,
         borderStyle: "round",
-        borderColor: subtle,
         children: [
           // Header
           Box({
@@ -108,7 +99,6 @@ function SettingsPanel() {
             paddingEnd: 2,
             paddingTop: 1,
             paddingBottom: 1,
-            backgroundColor: cardBg,
             children: [Text({ content: "Settings", bold: true })],
           }),
 
@@ -181,7 +171,6 @@ function SettingsPanel() {
                       Label({
                         children: () => (notifications() ? "Enabled" : "Disabled"),
                         for: switchRef,
-                        style: { dim: true },
                       }),
                     ],
                   });
@@ -205,7 +194,6 @@ function SettingsPanel() {
                       Label({
                         children: () => (sound() ? "Enabled" : "Disabled"),
                         for: switchRef,
-                        style: { dim: true },
                       }),
                     ],
                   });
@@ -247,37 +235,24 @@ function SettingsPanel() {
                     children: [
                       Text({
                         content: status,
-                        color: success,
                         dim: true,
                       }),
                     ],
                   }),
 
-                  Box({
-                    border: "single",
-                    borderColor: muted,
-                    children: [
-                      Button({
-                        children: Text({ content: " Cancel " }),
-                        onClick: () => {
-                          app.unmount();
-                        },
-                      }),
-                    ],
+                  Button({
+                    children: "Cancel",
+                    onClick: () => {
+                      app.unmount();
+                    },
                   }),
 
-                  Box({
-                    border: "single",
-                    borderColor: accent,
-                    children: [
-                      Button({
-                        children: Text({ content: " Save ", bold: true }),
-                        onClick: () => {
-                          setStatus("Saved!");
-                          setTimeout(() => setStatus(""), 2000);
-                        },
-                      }),
-                    ],
+                  Button({
+                    children: "Save",
+                    onClick: () => {
+                      setStatus("Saved!");
+                      setTimeout(() => setStatus(""), 2000);
+                    },
                   }),
                 ],
               }),
@@ -293,7 +268,6 @@ function SettingsPanel() {
           Text({
             content:
               "Tab/Mouse to navigate  |  Enter/Space/Click to interact  |  Esc to quit",
-            color: muted,
             dim: true,
           }),
         ],

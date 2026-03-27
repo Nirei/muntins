@@ -4,7 +4,7 @@ import type { ActivateEvent, KeyEvent, MouseEvent } from "../core/input.ts";
 import type { FlexStyle } from "../core/layout.ts";
 import type { BoxChild, Node, Ref } from "../core/runtime.ts";
 import { Box } from "../core/runtime.ts";
-import { type MaybeAccessor, resolve } from "../core/signals.ts";
+import { type MaybeAccessor, createSignal, resolve } from "../core/signals.ts";
 import { styleFallback } from "../core/theme.ts";
 
 /**
@@ -69,6 +69,7 @@ export interface ButtonProps {
  */
 export function Button(props: ButtonProps): Node {
   const isDisabled = () => resolve(props.disabled) ?? false;
+  const [isHovered, setIsHovered] = createSignal(false);
 
   const handleActivate = (_event: ActivateEvent): void => {
     if (isDisabled()) return;
@@ -96,7 +97,13 @@ export function Button(props: ButtonProps): Node {
     onActivate: handleActivate,
     onKeyPress: handleKeyPress,
     onMousePress: handleMousePress,
-    ...styleFallback(props.style, 'button'),
+    onHover: setIsHovered,
+    ...styleFallback(
+      props.style,
+      () => isDisabled() ? 'button--disabled' : '',
+      () => isHovered() ? 'button--hover' : '',
+      'button',
+    ),
     children: props.children,
   });
 }
