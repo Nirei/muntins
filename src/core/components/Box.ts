@@ -18,10 +18,11 @@ import {
   fillClippedRect,
   getBorderStyleName,
   parseBorderProp,
-  rectOverlaps,
   renderBorder,
   resolveInheritable
 } from "../render.ts";
+import { compact } from "../objects.ts";
+import { rectOverlaps } from "../rects.ts";
 import { type InheritableProps, Node, type EventHandlerProps, type Ref } from "../runtime/Node.ts";
 import { resolve } from "../signals.ts";
 import { Text } from "./Text.ts";
@@ -39,6 +40,7 @@ export interface BoxProps extends Partial<ReactiveFlexStyle & InheritableProps &
   ref?: Ref;
 }
 
+
 /**
  * Creates a Box node - a layout container that supports reactive styles and event handlers.
  *
@@ -46,14 +48,6 @@ export interface BoxProps extends Partial<ReactiveFlexStyle & InheritableProps &
  * its background; when border is set, Box renders its border.
  * Size is determined by flexbox layout based on its children.
  */
-function compact(obj: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (v !== undefined) out[k] = v;
-  }
-  return out;
-}
-
 export function Box({
     children: childrenProp,
     backgroundColor,

@@ -9,7 +9,7 @@ import {
 } from "../core/buffer.ts";
 import { type KeyEvent, type MouseEvent, isPrintable } from "../core/input.ts";
 import { DEFAULT_FLEX_STYLE, type FlexStyle } from "../core/layout.ts";
-import { rectContains } from "../core/render.ts";
+import { rectContains } from "../core/rects.ts";
 import { Node } from "../core/runtime.ts";
 import type { Rect, InheritedStyle, Ref } from "../core/runtime.ts";
 import { App, Box } from "../core/runtime.ts";

@@ -88,23 +88,7 @@ export interface LayoutNode {
   ) => { width: number; height: number };
 }
 
-/**
- * Axis-aligned rectangle: position + size.
- */
-export interface Rect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-/**
- * Rectangle with absolute screen coordinates.
- */
-export interface ScreenRect extends Rect {
-  screenX: number;
-  screenY: number;
-}
+import type { ScreenRect } from "./rects.ts";
 
 /**
  * Output from the layout algorithm.

@@ -45,7 +45,6 @@ export { EventDispatcher } from "./runtime/EventDispatcher.ts";
 // Pass-through re-exports from render.ts
 export {
   BORDER_CHARS,
-  DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
   enterTuiMode,
   exitTuiMode,
@@ -60,8 +59,9 @@ export type {
   BorderStyleName,
 } from "./render.ts";
 
-// Pass-through re-exports from layout.ts
-export type { Rect, ScreenRect } from "./layout.ts";
+// Pass-through re-exports from rects.ts
+export { DEFAULT_CLIP } from "./rects.ts";
+export type { Rect, ScreenRect } from "./rects.ts";
 
 // Pass-through re-exports from text.ts
 export {

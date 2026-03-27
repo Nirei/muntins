@@ -1,10 +1,10 @@
 import { Buffer } from "../buffer.ts";
-import { computeLayout, type LayoutResult, type Rect } from "../layout.ts";
+import { computeLayout, type LayoutResult } from "../layout.ts";
+import { rectIntersection, type Rect } from "../rects.ts";
 import type { InheritedStyle } from "../render.ts";
 import {
   DEFAULT_INHERITED_STYLE,
   flushFrame,
-  rectIntersection,
 } from "../render.ts";
 import type { Accessor } from "../signals.ts";
 import { batch, createSignal } from "../signals.ts";

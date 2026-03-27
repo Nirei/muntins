@@ -9,9 +9,8 @@ import type {
   FlexStyle,
   LayoutNode,
   LayoutResult,
-  Rect,
-  ScreenRect,
 } from "../layout.ts";
+import type { Rect, ScreenRect } from "../rects.ts";
 import type { InheritableBool, InheritedStyle } from "../render.ts";
 import { resolveInheritable } from "../render.ts";
 import type { Accessor } from "../signals.ts";
