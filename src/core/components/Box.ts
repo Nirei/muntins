@@ -18,6 +18,7 @@ import {
   fillClippedRect,
   getBorderStyleName,
   parseBorderProp,
+  rectOverlaps,
   renderBorder,
   resolveInheritable
 } from "../render.ts";
@@ -141,15 +142,7 @@ export function Box({
     },
 
     render(bounds, buffer, inherited, clip) {
-      const { screenX: x, screenY: y, width, height } = bounds;
-      if (
-        x >= clip.x + clip.width ||
-        x + width <= clip.x ||
-        y >= clip.y + clip.height ||
-        y + height <= clip.y
-      ) {
-        return;
-      }
+      if (!rectOverlaps(bounds, clip)) return;
 
       const bg = resolveInheritable(
         backgroundColor,

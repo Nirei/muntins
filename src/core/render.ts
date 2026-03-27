@@ -113,10 +113,10 @@ export const DEFAULT_CLIP: Rect = {
 };
 
 /**
- * Intersect two clip rects, returning the overlapping region.
+ * Compute the overlapping region of two rects.
  * Returns a zero-area rect if there's no overlap.
  */
-export function intersectRect(a: Rect, b: Rect): Rect {
+export function rectIntersection(a: Rect, b: Rect): Rect {
   const x = Math.max(a.x, b.x);
   const y = Math.max(a.y, b.y);
   const right = Math.min(a.x + a.width, b.x + b.width);
@@ -130,14 +130,26 @@ export function intersectRect(a: Rect, b: Rect): Rect {
 }
 
 /**
- * Check if a point is within the clip rect.
+ * Check if a point is within a rect.
  */
-export function isInRect(x: number, y: number, clip: Rect): boolean {
+export function rectContains(rect: Rect, x: number, y: number): boolean {
   return (
-    x >= clip.x &&
-    x < clip.x + clip.width &&
-    y >= clip.y &&
-    y < clip.y + clip.height
+    x >= rect.x &&
+    x < rect.x + rect.width &&
+    y >= rect.y &&
+    y < rect.y + rect.height
+  );
+}
+
+/**
+ * Check if a screen-positioned rect overlaps a rect.
+ */
+export function rectOverlaps(a: ScreenRect, b: Rect): boolean {
+  return (
+    a.screenX < b.x + b.width &&
+    a.screenX + a.width > b.x &&
+    a.screenY < b.y + b.height &&
+    a.screenY + a.height > b.y
   );
 }
 
@@ -267,7 +279,7 @@ export function renderBorder(
     const startCol = start ? x + 1 : x;
     const endCol = end ? x + width - 1 : x + width;
     for (let col = startCol; col < endCol; col++) {
-      if (isInRect(col, y, clip)) {
+      if (rectContains(clip, col, y)) {
         buffer.set(col, y, chars.h, fg, bg, 0);
       }
     }
@@ -276,7 +288,7 @@ export function renderBorder(
     const startCol = start ? x + 1 : x;
     const endCol = end ? x + width - 1 : x + width;
     for (let col = startCol; col < endCol; col++) {
-      if (isInRect(col, y + height - 1, clip)) {
+      if (rectContains(clip, col, y + height - 1)) {
         buffer.set(col, y + height - 1, chars.h, fg, bg, 0);
       }
     }
@@ -286,7 +298,7 @@ export function renderBorder(
     const startRow = top ? y + 1 : y;
     const endRow = bottom ? y + height - 1 : y + height;
     for (let row = startRow; row < endRow; row++) {
-      if (isInRect(x, row, clip)) {
+      if (rectContains(clip, x, row)) {
         buffer.set(x, row, chars.v, fg, bg, 0);
       }
     }
@@ -295,7 +307,7 @@ export function renderBorder(
     const startRow = top ? y + 1 : y;
     const endRow = bottom ? y + height - 1 : y + height;
     for (let row = startRow; row < endRow; row++) {
-      if (isInRect(x + width - 1, row, clip)) {
+      if (rectContains(clip, x + width - 1, row)) {
         buffer.set(x + width - 1, row, chars.v, fg, bg, 0);
       }
     }
@@ -311,7 +323,7 @@ export function renderBorder(
 
   for (const [cx, cy, hasHoriz, hasVert, corner, hChar, vChar] of corners) {
     const char = getCornerChar(chars, hasHoriz, hasVert, corner, hChar, vChar);
-    if (char && isInRect(cx, cy, clip)) {
+    if (char && rectContains(clip, cx, cy)) {
       buffer.set(cx, cy, char, fg, bg, 0);
     }
   }
@@ -381,15 +393,8 @@ export function renderText(
   inherited: InheritedStyle,
   clip: Rect,
 ): void {
+  if (!rectOverlaps(rect, clip)) return;
   const { screenX: x, screenY: y, width, height } = rect;
-  if (
-    x >= clip.x + clip.width ||
-    x + width <= clip.x ||
-    y >= clip.y + clip.height ||
-    y + height <= clip.y
-  ) {
-    return;
-  }
 
   const fg = resolveInheritable(props.color, inherited.color);
   const bg = resolveInheritable(

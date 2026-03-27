@@ -4,7 +4,7 @@ import type { InheritedStyle } from "../render.ts";
 import {
   DEFAULT_INHERITED_STYLE,
   flushFrame,
-  intersectRect,
+  rectIntersection,
 } from "../render.ts";
 import type { Accessor } from "../signals.ts";
 import { batch, createSignal } from "../signals.ts";
@@ -257,7 +257,7 @@ export class Renderer {
 
     const childClip =
       style.overflow === "hidden"
-        ? intersectRect(clip, {
+        ? rectIntersection(clip, {
             x: layoutResult.screenX,
             y: layoutResult.screenY,
             width: layoutResult.width,
@@ -392,7 +392,7 @@ export class Renderer {
       const s = node.resolveStyle();
       const layout = node._layout;
       if (s.overflow === "hidden" && layout) {
-        return intersectRect(parentClip, {
+        return rectIntersection(parentClip, {
           x: layout.screenX(),
           y: layout.screenY(),
           width: layout.width(),
