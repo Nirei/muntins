@@ -189,10 +189,7 @@ describe("ScrollArea", () => {
       // Render to a buffer
       const buffer = new RenderBuffer(1, 3);
       scrollbar.render(
-        0,
-        0,
-        1,
-        3,
+        { x: 0, y: 0, screenX: 0, screenY: 0, width: 1, height: 3 },
         buffer,
         DEFAULT_INHERITED_STYLE,
         DEFAULT_CLIP,
@@ -229,10 +226,7 @@ describe("ScrollArea", () => {
       // Render to a buffer
       const buffer = new RenderBuffer(1, 3);
       scrollbar.render(
-        0,
-        0,
-        1,
-        3,
+        { x: 0, y: 0, screenX: 0, screenY: 0, width: 1, height: 3 },
         buffer,
         DEFAULT_INHERITED_STYLE,
         DEFAULT_CLIP,
@@ -617,10 +611,7 @@ describe("ScrollArea", () => {
 
       const buffer = new RenderBuffer(1, 5);
       scrollbar.render(
-        0,
-        0,
-        1,
-        5,
+        { x: 0, y: 0, screenX: 0, screenY: 0, width: 1, height: 5 },
         buffer,
         DEFAULT_INHERITED_STYLE,
         DEFAULT_CLIP,
@@ -655,10 +646,7 @@ describe("ScrollArea", () => {
       // Render at top
       const bufferTop = new RenderBuffer(1, 5);
       scrollbar.render(
-        0,
-        0,
-        1,
-        5,
+        { x: 0, y: 0, screenX: 0, screenY: 0, width: 1, height: 5 },
         bufferTop,
         DEFAULT_INHERITED_STYLE,
         DEFAULT_CLIP,
@@ -669,10 +657,7 @@ describe("ScrollArea", () => {
       setScrollPos(5);
       const bufferBottom = new RenderBuffer(1, 5);
       scrollbar.render(
-        0,
-        0,
-        1,
-        5,
+        { x: 0, y: 0, screenX: 0, screenY: 0, width: 1, height: 5 },
         bufferBottom,
         DEFAULT_INHERITED_STYLE,
         DEFAULT_CLIP,

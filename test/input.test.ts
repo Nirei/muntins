@@ -5,7 +5,6 @@ import {
   type InputEvent,
   type KeyInput,
   MOUSE_LEFT,
-  type Modifiers,
   type MouseInput,
   NO_MODIFIERS,
   type PasteEvent,
@@ -21,7 +20,7 @@ import {
   setupKeyboardInput,
   setupResizeHandler,
   setupTerminal,
-  teardownTerminal,
+  teardownTerminal
 } from "../src/core/input.ts";
 
 describe("input event types", () => {

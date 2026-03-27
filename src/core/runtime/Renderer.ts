@@ -1,10 +1,10 @@
 import { Buffer } from "../buffer.ts";
-import { computeLayout, type LayoutResult } from "../layout.ts";
-import type { ClipRect, InheritedStyle } from "../render.ts";
+import { computeLayout, type LayoutResult, type Rect } from "../layout.ts";
+import type { InheritedStyle } from "../render.ts";
 import {
   DEFAULT_INHERITED_STYLE,
   flushFrame,
-  intersectClipRect,
+  intersectRect,
 } from "../render.ts";
 import type { Accessor } from "../signals.ts";
 import { batch, createSignal } from "../signals.ts";
@@ -15,7 +15,7 @@ type InheritedStyleAccessor = Accessor<InheritedStyle>;
 interface BindableNode {
   node: Node;
   inheritedAccessor: InheritedStyleAccessor;
-  clipAccessor: Accessor<ClipRect>;
+  clipAccessor: Accessor<Rect>;
 }
 
 /**
@@ -118,7 +118,7 @@ export class Renderer {
   }
 
   private createRootAccessors(): {
-    clip: Accessor<ClipRect>;
+    clip: Accessor<Rect>;
     inherited: Accessor<InheritedStyle>;
   } {
     return {
@@ -155,7 +155,7 @@ export class Renderer {
 
     this.buffer.clear();
 
-    const rootClip: ClipRect = {
+    const rootClip: Rect = {
       x: 0,
       y: 0,
       width: this.stdout.columns,
@@ -192,7 +192,7 @@ export class Renderer {
   private paintTree(
     root: Node,
     layoutResult: LayoutResult,
-    clip: ClipRect,
+    clip: Rect,
   ): void {
     const rootStyle = root.resolveStyle();
 
@@ -222,7 +222,7 @@ export class Renderer {
     layoutChildren: LayoutResult[],
     startIndex: number,
     inherited: InheritedStyle,
-    clip: ClipRect,
+    clip: Rect,
   ): number {
     const style = node.resolveStyle();
 
@@ -252,20 +252,12 @@ export class Renderer {
     const nodeInherited = node.resolveInheritedStyle(inherited);
 
     if (node.render) {
-      node.render(
-        layoutResult.screenX,
-        layoutResult.screenY,
-        layoutResult.width,
-        layoutResult.height,
-        this.buffer,
-        inherited,
-        clip,
-      );
+      node.render(layoutResult, this.buffer, inherited, clip);
     }
 
     const childClip =
       style.overflow === "hidden"
-        ? intersectClipRect(clip, {
+        ? intersectRect(clip, {
             x: layoutResult.screenX,
             y: layoutResult.screenY,
             width: layoutResult.width,
@@ -319,7 +311,7 @@ export class Renderer {
     root: Node,
     layoutResult: LayoutResult,
     rootInheritedAccessor: InheritedStyleAccessor,
-    rootClipAccessor: Accessor<ClipRect>,
+    rootClipAccessor: Accessor<Rect>,
     onlyNew = false,
   ): void {
     const bindableNodes: BindableNode[] = [];
@@ -366,7 +358,7 @@ export class Renderer {
   private static flattenBindableNodes(
     node: Node,
     inheritedAccessor: InheritedStyleAccessor,
-    clipAccessor: Accessor<ClipRect>,
+    clipAccessor: Accessor<Rect>,
     result: BindableNode[],
   ): void {
     const style = node.resolveStyle();
@@ -395,12 +387,12 @@ export class Renderer {
     const childInheritedAccessor: InheritedStyleAccessor = () =>
       node.resolveInheritedStyle(inheritedAccessor());
 
-    const childClipAccessor: Accessor<ClipRect> = () => {
+    const childClipAccessor: Accessor<Rect> = () => {
       const parentClip = clipAccessor();
       const s = node.resolveStyle();
       const layout = node._layout;
       if (s.overflow === "hidden" && layout) {
-        return intersectClipRect(parentClip, {
+        return intersectRect(parentClip, {
           x: layout.screenX(),
           y: layout.screenY(),
           width: layout.width(),

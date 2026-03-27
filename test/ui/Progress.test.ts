@@ -7,7 +7,7 @@ import {
   computeLayout,
 } from "../../src/core/layout.ts";
 import {
-  type ClipRect,
+  type Rect,
   DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
   type InheritedStyle,
@@ -36,12 +36,10 @@ function paintTree(
   layout: LayoutResult,
   buffer: RenderBuffer,
   inherited: InheritedStyle,
-  clip: ClipRect,
+  clip: Rect,
 ): void {
-  const { screenX, screenY, width, height } = layout;
-
   if (node.render) {
-    node.render(screenX, screenY, width, height, buffer, inherited, clip);
+    node.render(layout, buffer, inherited, clip);
   }
 
   const children =

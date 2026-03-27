@@ -20,6 +20,7 @@ import {
   truncateLine,
   wrapLine,
 } from "./text.ts";
+import type { Rect, ScreenRect } from "./layout.ts";
 
 /**
  * Inherited style values passed down through the node tree during paint.
@@ -101,21 +102,10 @@ export function resolveInheritable<T>(
 }
 
 /**
- * Clipping rectangle for paint-time clipping.
- * Coordinates are absolute screen positions.
- */
-export interface ClipRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-/**
  * Default clip rect covering the full terminal.
  * Used when no parent clipping is in effect.
  */
-export const DEFAULT_CLIP: ClipRect = {
+export const DEFAULT_CLIP: Rect = {
   x: 0,
   y: 0,
   width: Number.POSITIVE_INFINITY,
@@ -126,7 +116,7 @@ export const DEFAULT_CLIP: ClipRect = {
  * Intersect two clip rects, returning the overlapping region.
  * Returns a zero-area rect if there's no overlap.
  */
-export function intersectClipRect(a: ClipRect, b: ClipRect): ClipRect {
+export function intersectRect(a: Rect, b: Rect): Rect {
   const x = Math.max(a.x, b.x);
   const y = Math.max(a.y, b.y);
   const right = Math.min(a.x + a.width, b.x + b.width);
@@ -142,7 +132,7 @@ export function intersectClipRect(a: ClipRect, b: ClipRect): ClipRect {
 /**
  * Check if a point is within the clip rect.
  */
-export function isInClipRect(x: number, y: number, clip: ClipRect): boolean {
+export function isInRect(x: number, y: number, clip: Rect): boolean {
   return (
     x >= clip.x &&
     x < clip.x + clip.width &&
@@ -262,16 +252,14 @@ function getCornerChar(
  */
 export function renderBorder(
   buffer: Buffer,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
+  rect: ScreenRect,
   borders: { borderTop: boolean; borderEnd: boolean; borderBottom: boolean; borderStart: boolean },
   styleName: BorderStyleName,
   fg: Color,
   bg: Color,
-  clip: ClipRect,
+  clip: Rect,
 ): void {
+  const { screenX: x, screenY: y, width, height } = rect;
   const chars = BORDER_CHARS[styleName];
   const { borderTop: top, borderEnd: end, borderBottom: bottom, borderStart: start } = borders;
 
@@ -279,7 +267,7 @@ export function renderBorder(
     const startCol = start ? x + 1 : x;
     const endCol = end ? x + width - 1 : x + width;
     for (let col = startCol; col < endCol; col++) {
-      if (isInClipRect(col, y, clip)) {
+      if (isInRect(col, y, clip)) {
         buffer.set(col, y, chars.h, fg, bg, 0);
       }
     }
@@ -288,7 +276,7 @@ export function renderBorder(
     const startCol = start ? x + 1 : x;
     const endCol = end ? x + width - 1 : x + width;
     for (let col = startCol; col < endCol; col++) {
-      if (isInClipRect(col, y + height - 1, clip)) {
+      if (isInRect(col, y + height - 1, clip)) {
         buffer.set(col, y + height - 1, chars.h, fg, bg, 0);
       }
     }
@@ -298,7 +286,7 @@ export function renderBorder(
     const startRow = top ? y + 1 : y;
     const endRow = bottom ? y + height - 1 : y + height;
     for (let row = startRow; row < endRow; row++) {
-      if (isInClipRect(x, row, clip)) {
+      if (isInRect(x, row, clip)) {
         buffer.set(x, row, chars.v, fg, bg, 0);
       }
     }
@@ -307,7 +295,7 @@ export function renderBorder(
     const startRow = top ? y + 1 : y;
     const endRow = bottom ? y + height - 1 : y + height;
     for (let row = startRow; row < endRow; row++) {
-      if (isInClipRect(x + width - 1, row, clip)) {
+      if (isInRect(x + width - 1, row, clip)) {
         buffer.set(x + width - 1, row, chars.v, fg, bg, 0);
       }
     }
@@ -323,7 +311,7 @@ export function renderBorder(
 
   for (const [cx, cy, hasHoriz, hasVert, corner, hChar, vChar] of corners) {
     const char = getCornerChar(chars, hasHoriz, hasVert, corner, hChar, vChar);
-    if (char && isInClipRect(cx, cy, clip)) {
+    if (char && isInRect(cx, cy, clip)) {
       buffer.set(cx, cy, char, fg, bg, 0);
     }
   }
@@ -363,15 +351,13 @@ function computeModifiers(
 
 export function fillClippedRect(
   buffer: Buffer,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  clip: ClipRect,
+  rect: ScreenRect,
+  clip: Rect,
   fg: Color,
   bg: Color,
   modifiers: number,
 ): void {
+  const { screenX: x, screenY: y, width, height } = rect;
   const fillX = Math.max(x, clip.x);
   const fillY = Math.max(y, clip.y);
   const fillRight = Math.min(x + width, clip.x + clip.width);
@@ -389,15 +375,13 @@ export function fillClippedRect(
  */
 export function renderText(
   buffer: Buffer,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
+  rect: ScreenRect,
   text: string,
   props: TextRenderProps,
   inherited: InheritedStyle,
-  clip: ClipRect,
+  clip: Rect,
 ): void {
+  const { screenX: x, screenY: y, width, height } = rect;
   if (
     x >= clip.x + clip.width ||
     x + width <= clip.x ||
@@ -415,7 +399,7 @@ export function renderText(
   const modifiers = computeModifiers(props, inherited);
   const wrapValue = props.wrap ?? "wrap";
 
-  fillClippedRect(buffer, x, y, width, height, clip, fg, bg, modifiers);
+  fillClippedRect(buffer, rect, clip, fg, bg, modifiers);
 
   const lines = text.split("\n");
   const displayLines =

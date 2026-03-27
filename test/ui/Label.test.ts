@@ -94,7 +94,7 @@ describe("Label", () => {
       assert.ok(node.render);
 
       const buffer = new RenderBuffer(20, 1);
-      node.render(0, 0, 20, 1, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+      node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 20, height: 1 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
 
       // Check that text is rendered
       assert.strictEqual(buffer.getSymbol(0, 0), "U");
@@ -326,7 +326,7 @@ describe("Label", () => {
       assert.ok(node.render);
 
       const buffer = new RenderBuffer(20, 1);
-      node.render(0, 0, 20, 1, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+      node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 20, height: 1 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
 
       assert.strictEqual(buffer.getSymbol(0, 0), "S");
     });

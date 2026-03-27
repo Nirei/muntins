@@ -1,42 +1,20 @@
-import type {
-    Buffer
-} from "../buffer.ts";
-import type {
-    ActivateEvent,
-    KeyEvent,
-    MouseEvent,
-    ScrollEvent
-} from "../input.ts";
-import {
-    DEFAULT_FLEX_STYLE
-} from "../layout.ts";
-import {
-    type ClipRect,
-    type InheritedStyle,
-    type ReactiveTextStyle,
-    renderText
-} from "../render.ts";
+import type { ActivateEvent } from "../input.ts";
+import { DEFAULT_FLEX_STYLE } from "../layout.ts";
+import { type ReactiveTextStyle, renderText } from "../render.ts";
 import { App } from "../runtime/App.ts";
 import {
     createEffect
 } from "../signals.ts";
 import { type WrapMode, measureText } from "../text.ts";
-import { Node, type Ref } from "../runtime/Node.ts";
+import { type EventHandlerProps, Node, type Ref } from "../runtime/Node.ts";
 
 /** Props for Text component. */
-export interface TextProps extends Partial<ReactiveTextStyle> {
+export interface TextProps extends Partial<ReactiveTextStyle & EventHandlerProps> {
   content: string | (() => string);
   wrap?: WrapMode | (() => WrapMode);
   focusable?: boolean;
   autoFocus?: boolean;
   ref?: Ref;
-  onKeyPress?: (key: KeyEvent) => boolean | undefined;
-  onMousePress?: (event: MouseEvent) => void;
-  onMouseRelease?: (event: MouseEvent) => void;
-  onMouseMove?: (event: MouseEvent) => void;
-  onScroll?: (event: ScrollEvent) => void;
-  onHover?: (hovering: boolean) => void;
-  onActivate?: (event: ActivateEvent) => void;
 }
 
 /**
@@ -106,21 +84,10 @@ export function Text(props: TextProps): Node {
       return measureText(getContent(), availableWidth, getWrap());
     },
 
-    render(
-      x: number,
-      y: number,
-      width: number,
-      height: number,
-      buffer: Buffer,
-      inherited: InheritedStyle,
-      clip: ClipRect,
-    ) {
+    render(bounds, buffer, inherited, clip) {
       renderText(
         buffer,
-        x,
-        y,
-        width,
-        height,
+        bounds,
         getContent(),
         {
           color,

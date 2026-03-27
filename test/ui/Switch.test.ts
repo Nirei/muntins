@@ -96,10 +96,7 @@ describe("Switch", () => {
 
       const buffer = new RenderBuffer(2, 1);
       textNode.render(
-        0,
-        0,
-        2,
-        1,
+        { x: 0, y: 0, screenX: 0, screenY: 0, width: 2, height: 1 },
         buffer,
         DEFAULT_INHERITED_STYLE,
         DEFAULT_CLIP,
@@ -117,10 +114,7 @@ describe("Switch", () => {
 
       const buffer = new RenderBuffer(2, 1);
       textNode.render(
-        0,
-        0,
-        2,
-        1,
+        { x: 0, y: 0, screenX: 0, screenY: 0, width: 2, height: 1 },
         buffer,
         DEFAULT_INHERITED_STYLE,
         DEFAULT_CLIP,
@@ -141,10 +135,7 @@ describe("Switch", () => {
 
       // Initial: off
       textNode.render(
-        0,
-        0,
-        2,
-        1,
+        { x: 0, y: 0, screenX: 0, screenY: 0, width: 2, height: 1 },
         buffer,
         DEFAULT_INHERITED_STYLE,
         DEFAULT_CLIP,
@@ -156,10 +147,7 @@ describe("Switch", () => {
       setChecked(true);
       buffer.flush();
       textNode.render(
-        0,
-        0,
-        2,
-        1,
+        { x: 0, y: 0, screenX: 0, screenY: 0, width: 2, height: 1 },
         buffer,
         DEFAULT_INHERITED_STYLE,
         DEFAULT_CLIP,

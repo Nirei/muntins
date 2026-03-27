@@ -78,7 +78,7 @@ describe("RadioGroup", () => {
       assert.ok(glyph0?.render);
 
       const buffer0 = new RenderBuffer(1, 1);
-      glyph0.render(0, 0, 1, 1, buffer0, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+      glyph0.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 1, height: 1 }, buffer0, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
       assert.strictEqual(buffer0.getSymbol(0, 0), "○");
 
       // Check second option (selected)
@@ -90,7 +90,7 @@ describe("RadioGroup", () => {
       assert.ok(glyph1?.render);
 
       const buffer1 = new RenderBuffer(1, 1);
-      glyph1.render(0, 0, 1, 1, buffer1, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+      glyph1.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 1, height: 1 }, buffer1, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
       assert.strictEqual(buffer1.getSymbol(0, 0), "●");
     });
 
@@ -107,10 +107,7 @@ describe("RadioGroup", () => {
         const glyph = optChildren[0];
         const buffer = new RenderBuffer(1, 1);
         glyph?.render?.(
-          0,
-          0,
-          1,
-          1,
+          { x: 0, y: 0, screenX: 0, screenY: 0, width: 1, height: 1 },
           buffer,
           DEFAULT_INHERITED_STYLE,
           DEFAULT_CLIP,
@@ -498,7 +495,7 @@ describe("RadioGroup", () => {
       assert.ok(opt0?.render);
 
       const buffer = new RenderBuffer(1, 1);
-      opt0.render(0, 0, 1, 1, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+      opt0.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 1, height: 1 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
       assert.strictEqual(buffer.getSymbol(0, 0), "X"); // selected
 
       const wrapper1 = children[1];
@@ -507,7 +504,7 @@ describe("RadioGroup", () => {
       assert.ok(opt1?.render);
 
       const buffer1 = new RenderBuffer(1, 1);
-      opt1.render(0, 0, 1, 1, buffer1, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+      opt1.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 1, height: 1 }, buffer1, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
       assert.strictEqual(buffer1.getSymbol(0, 0), "O"); // not selected
     });
   });

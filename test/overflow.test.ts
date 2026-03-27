@@ -4,13 +4,13 @@ import { Buffer as RenderBuffer } from "../src/core/buffer.ts";
 import { DEFAULT_FLEX_STYLE, computeLayout } from "../src/core/layout.ts";
 import {
   Box,
-  type ClipRect,
+  type Rect,
   DEFAULT_INHERITED_STYLE,
   Text,
 } from "../src/core/runtime.ts";
 
 // Default clip rect for testing (large enough for all tests)
-const FULL_CLIP: ClipRect = { x: 0, y: 0, width: 100, height: 100 };
+const FULL_CLIP: Rect = { x: 0, y: 0, width: 100, height: 100 };
 
 describe("overflow property", () => {
   it("overflow defaults to visible in DEFAULT_FLEX_STYLE", () => {
@@ -62,7 +62,7 @@ describe("overflow clipping", () => {
 
     // Paint parent
     if (parent.render) {
-      parent.render(0, 0, 5, 3, buffer, DEFAULT_INHERITED_STYLE, FULL_CLIP);
+      parent.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, FULL_CLIP);
     }
 
     // The text should be at row 2 within the parent's bounds
@@ -86,7 +86,7 @@ describe("overflow clipping", () => {
     const buffer = new RenderBuffer(10, 10);
 
     if (parent.render) {
-      parent.render(0, 0, 5, 2, buffer, DEFAULT_INHERITED_STYLE, FULL_CLIP);
+      parent.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 2 }, buffer, DEFAULT_INHERITED_STYLE, FULL_CLIP);
     }
 
     // Background should fill the parent area
@@ -111,7 +111,7 @@ describe("overflow clipping", () => {
 
     const buffer = new RenderBuffer(15, 15);
     if (parent.render) {
-      parent.render(0, 0, 10, 3, buffer, DEFAULT_INHERITED_STYLE, FULL_CLIP);
+      parent.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, FULL_CLIP);
     }
 
     // Content above the parent (negative y) should be clipped
@@ -121,20 +121,17 @@ describe("overflow clipping", () => {
   });
 });
 
-describe("ClipRect intersection", () => {
+describe("Rect intersection", () => {
   it("Text render respects clip bounds", () => {
     const textNode = Text({ content: "ABCDE" });
     const buffer = new RenderBuffer(10, 10);
 
     // Create a restrictive clip that only allows columns 1-3
-    const restrictiveClip: ClipRect = { x: 1, y: 0, width: 3, height: 1 };
+    const restrictiveClip: Rect = { x: 1, y: 0, width: 3, height: 1 };
 
     if (textNode.render) {
       textNode.render(
-        0, // Start at x=0
-        0,
-        5,
-        1,
+        { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 1 },
         buffer,
         DEFAULT_INHERITED_STYLE,
         restrictiveClip,
@@ -167,14 +164,11 @@ describe("ClipRect intersection", () => {
     const buffer = new RenderBuffer(10, 10);
 
     // Clip to only show the top-left corner area
-    const restrictiveClip: ClipRect = { x: 0, y: 0, width: 2, height: 2 };
+    const restrictiveClip: Rect = { x: 0, y: 0, width: 2, height: 2 };
 
     if (boxNode.render) {
       boxNode.render(
-        0,
-        0,
-        5,
-        3,
+        { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 },
         buffer,
         DEFAULT_INHERITED_STYLE,
         restrictiveClip,
@@ -198,10 +192,10 @@ describe("ClipRect intersection", () => {
     const buffer = new RenderBuffer(10, 10);
 
     // Zero-width clip
-    const zeroClip: ClipRect = { x: 0, y: 0, width: 0, height: 0 };
+    const zeroClip: Rect = { x: 0, y: 0, width: 0, height: 0 };
 
     if (textNode.render) {
-      textNode.render(0, 0, 5, 1, buffer, DEFAULT_INHERITED_STYLE, zeroClip);
+      textNode.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 1 }, buffer, DEFAULT_INHERITED_STYLE, zeroClip);
     }
 
     // Nothing should be written

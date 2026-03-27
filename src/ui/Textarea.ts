@@ -9,9 +9,9 @@ import {
 } from "../core/buffer.ts";
 import { type KeyEvent, type MouseEvent, isPrintable } from "../core/input.ts";
 import { DEFAULT_FLEX_STYLE, type FlexStyle } from "../core/layout.ts";
-import { isInClipRect } from "../core/render.ts";
+import { isInRect } from "../core/render.ts";
 import { Node } from "../core/runtime.ts";
-import type { ClipRect, InheritedStyle, Ref } from "../core/runtime.ts";
+import type { Rect, InheritedStyle, Ref } from "../core/runtime.ts";
 import { App, Box } from "../core/runtime.ts";
 import {
   type Accessor,
@@ -443,15 +443,8 @@ export function Textarea(props: TextareaProps): Node {
       return { width: contentWidth(), height: lineCount };
     },
 
-    render(
-      x: number,
-      y: number,
-      width: number,
-      height: number,
-      buffer: Buffer,
-      inherited: InheritedStyle,
-      clip: ClipRect,
-    ) {
+    render(bounds, buffer, inherited, clip) {
+      const { screenX: x, screenY: y, width, height } = bounds;
       lastScreenX = x;
       lastScreenY = y;
 
@@ -569,7 +562,7 @@ function renderTextareaContent(
   showCursor: boolean,
   cursorPos: number,
   scrollLeft = 0,
-  clip?: ClipRect,
+  clip?: Rect,
   cursorInverse = true,
 ): void {
   const lines = text.split("\n");
@@ -577,7 +570,7 @@ function renderTextareaContent(
 
   // Helper to check if a position is within the clip bounds
   const inClip = (cx: number, cy: number): boolean =>
-    !clip || isInClipRect(cx, cy, clip);
+    !clip || isInRect(cx, cy, clip);
 
   for (let row = 0; row < Math.min(lines.length, height); row++) {
     const line = lines[row];

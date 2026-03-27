@@ -94,10 +94,7 @@ describe("Button", () => {
 
       const buffer = new RenderBuffer(8, 1);
       textNode.render(
-        0,
-        0,
-        8,
-        1,
+        { x: 0, y: 0, screenX: 0, screenY: 0, width: 8, height: 1 },
         buffer,
         DEFAULT_INHERITED_STYLE,
         DEFAULT_CLIP,
@@ -124,10 +121,7 @@ describe("Button", () => {
 
       // Initial render
       textNode.render(
-        0,
-        0,
-        5,
-        1,
+        { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 1 },
         buffer,
         DEFAULT_INHERITED_STYLE,
         DEFAULT_CLIP,
@@ -142,10 +136,7 @@ describe("Button", () => {
       setLabel("World");
       buffer.flush();
       textNode.render(
-        0,
-        0,
-        5,
-        1,
+        { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 1 },
         buffer,
         DEFAULT_INHERITED_STYLE,
         DEFAULT_CLIP,

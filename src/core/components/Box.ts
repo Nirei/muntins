@@ -1,83 +1,41 @@
 import {
-  Buffer,
-  DEFAULT_COLOR,
-  type InheritableColor,
-  graphemes,
+  DEFAULT_COLOR
 } from "../buffer.ts";
-import type { FocusEvent, PasteEvent } from "../input.ts";
-import {
-  type ActivateEvent,
-  type InputEvent,
-  type KeyEvent,
-  type KeyInput,
-  type MouseEvent,
-  type MouseInput,
-  type ScrollEvent,
-  type ScrollInput,
-  createInputParser,
+import type {
+  ActivateEvent,
+  KeyEvent,
+  MouseEvent,
+  ScrollEvent
 } from "../input.ts";
 import {
   DEFAULT_FLEX_STYLE,
   type FlexStyle,
-  type LayoutNode,
-  type LayoutResult,
-  type ReactiveFlexStyle,
-  computeLayout,
+  type ReactiveFlexStyle
 } from "../layout.ts";
 import {
-  BORDER_CHARS,
   type BorderProp,
   type BorderStyleName,
-  type ClipRect,
-  DEFAULT_CLIP,
-  DEFAULT_INHERITED_STYLE,
-  type InheritableBool,
-  type InheritedStyle,
-  type ReactiveTextStyle,
-  enterTuiMode,
-  exitTuiMode,
   fillClippedRect,
-  flushFrame,
   getBorderStyleName,
-  intersectClipRect,
-  isInClipRect,
   parseBorderProp,
   renderBorder,
-  renderText,
-  resolveInheritable,
+  resolveInheritable
 } from "../render.ts";
+import { type InheritableProps, Node, type EventHandlerProps, type Ref } from "../runtime/Node.ts";
 import { resolve } from "../signals.ts";
-import { type WrapMode, measureText } from "../text.ts";
-import { Node, type Ref } from "../runtime/Node.ts";
 import { Text } from "./Text.ts";
 
 /** Child element that Box can accept - Node, string, or reactive string. */
 export type BoxChild = Node | string | (() => string);
 
 /** Props for Box component. */
-export interface BoxProps extends Partial<ReactiveFlexStyle> {
+export interface BoxProps extends Partial<ReactiveFlexStyle & InheritableProps & EventHandlerProps> {
   children?: BoxChild | BoxChild[];
-  backgroundColor?: InheritableColor | (() => InheritableColor);
   border?: BorderProp | (() => BorderProp);
-  borderColor?: InheritableColor | (() => InheritableColor);
   borderStyle?: BorderStyleName | (() => BorderStyleName);
-  color?: InheritableColor | (() => InheritableColor);
-  bold?: InheritableBool | (() => InheritableBool);
-  dim?: InheritableBool | (() => InheritableBool);
-  italic?: InheritableBool | (() => InheritableBool);
-  underline?: InheritableBool | (() => InheritableBool);
-  strikethrough?: InheritableBool | (() => InheritableBool);
-  inverse?: InheritableBool | (() => InheritableBool);
   focusable?: boolean;
   autoFocus?: boolean;
   ref?: Ref;
-  onKeyPress?: (key: KeyEvent) => boolean | undefined;
-  onMousePress?: (event: MouseEvent) => void;
-  onMouseRelease?: (event: MouseEvent) => void;
-  onMouseMove?: (event: MouseEvent) => void;
-  onScroll?: (event: ScrollEvent) => void;
-  onHover?: (hovering: boolean) => void;
-  onActivate?: (event: ActivateEvent) => void;
 }
 
 /**
@@ -95,8 +53,7 @@ function compact(obj: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
-export function Box(props: BoxProps): Node {
-  const {
+export function Box({
     children: childrenProp,
     backgroundColor,
     border,
@@ -120,7 +77,7 @@ export function Box(props: BoxProps): Node {
     onHover,
     onActivate,
     ...styleProps
-  } = props;
+  }: BoxProps): Node {
 
   const normalizeChild = (child: BoxChild): Node => {
     if (typeof child === "string") {
@@ -183,7 +140,8 @@ export function Box(props: BoxProps): Node {
       inverse,
     },
 
-    render(x, y, width, height, buffer, inherited, clip) {
+    render(bounds, buffer, inherited, clip) {
+      const { screenX: x, screenY: y, width, height } = bounds;
       if (
         x >= clip.x + clip.width ||
         x + width <= clip.x ||
@@ -200,7 +158,7 @@ export function Box(props: BoxProps): Node {
 
       const hasBg = bg !== inherited.backgroundColor;
       if (hasBg) {
-        fillClippedRect(buffer, x, y, width, height, clip, DEFAULT_COLOR, bg, 0);
+        fillClippedRect(buffer, bounds, clip, DEFAULT_COLOR, bg, 0);
       }
 
       const borderFlags = getBorderFlags();
@@ -216,18 +174,7 @@ export function Box(props: BoxProps): Node {
           resolve(border),
           resolve(borderStyle),
         );
-        renderBorder(
-          buffer,
-          x,
-          y,
-          width,
-          height,
-          borderFlags,
-          styleName,
-          fg,
-          bg,
-          clip,
-        );
+        renderBorder(buffer, bounds, borderFlags, styleName, fg, bg, clip);
       }
     },
   });

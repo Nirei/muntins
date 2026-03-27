@@ -89,20 +89,30 @@ export interface LayoutNode {
 }
 
 /**
+ * Axis-aligned rectangle: position + size.
+ */
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Rectangle with absolute screen coordinates.
+ */
+export interface ScreenRect extends Rect {
+  screenX: number;
+  screenY: number;
+}
+
+/**
  * Output from the layout algorithm.
  *
  * x/y are relative to the parent's content area (used during layout).
  * screenX/screenY are absolute positions from root (set by finalizePositions).
  */
-export interface LayoutResult {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-
-  screenX: number;
-  screenY: number;
-
+export interface LayoutResult extends ScreenRect {
   children: LayoutResult[];
 }
 

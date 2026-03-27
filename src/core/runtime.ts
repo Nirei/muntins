@@ -52,7 +52,6 @@ export {
   flushFrame,
 } from "./render.ts";
 export type {
-  ClipRect,
   InheritableBool,
   InheritedStyle,
   ReactiveTextStyle,
@@ -60,6 +59,9 @@ export type {
   BorderProp,
   BorderStyleName,
 } from "./render.ts";
+
+// Pass-through re-exports from layout.ts
+export type { Rect, ScreenRect } from "./layout.ts";
 
 // Pass-through re-exports from text.ts
 export {

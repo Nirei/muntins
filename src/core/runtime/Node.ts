@@ -5,8 +5,14 @@ import type {
   MouseEvent,
   ScrollEvent,
 } from "../input.ts";
-import type { FlexStyle, LayoutNode, LayoutResult } from "../layout.ts";
-import type { ClipRect, InheritableBool, InheritedStyle } from "../render.ts";
+import type {
+  FlexStyle,
+  LayoutNode,
+  LayoutResult,
+  Rect,
+  ScreenRect,
+} from "../layout.ts";
+import type { InheritableBool, InheritedStyle } from "../render.ts";
 import { resolveInheritable } from "../render.ts";
 import type { Accessor } from "../signals.ts";
 import { createSignal } from "../signals.ts";
@@ -58,7 +64,7 @@ export interface LayoutSignals {
   setLayout: (result: LayoutResult) => void;
 }
 
-type InheritableProps = {
+export type InheritableProps = {
   backgroundColor?: InheritableColor | (() => InheritableColor);
   borderColor?: InheritableColor | (() => InheritableColor);
   color?: InheritableColor | (() => InheritableColor);
@@ -71,25 +77,32 @@ type InheritableProps = {
 };
 
 type MeasureFunction = (
-    width: number,
-    height: number,
-  ) => { width: number; height: number }
-
-type RenderFunction = (
-  x: number,
-  y: number,
   width: number,
   height: number,
+) => { width: number; height: number };
+
+type RenderFunction = (
+  bounds: ScreenRect,
   buffer: Buffer,
   inherited: InheritedStyle,
-  clip: ClipRect,
+  clip: Rect,
 ) => void;
+
+export interface EventHandlerProps {
+  onKeyPress?: (key: KeyEvent) => boolean | undefined;
+  onMousePress?: (event: MouseEvent) => void;
+  onMouseRelease?: (event: MouseEvent) => void;
+  onMouseMove?: (event: MouseEvent) => void;
+  onScroll?: (event: ScrollEvent) => void;
+  onHover?: (hovering: boolean) => void;
+  onActivate?: (event: ActivateEvent) => void;
+}
 
 /**
  * Constructor argument for Node.
  * Same shape as Node minus runtime-set fields (_parent, _layout) and methods.
  */
-export interface NodeInit {
+export interface NodeInit extends EventHandlerProps {
   style: FlexStyle | (() => FlexStyle);
   children?: Node[] | (() => Node[]);
   measure?: MeasureFunction;
@@ -98,13 +111,6 @@ export interface NodeInit {
   focusable?: boolean;
   autoFocus?: boolean;
   ref?: Ref;
-  onKeyPress?: (key: KeyEvent) => boolean | undefined;
-  onMousePress?: (event: MouseEvent) => void;
-  onMouseRelease?: (event: MouseEvent) => void;
-  onMouseMove?: (event: MouseEvent) => void;
-  onScroll?: (event: ScrollEvent) => void;
-  onHover?: (hovering: boolean) => void;
-  onActivate?: (event: ActivateEvent) => void;
   activate?: () => void;
 }
 
@@ -114,7 +120,7 @@ export interface NodeInit {
  * Nodes either have children (container) or measure/render (leaf like Text).
  * Components run once; signals handle updates.
  */
-export class Node {
+export class Node implements EventHandlerProps {
   style!: FlexStyle | (() => FlexStyle);
   children?: Node[] | (() => Node[]);
   measure?: MeasureFunction;
