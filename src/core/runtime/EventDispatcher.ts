@@ -99,14 +99,18 @@ export class EventDispatcher {
 
     const target = root.hitTest(layoutResult, input.x, input.y);
 
-    if (target !== this.hoverState.currentNode) {
+    const hoverTarget = target
+      ? target.pathToRoot().find((n) => n.onHover) ?? null
+      : null;
+
+    if (hoverTarget !== this.hoverState.currentNode) {
       if (this.hoverState.currentNode?.onHover) {
         this.hoverState.currentNode.onHover(false);
       }
-      if (target?.onHover) {
-        target.onHover(true);
+      if (hoverTarget?.onHover) {
+        hoverTarget.onHover(true);
       }
-      this.hoverState.currentNode = target;
+      this.hoverState.currentNode = hoverTarget;
     }
 
     if (!target) return;

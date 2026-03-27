@@ -245,6 +245,7 @@ export function setupTerminal(
   if (options.mouse) {
     seq += "\x1b[?1000h"; // Basic mouse press/release
     seq += "\x1b[?1002h"; // Button-event tracking (motion while pressed)
+    seq += "\x1b[?1003h"; // Any-event tracking (hover/motion without pressing)
     seq += "\x1b[?1006h"; // SGR extended coordinates
   }
 
@@ -268,6 +269,7 @@ export function teardownTerminal(
   seq += "\x1b[?2004l"; // Disable bracketed paste
   seq += "\x1b[?1004l"; // Disable focus reporting
   seq += "\x1b[?1006l"; // Disable mouse tracking
+  seq += "\x1b[?1003l";
   seq += "\x1b[?1002l";
   seq += "\x1b[?1000l";
 
