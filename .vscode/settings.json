@@ -1,0 +1,16 @@
+{
+  "nodejs-testing.nodejsPath": "/home/nirro/.nvm/versions/node/v24.13.0/bin/node",
+  "nodejs-testing.include": ["test"],
+  "nodejs-testing.exclude": ["**/node_modules/**"],
+  "nodejs-testing.extensions": [
+    {
+      "extensions": ["mjs", "cjs", "js"],
+      "parameters": []
+    },
+    {
+      "extensions": ["ts"],
+      "parameters": [],
+      "filePattern": "*.test"
+    }
+  ]
+}
