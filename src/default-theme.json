@@ -9,12 +9,13 @@
     "error": "#c45d5d"
   },
   "root": { "backgroundColor": "$bg", "color": "$fg" },
-  "switch": { "checkedChar": " ■", "uncheckedChar": "■ " },
-  "switch--checked": { "color": "$accent", "inverse": true },
-  "switch--unchecked": { "color": "$error", "inverse": true },
+  "switch": { "checkedChar": " ■", "uncheckedChar": "■ ", "inverse": true },
+  "switch--checked": { "color": "$accent" },
+  "switch--unchecked": { "color": "$error" },
   "switch--disabled": { "dim": true },
-  "radio-group": { "flexDirection": "column", "selectedChar": "●", "unselectedChar": "○" },
-  "radio-group--disabled": { "dim": true },
+  "radio-group": { "flexDirection": "row", "selectedChar": "●", "unselectedChar": "○" },
+  "radio-group--label": { "color": "$muted" },
+  "radio-group--disabled": { "dim": true, "color": "$muted" },
   "select--dropdown": { "backgroundColor": "$surface", "paddingStart": 1, "paddingEnd": 1 },
   "select--indicator": { "openChar": "▲", "closedChar": "▼" },
   "select--disabled": { "dim": true },
@@ -33,5 +34,7 @@
   "menubar--separator": { "content": "──────────" },
   "menubar--item": { "gap": 2 },
   "button": { "backgroundColor": "$surface", "paddingStart": 1, "paddingEnd": 1 },
-  "button--hover": { "backgroundColor": "$primary" }
+  "button--hover": { "backgroundColor": "$primary" },
+  "label": { "color": "$muted" },
+  "separator": { "borderColor": "$surface" }
 }

@@ -3,6 +3,7 @@
 import type { MouseEvent } from "../core/input.ts";
 import type { Node, ReactiveTextStyle, Ref } from "../core/runtime.ts";
 import { App, Text, useFocus } from "../core/runtime.ts";
+import { styleFallback } from "../core/theme.ts";
 
 /**
  * Props for the Label component.
@@ -57,7 +58,7 @@ export function Label(props: LabelProps): Node {
 
   return Text({
     content: children,
-    ...style,
+    ...styleFallback(style, 'label'),
     onMousePress: handleMousePress,
   });
 }

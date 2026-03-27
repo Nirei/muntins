@@ -47,9 +47,6 @@ export interface RadioGroupProps<T> {
   /** Disable the entire group */
   disabled?: MaybeAccessor<boolean>;
 
-  /** Render function for option - controls all styling */
-  renderOption?: (props: RadioOptionRenderProps<T>) => Node;
-
   /** Layout direction. Default from theme. */
   direction?: MaybeAccessor<"row" | "column">;
 
@@ -73,16 +70,16 @@ function defaultRenderOption<T>(props: RadioOptionRenderProps<T>): Node {
     children: [
       Text({
         content: () => {
-          const t = theme('radio-group');
+          const t = theme("radio-group");
           return props.selected()
             ? (t.selectedChar as string)
             : (t.unselectedChar as string);
         },
-        dim: () => props.disabled() && (theme('radio-group--disabled').dim as boolean),
+        ...styleFallback(undefined, () => props.disabled() ? "radio-group--disabled" : "radio-group"),
       }),
       Text({
         content: props.option.label,
-        dim: () => props.disabled() && (theme('radio-group--disabled').dim as boolean),
+        ...styleFallback(undefined, () => props.disabled() ? "radio-group--disabled" : "radio-group--label", "radio-group"),
       }),
     ],
   });
@@ -117,8 +114,6 @@ export function RadioGroup<T>(props: RadioGroupProps<T>): Node {
 
   const getValue = () => resolve(props.value);
   const isDisabled = () => resolve(props.disabled) ?? false;
-
-  const renderOption = props.renderOption ?? defaultRenderOption;
 
   // Sync focused index with selected value
   createEffect(() => {
@@ -170,18 +165,16 @@ export function RadioGroup<T>(props: RadioGroupProps<T>): Node {
   };
 
   return Box({
-    flexDirection: () =>
-      resolve(props.direction) ?? (theme('radio-group').flexDirection as "row" | "column"),
     focusable: props.focusable ?? true,
     autoFocus: props.autoFocus,
     ref: props.ref,
     onKeyPress: handleKeyPress,
-    ...props.style,
+    ...styleFallback(props.style, "radio-group"),
     children: props.options.map((opt, index) =>
       Box({
         onMousePress: handleOptionMousePress(index),
         children: [
-          renderOption({
+          defaultRenderOption({
             option: opt,
             selected: () => getValue() === opt.value,
             focused: () => focusedIndex() === index,

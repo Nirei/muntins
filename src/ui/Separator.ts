@@ -4,6 +4,7 @@ import type { FlexStyle } from "../core/layout.ts";
 import type { Node } from "../core/runtime.ts";
 import { Box } from "../core/runtime.ts";
 import { type MaybeAccessor, resolve } from "../core/signals.ts";
+import { styleFallback } from "../core/theme.ts";
 
 /** Orientation of the separator. */
 export type SeparatorOrientation = "horizontal" | "vertical";
@@ -48,7 +49,7 @@ export function Separator(props: SeparatorProps): Node {
     height: () => (isHorizontal() ? 1 : "auto"),
     // Stretch to fill available space in the cross-axis
     alignSelf: "stretch",
-    ...style,
+    ...styleFallback(style, 'separator'),
   };
 
   return Box(boxProps as Parameters<typeof Box>[0]);

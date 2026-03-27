@@ -72,7 +72,7 @@ function FormRow(props: {
     children: [
       Box({
         width: 14,
-        children: [Label({ children: props.label })],
+        children: [Text({ content: props.label })],
       }),
       props.children,
     ],
