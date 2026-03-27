@@ -1,3 +1,4 @@
+import { Box } from "../components/Box.ts";
 import { ScrollArea } from "../components/ScrollArea.ts";
 import { createInputParser, type InputEvent } from "../input.ts";
 import type { LayoutResult } from "../layout.ts";
@@ -7,6 +8,7 @@ import {
 } from "../render.ts";
 import type { Accessor, Setter } from "../signals.ts";
 import { batch, createRoot } from "../signals.ts";
+import { styleFallback } from "../theme.ts";
 import { EventDispatcher } from "./EventDispatcher.ts";
 import { type FocusScope, FocusManager } from "./FocusManager.ts";
 import type { Node } from "./Node.ts";
@@ -157,15 +159,15 @@ export class App {
     };
 
     this.rootDispose = createRoot((dispose) => {
-      let rootNode = App.withContext(ctx, () => component());
+      let contentNode = App.withContext(ctx, () => component());
 
       if (opts.scroll) {
         // Inject minHeight so the user's root fills the viewport height.
         // Without this, intermediate wrappers (e.g. TabFocus) that lack
         // flexGrow won't stretch vertically, breaking centering.
         // Only when the user hasn't set an explicit height.
-        const origStyle = rootNode.style;
-        rootNode.style = () => {
+        const origStyle = contentNode.style;
+        contentNode.style = () => {
           const base =
             typeof origStyle === "function" ? origStyle() : origStyle;
           if (base.height === "auto") {
@@ -177,17 +179,32 @@ export class App {
           return base;
         };
 
-        rootNode = App.withContext(ctx, () =>
+        contentNode = App.withContext(ctx, () =>
           ScrollArea({
             height: () => stdout.rows,
             minHeight: () => stdout.rows,
             focusable: false,
-            children: [rootNode],
+            children: [contentNode],
           }),
         );
       }
 
-      this.root = rootNode;
+      // Ensure content fills the root Box (previously the content WAS the
+      // layout root and received full terminal dimensions automatically).
+      const contentStyle = contentNode.style;
+      contentNode.style = () => {
+        const base =
+          typeof contentStyle === "function" ? contentStyle() : contentStyle;
+        return { ...base, flexGrow: 1 };
+      };
+
+      this.root = App.withContext(ctx, () =>
+        Box({
+          ...styleFallback(undefined, 'root'),
+          flexDirection: "column",
+          children: [contentNode],
+        }),
+      );
 
       // Attach pending portal children to root
       const rootChildren = (this.root.children as Node[] ?? []);

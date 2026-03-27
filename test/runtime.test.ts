@@ -191,19 +191,6 @@ describe("Box", () => {
     assert.strictEqual(node.measure, undefined);
   });
 
-  it("has no render function when no backgroundColor or border", () => {
-    const node = Box({});
-
-    // Box without backgroundColor or border has no render function
-    // (nothing to render - it's a pure layout container)
-    assert.strictEqual(node.render, undefined);
-  });
-
-  it("has render function when backgroundColor is provided", () => {
-    const node = Box({ backgroundColor: { type: "named", index: 1 } }); // red
-    assert.strictEqual(typeof node.render, "function");
-  });
-
   it("has render function when border is provided", () => {
     const node = Box({ border: true });
     assert.strictEqual(typeof node.render, "function");
@@ -4115,9 +4102,13 @@ describe("reactive content relayout", () => {
 
     // Verify only "0" is rendered, not stale "11" characters
     // The output should NOT contain "111" or "011" patterns
+    // Strip ANSI escape sequences first — cursor positioning like \x1b[11;8H
+    // contains "11" as a row number, which is a false positive.
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape codes use control chars
+    const stripped = mockStdout.written.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, "");
     assert.ok(
-      !mockStdout.written.includes("11"),
-      `Should not have stale "11" in output: ${mockStdout.written.slice(-100)}`,
+      !stripped.includes("11"),
+      `Should not have stale "11" in output: ${stripped.slice(-100)}`,
     );
 
     app.unmount();

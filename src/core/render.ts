@@ -95,7 +95,7 @@ export function resolveInheritable<T>(
   }
   if (typeof value === "function") {
     const resolved = (value as () => Inheritable<T>)();
-    return resolved === "inherit" ? inherited : resolved;
+    return resolved === undefined || resolved === "inherit" ? inherited : resolved;
   }
   return value as T;
 }
@@ -204,25 +204,25 @@ export const BORDER_CHARS: Record<BorderStyleName, BorderChars> = {
  * Parse BorderProp into individual border flags for each side.
  */
 export function parseBorderProp(border: BorderProp | undefined): {
-  top: boolean;
-  end: boolean;
-  bottom: boolean;
-  start: boolean;
+  borderTop: boolean;
+  borderEnd: boolean;
+  borderBottom: boolean;
+  borderStart: boolean;
 } {
   if (border === undefined || border === false) {
-    return { top: false, end: false, bottom: false, start: false };
+    return { borderTop: false, borderEnd: false, borderBottom: false, borderStart: false };
   }
 
   if (border === true || typeof border === "string") {
-    return { top: true, end: true, bottom: true, start: true };
+    return { borderTop: true, borderEnd: true, borderBottom: true, borderStart: true };
   }
 
   // Selective borders object - map right to end, left to start
   return {
-    top: border.top ?? false,
-    end: border.right ?? false,
-    bottom: border.bottom ?? false,
-    start: border.left ?? false,
+    borderTop: border.top ?? false,
+    borderEnd: border.right ?? false,
+    borderBottom: border.bottom ?? false,
+    borderStart: border.left ?? false,
   };
 }
 
@@ -266,14 +266,14 @@ export function renderBorder(
   y: number,
   width: number,
   height: number,
-  borders: { top: boolean; end: boolean; bottom: boolean; start: boolean },
+  borders: { borderTop: boolean; borderEnd: boolean; borderBottom: boolean; borderStart: boolean },
   styleName: BorderStyleName,
   fg: Color,
   bg: Color,
   clip: ClipRect,
 ): void {
   const chars = BORDER_CHARS[styleName];
-  const { top, end, bottom, start } = borders;
+  const { borderTop: top, borderEnd: end, borderBottom: bottom, borderStart: start } = borders;
 
   if (top) {
     const startCol = start ? x + 1 : x;

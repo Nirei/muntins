@@ -46,15 +46,7 @@ import {
   renderText,
   resolveInheritable,
 } from "../render.ts";
-import { batch } from "../signals.ts";
-import {
-  type Accessor,
-  type Setter,
-  createEffect,
-  createRoot,
-  createSignal,
-  onCleanup,
-} from "../signals.ts";
+import { resolve } from "../signals.ts";
 import { type WrapMode, measureText } from "../text.ts";
 import { Node, type Ref } from "../runtime/Node.ts";
 import { Text } from "./Text.ts";
@@ -95,6 +87,14 @@ export interface BoxProps extends Partial<ReactiveFlexStyle> {
  * its background; when border is set, Box renders its border.
  * Size is determined by flexbox layout based on its children.
  */
+function compact(obj: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) out[k] = v;
+  }
+  return out;
+}
+
 export function Box(props: BoxProps): Node {
   const {
     children: childrenProp,
@@ -139,25 +139,19 @@ export function Box(props: BoxProps): Node {
     : [];
 
   const getBorderFlags = () => {
-    const borderValue = typeof border === "function" ? border() : border;
-    return parseBorderProp(borderValue);
+    return parseBorderProp(resolve(border));
   };
 
   const node = new Node({
     style: () => {
       const resolved: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(styleProps)) {
-        resolved[key] =
-          typeof value === "function" ? (value as () => unknown)() : value;
+        resolved[key] = resolve(value);
       }
-      const borderFlags = getBorderFlags();
       return {
         ...DEFAULT_FLEX_STYLE,
-        ...resolved,
-        borderTop: borderFlags.top,
-        borderEnd: borderFlags.end,
-        borderBottom: borderFlags.bottom,
-        borderStart: borderFlags.start,
+        ...compact(resolved),
+        ...getBorderFlags(),
       } as FlexStyle;
     },
     children,
@@ -189,59 +183,53 @@ export function Box(props: BoxProps): Node {
       inverse,
     },
 
-    render:
-      backgroundColor !== undefined || border !== undefined
-        ? (x, y, width, height, buffer, inherited, clip) => {
-            if (
-              x >= clip.x + clip.width ||
-              x + width <= clip.x ||
-              y >= clip.y + clip.height ||
-              y + height <= clip.y
-            ) {
-              return;
-            }
+    render(x, y, width, height, buffer, inherited, clip) {
+      if (
+        x >= clip.x + clip.width ||
+        x + width <= clip.x ||
+        y >= clip.y + clip.height ||
+        y + height <= clip.y
+      ) {
+        return;
+      }
 
-            const bg = resolveInheritable(
-              backgroundColor,
-              inherited.backgroundColor,
-            );
+      const bg = resolveInheritable(
+        backgroundColor,
+        inherited.backgroundColor,
+      );
 
-            if (backgroundColor !== undefined) {
-              fillClippedRect(buffer, x, y, width, height, clip, DEFAULT_COLOR, bg, 0);
-            }
+      const hasBg = bg !== inherited.backgroundColor;
+      if (hasBg) {
+        fillClippedRect(buffer, x, y, width, height, clip, DEFAULT_COLOR, bg, 0);
+      }
 
-            const borderFlags = getBorderFlags();
-            const hasBorder =
-              borderFlags.top ||
-              borderFlags.end ||
-              borderFlags.bottom ||
-              borderFlags.start;
+      const borderFlags = getBorderFlags();
+      const hasBorder =
+        borderFlags.borderTop ||
+        borderFlags.borderEnd ||
+        borderFlags.borderBottom ||
+        borderFlags.borderStart;
 
-            if (hasBorder) {
-              const fg = resolveInheritable(borderColor, inherited.borderColor);
-              const borderValue =
-                typeof border === "function" ? border() : border;
-              const borderStyleValue =
-                typeof borderStyle === "function" ? borderStyle() : borderStyle;
-              const styleName = getBorderStyleName(
-                borderValue,
-                borderStyleValue,
-              );
-              renderBorder(
-                buffer,
-                x,
-                y,
-                width,
-                height,
-                borderFlags,
-                styleName,
-                fg,
-                bg,
-                clip,
-              );
-            }
-          }
-        : undefined,
+      if (hasBorder) {
+        const fg = resolveInheritable(borderColor, inherited.borderColor);
+        const styleName = getBorderStyleName(
+          resolve(border),
+          resolve(borderStyle),
+        );
+        renderBorder(
+          buffer,
+          x,
+          y,
+          width,
+          height,
+          borderFlags,
+          styleName,
+          fg,
+          bg,
+          clip,
+        );
+      }
+    },
   });
 
   if (ref) {
