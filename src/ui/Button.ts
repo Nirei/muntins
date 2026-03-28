@@ -1,7 +1,7 @@
 // Button component - focusable, activatable element
 
 import type { ActivateEvent, KeyEvent, MouseEvent } from "../core/input.ts";
-import type { FlexStyle } from "../core/layout.ts";
+import type { ReactiveFlexStyle } from "../core/layout.ts";
 import type { BoxChild, Node, Ref } from "../core/runtime.ts";
 import { Box } from "../core/runtime.ts";
 import { type MaybeAccessor, createSignal, resolve } from "../core/signals.ts";
@@ -26,7 +26,7 @@ export interface ButtonProps {
   ref?: Ref;
 
   /** Style overrides for layout */
-  style?: Partial<FlexStyle>;
+  style?: Partial<ReactiveFlexStyle>;
 }
 
 /**

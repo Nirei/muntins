@@ -1,7 +1,7 @@
 // Switch component - on/off toggle control
 
 import type { ActivateEvent, KeyEvent, MouseEvent } from "../core/input.ts";
-import type { FlexStyle } from "../core/layout.ts";
+import type { FlexStyle, ReactiveFlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
 import { type MaybeAccessor, resolve } from "../core/signals.ts";
@@ -26,7 +26,7 @@ export interface SwitchProps {
   ref?: Ref;
 
   /** Style overrides for layout */
-  style?: Partial<FlexStyle>;
+  style?: Partial<ReactiveFlexStyle>;
 }
 
 /**

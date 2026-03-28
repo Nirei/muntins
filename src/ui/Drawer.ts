@@ -1,7 +1,7 @@
 // Drawer component - panel that slides in from the edge of the screen
 
 import type { KeyEvent } from "../core/input.ts";
-import type { FlexStyle } from "../core/layout.ts";
+import type { FlexStyle, ReactiveFlexStyle } from "../core/layout.ts";
 import type { Node } from "../core/runtime.ts";
 import { Box, Portal, Show, TabFocus } from "../core/runtime.ts";
 import { type MaybeAccessor, resolve } from "../core/signals.ts";
@@ -30,7 +30,7 @@ export interface DrawerProps {
   size?: MaybeAccessor<number>;
 
   /** Style overrides for the drawer container */
-  style?: Partial<FlexStyle>;
+  style?: Partial<ReactiveFlexStyle>;
 }
 
 /**

@@ -7,12 +7,12 @@ import {
   graphemeDisplayWidth,
   graphemes,
 } from "../core/buffer.ts";
+import { ScrollArea } from "../core/components/ScrollArea.ts";
 import { type KeyEvent, type MouseEvent, isPrintable } from "../core/input.ts";
-import { DEFAULT_FLEX_STYLE, type FlexStyle } from "../core/layout.ts";
+import { DEFAULT_FLEX_STYLE, type FlexStyle, type ReactiveFlexStyle } from "../core/layout.ts";
 import { rectContains } from "../core/rects.ts";
-import { Node } from "../core/runtime.ts";
-import type { Rect, InheritedStyle, Ref } from "../core/runtime.ts";
-import { App, Box } from "../core/runtime.ts";
+import type { Rect, Ref } from "../core/runtime.ts";
+import { App, Box, Node } from "../core/runtime.ts";
 import {
   type Accessor,
   type MaybeAccessor,
@@ -22,7 +22,6 @@ import {
   untrack,
 } from "../core/signals.ts";
 import { displayWidthToPosition, textLength } from "../core/text.ts";
-import { ScrollArea } from "../core/components/ScrollArea.ts";
 import { styleFallback, theme } from "../core/theme.ts";
 
 /**
@@ -62,7 +61,7 @@ export interface TextareaProps {
   ref?: Ref;
 
   /** Style overrides */
-  style?: Partial<FlexStyle>;
+  style?: Partial<ReactiveFlexStyle>;
 }
 
 /**

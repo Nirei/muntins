@@ -1,7 +1,7 @@
 // ScrollArea component - scrollable container with scrollbar
 
 import type { KeyEvent, ScrollEvent } from "../input.ts";
-import type { FlexStyle } from "../layout.ts";
+import type { ReactiveFlexStyle } from "../layout.ts";
 import { App } from "../runtime/App.ts";
 import { type Node, type Ref, createRef } from "../runtime/Node.ts";
 import { createEffect, createSignal, resolve } from "../signals.ts";
@@ -43,7 +43,7 @@ export interface ScrollAreaProps {
   ref?: Ref;
 
   /** Style overrides */
-  style?: Partial<FlexStyle>;
+  style?: Partial<ReactiveFlexStyle>;
 }
 
 /**

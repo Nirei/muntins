@@ -1,7 +1,7 @@
 // Select component - dropdown selection control
 
 import type { KeyEvent, MouseEvent } from "../core/input.ts";
-import type { FlexStyle } from "../core/layout.ts";
+import type { ReactiveFlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
 import { type MaybeAccessor, createSignal, resolve } from "../core/signals.ts";
@@ -41,7 +41,7 @@ export interface SelectProps<T> {
   ref?: Ref;
 
   /** Style overrides */
-  style?: Partial<FlexStyle>;
+  style?: Partial<ReactiveFlexStyle>;
 }
 
 /**

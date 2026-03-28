@@ -739,47 +739,6 @@ describe("Menubar", () => {
 
       app.unmount();
     });
-
-    it("custom separator renders", async () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
-
-      const app = App.mount(
-        () =>
-          Box({
-            height: 10,
-            children: [
-              Menubar({
-                menus: createSampleMenus(),
-                autoFocus: true,
-                renderSeparator: () => Text({ content: "---custom---" }),
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-          fpsLimit: 0,
-        },
-      );
-
-      // Open menu
-      sendKey(mockStdin, "down");
-      await nextRender();
-
-      // Custom separator renders - due to buffer diff optimization and
-      // known layout bug with absolute positioning (popover content truncation),
-      // the full string may not appear contiguously. Check for partial content.
-      // NOTE: Known issue - popover content can be truncated. Full fix requires
-      // layout engine changes for absolute positioning with stretch constraints.
-      assert.ok(
-        mockStdout.written.includes("---") ||
-          mockStdout.written.includes("cust"),
-        "Should contain custom separator content (partial)",
-      );
-
-      app.unmount();
-    });
   });
 
   describe("render functions", () => {

@@ -1,6 +1,6 @@
 // Separator component - visual divider for content
 
-import type { FlexStyle } from "../core/layout.ts";
+import type { FlexStyle, ReactiveFlexStyle } from "../core/layout.ts";
 import type { Node } from "../core/runtime.ts";
 import { Box } from "../core/runtime.ts";
 import { type MaybeAccessor, resolve } from "../core/signals.ts";
@@ -17,7 +17,7 @@ export interface SeparatorProps {
   orientation?: MaybeAccessor<SeparatorOrientation>;
 
   /** Style overrides */
-  style?: Partial<FlexStyle>;
+  style?: Partial<ReactiveFlexStyle>;
 }
 
 /**

@@ -1,6 +1,6 @@
 // Toast component - temporary notification with auto-dismiss
 
-import type { FlexStyle } from "../core/layout.ts";
+import type { FlexStyle, ReactiveFlexStyle } from "../core/layout.ts";
 import type { BoxChild, Node } from "../core/runtime.ts";
 import { Box, Portal } from "../core/runtime.ts";
 import { type MaybeAccessor, onCleanup, resolve } from "../core/signals.ts";
@@ -34,7 +34,7 @@ export interface ToastProps {
   position?: MaybeAccessor<ToastPosition>;
 
   /** Style overrides */
-  style?: Partial<FlexStyle>;
+  style?: Partial<ReactiveFlexStyle>;
 }
 
 /**

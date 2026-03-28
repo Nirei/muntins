@@ -1,6 +1,6 @@
 // Spinner component - animated loading indicator
 
-import type { FlexStyle } from "../core/layout.ts";
+import type { FlexStyle, ReactiveFlexStyle } from "../core/layout.ts";
 import type { Node } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
 import {
@@ -29,7 +29,7 @@ export interface SpinnerProps {
   label?: MaybeAccessor<string>;
 
   /** Style overrides */
-  style?: Partial<FlexStyle>;
+  style?: Partial<ReactiveFlexStyle>;
 }
 
 /**

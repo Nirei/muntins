@@ -2,7 +2,7 @@
 
 import type { Color } from "./buffer.ts";
 import { DEFAULT_COLOR } from "./buffer.ts";
-import { createSignal } from "./signals.ts";
+import { createSignal, resolve } from "./signals.ts";
 
 /**
  * Compact color string for JSON theme files.
@@ -175,11 +175,8 @@ export function styleFallback(
   instanceStyle: Record<string, unknown> | undefined,
   ...themeKeys: (string | (() => string))[]
 ): Record<string, unknown> {
-  const slices = themeKeys.map((key) =>
-    typeof key === "function"
-      ? () => (getTheme()[key()] as Record<string, unknown>) ?? {}
-      : () => (getTheme()[key] as Record<string, unknown>) ?? {},
-  );
+  // Create reactive slices for theme keys
+  const slices = themeKeys.map((key) => () => getTheme()[resolve(key)] ?? {});
 
   // Collect all keys across all slices and instance style
   const allKeys = new Set<string>();

@@ -1,7 +1,7 @@
 // Popover component - floating panel anchored to a trigger element
 
 import type { KeyEvent } from "../core/input.ts";
-import type { FlexStyle } from "../core/layout.ts";
+import type { ReactiveFlexStyle } from "../core/layout.ts";
 import type { Node, Ref, RuntimeContext } from "../core/runtime.ts";
 import { App, Box, Portal, Show, createRef } from "../core/runtime.ts";
 import { type MaybeAccessor, resolve } from "../core/signals.ts";
@@ -44,7 +44,7 @@ export interface PopoverProps {
   placement?: MaybeAccessor<PopoverPlacement>;
 
   /** Style overrides for popover container */
-  style?: Partial<FlexStyle>;
+  style?: Partial<ReactiveFlexStyle>;
 }
 
 function searchChildren(

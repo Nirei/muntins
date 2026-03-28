@@ -1,7 +1,7 @@
 // Progress component - progress bar showing completion percentage
 
 import type { InheritableColor } from "../core/buffer.ts";
-import type { FlexStyle } from "../core/layout.ts";
+import type { ReactiveFlexStyle } from "../core/layout.ts";
 import type { Node } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
 import { type MaybeAccessor, resolve } from "../core/signals.ts";
@@ -27,7 +27,7 @@ export interface ProgressProps {
   backgroundColor?: MaybeAccessor<InheritableColor>;
 
   /** Style overrides */
-  style?: Partial<FlexStyle>;
+  style?: Partial<ReactiveFlexStyle>;
 }
 
 /**

@@ -14,7 +14,7 @@ import type { Rect, ScreenRect } from "../rects.ts";
 import type { InheritableBool, InheritedStyle } from "../render.ts";
 import { resolveInheritable } from "../render.ts";
 import type { Accessor } from "../signals.ts";
-import { createSignal } from "../signals.ts";
+import { createSignal, resolve } from "../signals.ts";
 
 /**
  * A mutable reference to a node.
@@ -163,7 +163,7 @@ export class Node implements EventHandlerProps {
 
   /** Resolve reactive style getter to a concrete FlexStyle. */
   resolveStyle(): FlexStyle {
-    return typeof this.style === "function" ? this.style() : this.style;
+    return resolve(this.style)
   }
 
   /** Resolve children, handling both static arrays and reactive getters. */

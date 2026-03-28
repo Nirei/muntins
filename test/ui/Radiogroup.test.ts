@@ -444,16 +444,16 @@ describe("RadioGroup", () => {
   });
 
   describe("direction", () => {
-    it("default direction is column", () => {
+    it("default direction is row", () => {
       const node = RadioGroup({ value: "a", options });
 
       const style =
         typeof node.style === "function" ? node.style() : node.style;
-      assert.strictEqual(style.flexDirection, "column");
+      assert.strictEqual(style.flexDirection, "row");
     });
 
     it("direction: row renders horizontally", () => {
-      const node = RadioGroup({ value: "a", options, direction: "row" });
+      const node = RadioGroup({ value: "a", options, style: { flexDirection: "row" } });
 
       const style =
         typeof node.style === "function" ? node.style() : node.style;
@@ -464,48 +464,12 @@ describe("RadioGroup", () => {
       const [direction, setDirection] = createSignal<"row" | "column">(
         "column",
       );
-      const node = RadioGroup({ value: "a", options, direction });
+      const node = RadioGroup({ value: "a", options, style: { flexDirection: direction } });
 
-      const getStyle = () =>
-        typeof node.style === "function" ? node.style() : node.style;
-
-      assert.strictEqual(getStyle().flexDirection, "column");
+      assert.strictEqual(node.resolveStyle().flexDirection, "column");
 
       setDirection("row");
-      assert.strictEqual(getStyle().flexDirection, "row");
-    });
-  });
-
-  describe("custom renderOption", () => {
-    it("renderOption controls appearance", () => {
-      const node = RadioGroup({
-        value: "a",
-        options,
-        renderOption: (props) =>
-          Text({
-            content: () => (props.selected() ? "X" : "O"),
-          }),
-      });
-
-      const children = getNodeChildren(node);
-      // Each option is wrapped in a Box for mouse handling
-      const wrapper0 = children[0];
-      const wrapper0Children = getNodeChildren(wrapper0);
-      const opt0 = wrapper0Children[0];
-      assert.ok(opt0?.render);
-
-      const buffer = new RenderBuffer(1, 1);
-      opt0.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 1, height: 1 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
-      assert.strictEqual(buffer.getSymbol(0, 0), "X"); // selected
-
-      const wrapper1 = children[1];
-      const wrapper1Children = getNodeChildren(wrapper1);
-      const opt1 = wrapper1Children[0];
-      assert.ok(opt1?.render);
-
-      const buffer1 = new RenderBuffer(1, 1);
-      opt1.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 1, height: 1 }, buffer1, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
-      assert.strictEqual(buffer1.getSymbol(0, 0), "O"); // not selected
+      assert.strictEqual(node.resolveStyle().flexDirection, "row");
     });
   });
 

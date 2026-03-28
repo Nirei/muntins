@@ -2078,7 +2078,7 @@ describe("integration", () => {
                               FormRow({
                                 label: "Theme",
                                 children: RadioGroup({
-                                  value: theme, onChange: setTheme, direction: "row",
+                                  value: theme, onChange: setTheme, style: { flexDirection: "row" },
                                   options: [
                                     { value: "light" as const, label: "Light" },
                                     { value: "dark" as const, label: "Dark" },

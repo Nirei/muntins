@@ -1,5 +1,5 @@
 {
-  "nodejs-testing.nodejsPath": "/home/nirro/.nvm/versions/node/v24.13.0/bin/node",
+  "nodejs-testing.nodejsPath": "/home/nirro/.nvm/versions/node/v24.14.1/bin/node",
   "nodejs-testing.include": ["test"],
   "nodejs-testing.exclude": ["**/node_modules/**"],
   "nodejs-testing.extensions": [

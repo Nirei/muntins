@@ -1,7 +1,7 @@
 // Menubar component - horizontal menu bar with dropdown menus
 
 import type { KeyEvent } from "../core/input.ts";
-import type { FlexStyle } from "../core/layout.ts";
+import type { ReactiveFlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Show, Text } from "../core/runtime.ts";
 import { createSignal } from "../core/signals.ts";
@@ -65,16 +65,13 @@ export interface MenubarProps {
   /** Render function for menu item - controls all styling */
   renderMenuItem?: (props: MenuItemRenderProps) => Node;
 
-  /** Render function for separator */
-  renderSeparator?: () => Node;
-
   /** Focus control */
   focusable?: boolean;
   autoFocus?: boolean;
   ref?: Ref;
 
   /** Style overrides */
-  style?: Partial<FlexStyle>;
+  style?: Partial<ReactiveFlexStyle>;
 }
 
 /**
@@ -189,7 +186,6 @@ export function Menubar(props: MenubarProps): Node {
 
   const renderMenuLabel = props.renderMenuLabel ?? defaultRenderMenuLabel;
   const renderMenuItem = props.renderMenuItem ?? defaultRenderMenuItem;
-  const renderSeparator = props.renderSeparator ?? defaultRenderSeparator;
 
   const handleKeyPress = (key: KeyEvent): boolean | undefined => {
     if (!isOpen()) {
@@ -277,7 +273,7 @@ export function Menubar(props: MenubarProps): Node {
             flexDirection: "column",
             children: menu.items.map((item, itemIndex) =>
               isSeparator(item)
-                ? renderSeparator()
+                ? defaultRenderSeparator()
                 : renderMenuItem({
                     item,
                     highlighted: () => highlightedItemIndex() === itemIndex,

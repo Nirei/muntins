@@ -1,7 +1,7 @@
 // RadioGroup component - exclusive selection from a list of options
 
 import type { KeyEvent, MouseEvent } from "../core/input.ts";
-import type { FlexStyle } from "../core/layout.ts";
+import type { FlexStyle, ReactiveFlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
 import { Box, Text } from "../core/runtime.ts";
 import {
@@ -47,16 +47,13 @@ export interface RadioGroupProps<T> {
   /** Disable the entire group */
   disabled?: MaybeAccessor<boolean>;
 
-  /** Layout direction. Default from theme. */
-  direction?: MaybeAccessor<"row" | "column">;
-
   /** Focus control */
   focusable?: boolean;
   autoFocus?: boolean;
   ref?: Ref;
 
   /** Style overrides */
-  style?: Partial<FlexStyle>;
+  style?: Partial<ReactiveFlexStyle>;
 }
 
 /**

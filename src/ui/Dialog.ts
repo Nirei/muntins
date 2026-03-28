@@ -1,7 +1,7 @@
 // Dialog component - modal overlay with focus trapping
 
 import type { KeyEvent } from "../core/input.ts";
-import type { FlexStyle } from "../core/layout.ts";
+import type { ReactiveFlexStyle } from "../core/layout.ts";
 import type { Node } from "../core/runtime.ts";
 import { Box, Portal, Show, TabFocus } from "../core/runtime.ts";
 import { type MaybeAccessor, resolve } from "../core/signals.ts";
@@ -21,7 +21,7 @@ export interface DialogProps {
   children: Node | Node[];
 
   /** Style overrides for the dialog container */
-  style?: Partial<FlexStyle>;
+  style?: Partial<ReactiveFlexStyle>;
 }
 
 /**
