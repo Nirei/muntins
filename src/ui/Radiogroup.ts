@@ -72,11 +72,18 @@ function defaultRenderOption<T>(props: RadioOptionRenderProps<T>): Node {
             ? (t.selectedChar as string)
             : (t.unselectedChar as string);
         },
-        ...styleFallback(undefined, () => props.disabled() ? "radio-group--disabled" : "radio-group"),
+        ...styleFallback(undefined, () =>
+          props.disabled() ? "radio-group--disabled" : "radio-group",
+        ),
       }),
       Text({
         content: props.option.label,
-        ...styleFallback(undefined, () => props.disabled() ? "radio-group--disabled" : "radio-group--label", "radio-group"),
+        ...styleFallback(
+          undefined,
+          () =>
+            props.disabled() ? "radio-group--disabled" : "radio-group--label",
+          "radio-group",
+        ),
       }),
     ],
   });

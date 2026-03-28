@@ -9,7 +9,11 @@ import {
 } from "../core/buffer.ts";
 import { ScrollArea } from "../core/components/ScrollArea.ts";
 import { type KeyEvent, type MouseEvent, isPrintable } from "../core/input.ts";
-import { DEFAULT_FLEX_STYLE, type FlexStyle, type ReactiveFlexStyle } from "../core/layout.ts";
+import {
+  DEFAULT_FLEX_STYLE,
+  type FlexStyle,
+  type ReactiveFlexStyle,
+} from "../core/layout.ts";
 import { rectContains } from "../core/rects.ts";
 import type { Rect, Ref } from "../core/runtime.ts";
 import { App, Box, Node } from "../core/runtime.ts";
@@ -190,7 +194,8 @@ export function Textarea(props: TextareaProps): Node {
 
   const getValue = () => resolve(props.value) ?? "";
   const isDisabled = () => resolve(props.disabled) ?? false;
-  const getWidth = () => resolve(props.width) ?? (theme('textarea').width as number);
+  const getWidth = () =>
+    resolve(props.width) ?? (theme("textarea").width as number);
   const getMaxHeight = () => resolve(props.maxHeight);
   const getPlaceholder = () => resolve(props.placeholder) ?? "";
   const isMultiline = props.multiline ?? true;
@@ -409,17 +414,20 @@ export function Textarea(props: TextareaProps): Node {
     return focusedNodeAccessor() === focusableNode;
   };
 
-  const themeStyle = styleFallback(props.style, 'textarea', 'input');
+  const themeStyle = styleFallback(props.style, "textarea", "input");
 
-  const getPadding = (side: 'paddingStart' | 'paddingEnd'): number => {
+  const getPadding = (side: "paddingStart" | "paddingEnd"): number => {
     const val = themeStyle[side];
-    return ((typeof val === 'function' ? (val as () => number)() : val) as number) ?? 0;
+    return (
+      ((typeof val === "function" ? (val as () => number)() : val) as number) ??
+      0
+    );
   };
 
   const contentWidth = () => {
     if (getMaxHeight() === undefined) return getWidth();
-    const ps = getPadding('paddingStart');
-    const pe = getPadding('paddingEnd');
+    const ps = getPadding("paddingStart");
+    const pe = getPadding("paddingEnd");
     return getWidth() - ps - pe - 1;
   };
 
@@ -455,9 +463,9 @@ export function Textarea(props: TextareaProps): Node {
       const fg = inherited.color;
       const bg = inherited.backgroundColor;
 
-      const cursorInverse = theme('textarea--cursor').inverse as boolean;
-      const placeholderDim = theme('textarea--placeholder').dim as boolean;
-      const disabledDim = theme('textarea--disabled').dim as boolean;
+      const cursorInverse = theme("textarea--cursor").inverse as boolean;
+      const placeholderDim = theme("textarea--placeholder").dim as boolean;
+      const disabledDim = theme("textarea--disabled").dim as boolean;
 
       const hScroll = isMultiline ? 0 : scrollLeft();
 
@@ -516,7 +524,7 @@ export function Textarea(props: TextareaProps): Node {
       children: [
         ScrollArea({
           height: maxHeight,
-          width: () => getWidth() - getPadding('paddingStart'),
+          width: () => getWidth() - getPadding("paddingStart"),
           scrollTop: scrollTop,
           onScroll: setScrollTop,
           focusable: false,

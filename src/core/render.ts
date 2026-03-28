@@ -15,12 +15,17 @@ import {
   graphemes,
 } from "./buffer.ts";
 import {
+  type Rect,
+  type ScreenRect,
+  rectContains,
+  rectOverlaps,
+} from "./rects.ts";
+import {
   type WrapMode,
   lineDisplayWidth,
   truncateLine,
   wrapLine,
 } from "./text.ts";
-import { rectContains, rectOverlaps, type Rect, type ScreenRect } from "./rects.ts";
 
 /**
  * Inherited style values passed down through the node tree during paint.
@@ -96,7 +101,9 @@ export function resolveInheritable<T>(
   }
   if (typeof value === "function") {
     const resolved = (value as () => Inheritable<T>)();
-    return resolved === undefined || resolved === "inherit" ? inherited : resolved;
+    return resolved === undefined || resolved === "inherit"
+      ? inherited
+      : resolved;
   }
   return value as T;
 }
@@ -160,11 +167,21 @@ export function parseBorderProp(border: BorderProp | undefined): {
   borderStart: boolean;
 } {
   if (border === undefined || border === false) {
-    return { borderTop: false, borderEnd: false, borderBottom: false, borderStart: false };
+    return {
+      borderTop: false,
+      borderEnd: false,
+      borderBottom: false,
+      borderStart: false,
+    };
   }
 
   if (border === true || typeof border === "string") {
-    return { borderTop: true, borderEnd: true, borderBottom: true, borderStart: true };
+    return {
+      borderTop: true,
+      borderEnd: true,
+      borderBottom: true,
+      borderStart: true,
+    };
   }
 
   // Selective borders object - map right to end, left to start
@@ -213,7 +230,12 @@ function getCornerChar(
 export function renderBorder(
   buffer: Buffer,
   rect: ScreenRect,
-  borders: { borderTop: boolean; borderEnd: boolean; borderBottom: boolean; borderStart: boolean },
+  borders: {
+    borderTop: boolean;
+    borderEnd: boolean;
+    borderBottom: boolean;
+    borderStart: boolean;
+  },
   styleName: BorderStyleName,
   fg: Color,
   bg: Color,
@@ -221,7 +243,12 @@ export function renderBorder(
 ): void {
   const { screenX: x, screenY: y, width, height } = rect;
   const chars = BORDER_CHARS[styleName];
-  const { borderTop: top, borderEnd: end, borderBottom: bottom, borderStart: start } = borders;
+  const {
+    borderTop: top,
+    borderEnd: end,
+    borderBottom: bottom,
+    borderStart: start,
+  } = borders;
 
   if (top) {
     const startCol = start ? x + 1 : x;
@@ -325,7 +352,16 @@ export function fillClippedRect(
   const fillWidth = fillRight - fillX;
   const fillHeight = fillBottom - fillY;
   if (fillWidth > 0 && fillHeight > 0) {
-    buffer.fillRect(fillX, fillY, fillWidth, fillHeight, " ", fg, bg, modifiers);
+    buffer.fillRect(
+      fillX,
+      fillY,
+      fillWidth,
+      fillHeight,
+      " ",
+      fg,
+      bg,
+      modifiers,
+    );
   }
 }
 

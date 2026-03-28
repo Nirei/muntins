@@ -1,7 +1,12 @@
 import { DEFAULT_FLEX_STYLE } from "../layout.ts";
-import { createEffect, createRoot, createSignal, onCleanup } from "../signals.ts";
 import { App } from "../runtime/App.ts";
 import { Node } from "../runtime/Node.ts";
+import {
+  createEffect,
+  createRoot,
+  createSignal,
+  onCleanup,
+} from "../signals.ts";
 
 /** Props for For component. */
 export interface ForProps<T> {

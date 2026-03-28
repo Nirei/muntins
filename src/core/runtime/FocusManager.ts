@@ -275,9 +275,7 @@ export class FocusManager {
     return null;
   }
 
-  private static countFocusablesInAncestors(
-    scope: FocusScope | null,
-  ): number {
+  private static countFocusablesInAncestors(scope: FocusScope | null): number {
     let count = 0;
     let current = scope;
     while (current) {
@@ -301,10 +299,7 @@ export class FocusManager {
     return result;
   }
 
-  private findScopeForNode(
-    target: Node,
-    defaultScope: FocusScope,
-  ): FocusScope {
+  private findScopeForNode(target: Node, defaultScope: FocusScope): FocusScope {
     let current: Node | undefined = target;
     while (current) {
       const scope = (current as NodeWithFocusScope)._focusScope;

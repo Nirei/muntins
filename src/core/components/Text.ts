@@ -2,14 +2,13 @@ import type { ActivateEvent } from "../input.ts";
 import { DEFAULT_FLEX_STYLE } from "../layout.ts";
 import { type ReactiveTextStyle, renderText } from "../render.ts";
 import { App } from "../runtime/App.ts";
-import {
-    createEffect
-} from "../signals.ts";
-import { type WrapMode, measureText } from "../text.ts";
 import { type EventHandlerProps, Node, type Ref } from "../runtime/Node.ts";
+import { createEffect } from "../signals.ts";
+import { type WrapMode, measureText } from "../text.ts";
 
 /** Props for Text component. */
-export interface TextProps extends Partial<ReactiveTextStyle & EventHandlerProps> {
+export interface TextProps
+  extends Partial<ReactiveTextStyle & EventHandlerProps> {
   content: string | (() => string);
   wrap?: WrapMode | (() => WrapMode);
   focusable?: boolean;

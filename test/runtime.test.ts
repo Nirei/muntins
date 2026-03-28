@@ -21,7 +21,6 @@ import {
   BORDER_CHARS,
   type BorderStyleName,
   Box,
-  type Rect,
   DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
   DEFAULT_MOUNT_OPTIONS,
@@ -32,6 +31,7 @@ import {
   type InheritedStyle,
   type LayoutInfo,
   Node,
+  type Rect,
   Renderer,
   type RuntimeContext,
   Show,
@@ -258,7 +258,12 @@ describe("Box backgroundColor", () => {
     );
 
     const buffer = new RenderBuffer(5, 5);
-    node.render({ x: 0, y: 0, screenX: 1, screenY: 1, width: 3, height: 2 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 1, screenY: 1, width: 3, height: 2 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
 
     // Check that the region is filled with spaces and the background color
     // Buffer cells at positions (1,1) through (3,2) should have the background
@@ -280,8 +285,11 @@ describe("Box backgroundColor", () => {
     renderer.flush();
 
     const cellBg = renderer.buffer.getBg(0, 0);
-    assert.deepStrictEqual(cellBg, bgColor,
-      "root box background color should be painted into the buffer");
+    assert.deepStrictEqual(
+      cellBg,
+      bgColor,
+      "root box background color should be painted into the buffer",
+    );
   });
 
   it("reactive backgroundColor updates on signal change", () => {
@@ -293,12 +301,22 @@ describe("Box backgroundColor", () => {
     const buffer = new RenderBuffer(5, 5);
 
     // First render with initial color
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 3, height: 2 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 3, height: 2 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
     buffer.flush();
 
     // Change color and re-render
     setColor({ type: "rgb", r: 255, g: 0, b: 0 });
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 3, height: 2 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 3, height: 2 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
     const output = buffer.flush();
     assert.ok(output.length > 0, "should produce output after color change");
   });
@@ -362,7 +380,12 @@ describe("Box backgroundColor", () => {
 
     const buffer = new RenderBuffer(5, 5);
     // Should not throw
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 0, height: 0 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 0, height: 0 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
   });
 
   it("background fills entire box area including padding region", () => {
@@ -382,7 +405,12 @@ describe("Box backgroundColor", () => {
     assert.ok(node.render);
 
     const buffer = new RenderBuffer(10, 6);
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 6 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 6 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
 
     // The render function fills from (0,0) to (10,6) with the background
     const output = buffer.flush();
@@ -466,7 +494,12 @@ describe("Box borders", () => {
     assert.ok(node.render);
 
     const buffer = new RenderBuffer(5, 3);
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
 
     // Check corners
     assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.single.tl);
@@ -489,7 +522,12 @@ describe("Box borders", () => {
     assert.ok(node.render);
 
     const buffer = new RenderBuffer(5, 3);
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
 
     assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.round.tl);
     assert.strictEqual(buffer.getSymbol(4, 0), BORDER_CHARS.round.tr);
@@ -502,7 +540,12 @@ describe("Box borders", () => {
     assert.ok(node.render);
 
     const buffer = new RenderBuffer(5, 3);
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
 
     assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.double.tl);
     assert.strictEqual(buffer.getSymbol(4, 0), BORDER_CHARS.double.tr);
@@ -513,7 +556,12 @@ describe("Box borders", () => {
     assert.ok(node.render);
 
     const buffer = new RenderBuffer(5, 3);
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
 
     assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.bold.tl);
     assert.strictEqual(buffer.getSymbol(4, 0), BORDER_CHARS.bold.tr);
@@ -524,7 +572,12 @@ describe("Box borders", () => {
     assert.ok(node.render);
 
     const buffer = new RenderBuffer(5, 3);
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
 
     assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.dashed.tl);
     assert.strictEqual(buffer.getSymbol(1, 0), BORDER_CHARS.dashed.h);
@@ -535,7 +588,12 @@ describe("Box borders", () => {
     assert.ok(node.render);
 
     const buffer = new RenderBuffer(5, 3);
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
 
     assert.strictEqual(buffer.getSymbol(0, 0), "+");
     assert.strictEqual(buffer.getSymbol(1, 0), "-");
@@ -548,7 +606,12 @@ describe("Box borders", () => {
     assert.ok(node.render);
 
     const buffer = new RenderBuffer(5, 3);
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
 
     // All positions on top row should be horizontal line (including corners)
     assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.single.h);
@@ -569,7 +632,12 @@ describe("Box borders", () => {
     assert.ok(node.render);
 
     const buffer = new RenderBuffer(5, 3);
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
 
     // Top-left corner
     assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.single.tl);
@@ -585,7 +653,12 @@ describe("Box borders", () => {
     assert.ok(node.render);
 
     const buffer = new RenderBuffer(5, 3);
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
 
     // Check that border cells have the specified foreground color
     const fg = buffer.getFg(0, 0);
@@ -603,11 +676,21 @@ describe("Box borders", () => {
     assert.ok(node.render);
 
     const buffer = new RenderBuffer(5, 3);
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
     buffer.flush();
 
     setColor({ type: "rgb", r: 0, g: 255, b: 0 });
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
 
     const fg = buffer.getFg(0, 0);
     assert.strictEqual(fg.type, "rgb");
@@ -625,12 +708,22 @@ describe("Box borders", () => {
     const buffer = new RenderBuffer(5, 3);
 
     // Initially no border
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
     assert.strictEqual(buffer.getSymbol(0, 0), " ");
 
     // Enable border
     setBorder(true);
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
     assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.single.tl);
 
     // Style getter also reflects reactive changes
@@ -646,17 +739,32 @@ describe("Box borders", () => {
     const buffer = new RenderBuffer(5, 3);
 
     // Initially single style
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
     assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.single.tl);
 
     // Change to double style
     setStyle("double");
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
     assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.double.tl);
 
     // Change to round style
     setStyle("round");
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
     assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.round.tl);
   });
 
@@ -666,7 +774,12 @@ describe("Box borders", () => {
 
     const buffer = new RenderBuffer(3, 2);
     // Should not throw
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 3, height: 2 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 3, height: 2 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
 
     assert.strictEqual(buffer.getSymbol(0, 0), BORDER_CHARS.single.tl);
     assert.strictEqual(buffer.getSymbol(2, 0), BORDER_CHARS.single.tr);
@@ -812,7 +925,12 @@ describe("Box borders", () => {
     assert.ok(node.render);
 
     const buffer = new RenderBuffer(5, 3);
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
 
     // Border corners should have border color as foreground
     const cornerFg = buffer.getFg(0, 0);
@@ -842,7 +960,12 @@ describe("style inheritance", () => {
     assert.ok(child.render);
 
     const buffer = new RenderBuffer(10, 1);
-    child.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 }, buffer, parentInherited, DEFAULT_CLIP);
+    child.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 },
+      buffer,
+      parentInherited,
+      DEFAULT_CLIP,
+    );
 
     // Text background should be parent's color
     const bg = buffer.getBg(0, 0);
@@ -866,7 +989,12 @@ describe("style inheritance", () => {
     assert.ok(child.render);
 
     const buffer = new RenderBuffer(10, 1);
-    child.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 }, buffer, parentInherited, DEFAULT_CLIP);
+    child.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 },
+      buffer,
+      parentInherited,
+      DEFAULT_CLIP,
+    );
 
     const bg = buffer.getBg(0, 0);
     assert.strictEqual(bg.type, "rgb");
@@ -890,7 +1018,12 @@ describe("style inheritance", () => {
     assert.ok(child.render);
 
     const buffer = new RenderBuffer(10, 1);
-    child.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 }, buffer, parentInherited, DEFAULT_CLIP);
+    child.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 },
+      buffer,
+      parentInherited,
+      DEFAULT_CLIP,
+    );
 
     const bg = buffer.getBg(0, 0);
     assert.strictEqual(bg.type, "rgb");
@@ -912,7 +1045,12 @@ describe("style inheritance", () => {
     assert.ok(child.render);
 
     const buffer = new RenderBuffer(10, 1);
-    child.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 }, buffer, parentInherited, DEFAULT_CLIP);
+    child.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 },
+      buffer,
+      parentInherited,
+      DEFAULT_CLIP,
+    );
 
     const fg = buffer.getFg(0, 0);
     assert.strictEqual(fg.type, "rgb");
@@ -934,7 +1072,12 @@ describe("style inheritance", () => {
     assert.ok(child.render);
 
     const buffer = new RenderBuffer(10, 1);
-    child.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 }, buffer, parentInherited, DEFAULT_CLIP);
+    child.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 },
+      buffer,
+      parentInherited,
+      DEFAULT_CLIP,
+    );
 
     // Check modifiers include bold and italic bits
     const mods = buffer.getModifiers(0, 0);
@@ -953,7 +1096,12 @@ describe("style inheritance", () => {
     assert.ok(child.render);
 
     const buffer = new RenderBuffer(10, 1);
-    child.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 }, buffer, parentInherited, DEFAULT_CLIP);
+    child.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 },
+      buffer,
+      parentInherited,
+      DEFAULT_CLIP,
+    );
 
     const mods = buffer.getModifiers(0, 0);
     assert.ok((mods & 1) === 0, "should not have bold modifier");
@@ -977,7 +1125,12 @@ describe("style inheritance", () => {
     const buffer = new RenderBuffer(10, 1);
 
     // Initially inherits
-    child.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 }, buffer, parentInherited, DEFAULT_CLIP);
+    child.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 },
+      buffer,
+      parentInherited,
+      DEFAULT_CLIP,
+    );
     let bg = buffer.getBg(0, 0);
     assert.strictEqual(bg.type, "rgb");
     if (bg.type === "rgb") {
@@ -986,7 +1139,12 @@ describe("style inheritance", () => {
 
     // Change to explicit
     setUseInherit(false);
-    child.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 }, buffer, parentInherited, DEFAULT_CLIP);
+    child.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 },
+      buffer,
+      parentInherited,
+      DEFAULT_CLIP,
+    );
     bg = buffer.getBg(0, 0);
     if (bg.type === "rgb") {
       assert.strictEqual(bg.r, 255);
@@ -1004,7 +1162,12 @@ describe("style inheritance", () => {
     assert.ok(node.render);
 
     const buffer = new RenderBuffer(5, 3);
-    node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 }, buffer, parentInherited, DEFAULT_CLIP);
+    node.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 },
+      buffer,
+      parentInherited,
+      DEFAULT_CLIP,
+    );
 
     // Border should use inherited color
     const fg = buffer.getFg(0, 0);
@@ -1022,7 +1185,12 @@ describe("style inheritance", () => {
     assert.ok(child.render);
 
     const buffer = new RenderBuffer(10, 1);
-    child.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+    child.render(
+      { x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 },
+      buffer,
+      DEFAULT_INHERITED_STYLE,
+      DEFAULT_CLIP,
+    );
 
     const fg = buffer.getFg(0, 0);
     assert.strictEqual(fg.type, "default");
@@ -1568,7 +1736,10 @@ describe("For", () => {
 
       // Each occurrence gets its own node
       assert.strictEqual(node.resolveChildren().length, 2);
-      assert.notStrictEqual(node.resolveChildren()[0], node.resolveChildren()[1]);
+      assert.notStrictEqual(
+        node.resolveChildren()[0],
+        node.resolveChildren()[1],
+      );
       dispose();
       return dispose;
     });

@@ -4,8 +4,8 @@ import {
   parseColor,
   resolveTheme,
   setTheme,
-  theme,
   styleFallback,
+  theme,
 } from "../../src/core/theme.ts";
 
 describe("parseColor", () => {

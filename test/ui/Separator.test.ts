@@ -9,11 +9,11 @@ import {
 } from "../../src/core/layout.ts";
 import {
   Box,
-  type Rect,
   DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
   type InheritedStyle,
   type Node,
+  type Rect,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import {

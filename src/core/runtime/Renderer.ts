@@ -1,11 +1,8 @@
 import { Buffer } from "../buffer.ts";
-import { computeLayout, type LayoutResult } from "../layout.ts";
-import { rectIntersection, type Rect } from "../rects.ts";
+import { type LayoutResult, computeLayout } from "../layout.ts";
+import { type Rect, rectIntersection } from "../rects.ts";
 import type { InheritedStyle } from "../render.ts";
-import {
-  DEFAULT_INHERITED_STYLE,
-  flushFrame,
-} from "../render.ts";
+import { DEFAULT_INHERITED_STYLE, flushFrame } from "../render.ts";
 import type { Accessor } from "../signals.ts";
 import { batch, createSignal } from "../signals.ts";
 import type { LayoutSignals, Node } from "./Node.ts";
@@ -189,11 +186,7 @@ export class Renderer {
     this.scheduleFlush();
   }
 
-  private paintTree(
-    root: Node,
-    layoutResult: LayoutResult,
-    clip: Rect,
-  ): void {
+  private paintTree(root: Node, layoutResult: LayoutResult, clip: Rect): void {
     const rootStyle = root.resolveStyle();
 
     if (rootStyle.display === "contents") {
@@ -335,10 +328,7 @@ export class Renderer {
     }
   }
 
-  private updateAllLayoutSignals(
-    root: Node,
-    layoutResult: LayoutResult,
-  ): void {
+  private updateAllLayoutSignals(root: Node, layoutResult: LayoutResult): void {
     const nodes: Node[] = [];
     root.flatten(nodes);
 

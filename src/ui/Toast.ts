@@ -102,7 +102,7 @@ function getPositionStyle(position: ToastPosition): Partial<FlexStyle> {
  */
 export function Toast(props: ToastProps): Node {
   const getPosition = () => resolve(props.position) ?? "bottom-right";
-  const duration = props.duration ?? (theme('toast').duration as number);
+  const duration = props.duration ?? (theme("toast").duration as number);
 
   if (duration !== 0) {
     const timer = setTimeout(() => {

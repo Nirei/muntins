@@ -1,14 +1,12 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import {
-  App,
-  Box,
-  createRef,
-} from "../../src/core/runtime.ts";
+import { App, Box, createRef } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
-import { Textarea } from "../../src/ui/Textarea.ts";
 import { setTheme } from "../../src/core/theme.ts";
-import defaultThemeJson from "../../src/default-theme.json" with { type: "json" };
+import defaultThemeJson from "../../src/default-theme.json" with {
+  type: "json",
+};
+import { Textarea } from "../../src/ui/Textarea.ts";
 
 // Helper to create mock stdin for mount tests
 function createMockStdin() {
@@ -110,8 +108,17 @@ describe("Textarea", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout(40, 10);
       const app = App.mount(
-        () => Box({ children: [Textarea({ value: "Line 1\nLine 2\nLine 3", width: 20 })] }),
-        { stdin: mockStdin as unknown as NodeJS.ReadStream, stdout: mockStdout as unknown as NodeJS.WriteStream, fpsLimit: 0 },
+        () =>
+          Box({
+            children: [
+              Textarea({ value: "Line 1\nLine 2\nLine 3", width: 20 }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+        },
       );
       const buf = app.renderer.buffer;
       assert.strictEqual(buf.getSymbol(p, 0), "L");
@@ -128,8 +135,21 @@ describe("Textarea", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout(40, 10);
       const app = App.mount(
-        () => Box({ children: [Textarea({ value: "", placeholder: "Enter your message...", width: 30 })] }),
-        { stdin: mockStdin as unknown as NodeJS.ReadStream, stdout: mockStdout as unknown as NodeJS.WriteStream, fpsLimit: 0 },
+        () =>
+          Box({
+            children: [
+              Textarea({
+                value: "",
+                placeholder: "Enter your message...",
+                width: 30,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+        },
       );
       const buf = app.renderer.buffer;
       assert.strictEqual(buf.getSymbol(p, 0), "E");
@@ -144,7 +164,11 @@ describe("Textarea", () => {
       const mockStdout = createMockStdout(40, 10);
       const app = App.mount(
         () => Box({ children: [Textarea({ value, width: 20 })] }),
-        { stdin: mockStdin as unknown as NodeJS.ReadStream, stdout: mockStdout as unknown as NodeJS.WriteStream, fpsLimit: 0 },
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+        },
       );
       const buf = app.renderer.buffer;
       assert.strictEqual(buf.getSymbol(p, 0), "H");
@@ -692,8 +716,13 @@ describe("Textarea", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout(40, 10);
       const app = App.mount(
-        () => Box({ children: [Textarea({ value: "Hello\nWorld", width: 20 })] }),
-        { stdin: mockStdin as unknown as NodeJS.ReadStream, stdout: mockStdout as unknown as NodeJS.WriteStream, fpsLimit: 0 },
+        () =>
+          Box({ children: [Textarea({ value: "Hello\nWorld", width: 20 })] }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+        },
       );
       const buf = app.renderer.buffer;
       // Line 1
@@ -710,7 +739,11 @@ describe("Textarea", () => {
       const mockStdout = createMockStdout(40, 10);
       const app = App.mount(
         () => Box({ children: [Textarea({ value: "", width: 20 })] }),
-        { stdin: mockStdin as unknown as NodeJS.ReadStream, stdout: mockStdout as unknown as NodeJS.WriteStream, fpsLimit: 0 },
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+        },
       );
       // Just verify it mounts without crashing
       assert.ok(app.renderer.buffer);
@@ -941,8 +974,17 @@ describe("Textarea", () => {
       }
 
       const app = App.mount(
-        () => Box({ children: [Textarea({ value: "1\n2\n3\n4\n5\n6\n7\n8\n9\n10", width: 20 })] }),
-        { stdin: mockStdin as unknown as NodeJS.ReadStream, stdout: mockStdout as unknown as NodeJS.WriteStream, fpsLimit: 0 },
+        () =>
+          Box({
+            children: [
+              Textarea({ value: "1\n2\n3\n4\n5\n6\n7\n8\n9\n10", width: 20 }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+        },
       );
 
       const output = stripAnsi(mockStdout.written);
@@ -1435,7 +1477,6 @@ describe("Textarea", () => {
 
       app.unmount();
     });
-
   });
 
   describe("clipping", () => {
@@ -1445,8 +1486,21 @@ describe("Textarea", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout(40, 10);
       const app = App.mount(
-        () => Box({ children: [Textarea({ value: "AAA\nBBB\nCCC\nDDD\nEEE", width: 10, maxHeight: 2 })] }),
-        { stdin: mockStdin as unknown as NodeJS.ReadStream, stdout: mockStdout as unknown as NodeJS.WriteStream, fpsLimit: 0 },
+        () =>
+          Box({
+            children: [
+              Textarea({
+                value: "AAA\nBBB\nCCC\nDDD\nEEE",
+                width: 10,
+                maxHeight: 2,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+        },
       );
       const buf = app.renderer.buffer;
       // maxHeight is 2, cursor starts at end so last 2 lines visible (DDD, EEE)
@@ -1462,8 +1516,13 @@ describe("Textarea", () => {
       const mockStdout = createMockStdout(40, 10);
       const [value] = createSignal("ABCDEFGHIJKLMNOP");
       const app = App.mount(
-        () => Box({ children: [Textarea({ value, width: 5, multiline: false })] }),
-        { stdin: mockStdin as unknown as NodeJS.ReadStream, stdout: mockStdout as unknown as NodeJS.WriteStream, fpsLimit: 0 },
+        () =>
+          Box({ children: [Textarea({ value, width: 5, multiline: false })] }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+        },
       );
       const buf = app.renderer.buffer;
       // Width is 5, cursor at end, so last 5 chars visible (LMNOP area)
@@ -1490,8 +1549,25 @@ describe("Textarea", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout(40, 5);
       const app = App.mount(
-        () => Box({ children: [Textarea({ value, onChange: (v) => { received = v; setValue(v); }, width: 20 })] }),
-        { stdin: mockStdin as unknown as NodeJS.ReadStream, stdout: mockStdout as unknown as NodeJS.WriteStream, mouse: true, fpsLimit: 0 },
+        () =>
+          Box({
+            children: [
+              Textarea({
+                value,
+                onChange: (v) => {
+                  received = v;
+                  setValue(v);
+                },
+                width: 20,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          mouse: true,
+          fpsLimit: 0,
+        },
       );
       await nextRender();
       // Click at column 3 on row 0, then type X
@@ -1509,8 +1585,25 @@ describe("Textarea", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout(40, 5);
       const app = App.mount(
-        () => Box({ children: [Textarea({ value, onChange: (v) => { received = v; setValue(v); }, width: 20 })] }),
-        { stdin: mockStdin as unknown as NodeJS.ReadStream, stdout: mockStdout as unknown as NodeJS.WriteStream, mouse: true, fpsLimit: 0 },
+        () =>
+          Box({
+            children: [
+              Textarea({
+                value,
+                onChange: (v) => {
+                  received = v;
+                  setValue(v);
+                },
+                width: 20,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          mouse: true,
+          fpsLimit: 0,
+        },
       );
       await nextRender();
       mockStdin.emit("data", Buffer.from(sgrClick(2, 1)));
@@ -1527,8 +1620,25 @@ describe("Textarea", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout(40, 5);
       const app = App.mount(
-        () => Box({ children: [Textarea({ value, onChange: (v) => { received = v; setValue(v); }, width: 20 })] }),
-        { stdin: mockStdin as unknown as NodeJS.ReadStream, stdout: mockStdout as unknown as NodeJS.WriteStream, mouse: true, fpsLimit: 0 },
+        () =>
+          Box({
+            children: [
+              Textarea({
+                value,
+                onChange: (v) => {
+                  received = v;
+                  setValue(v);
+                },
+                width: 20,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          mouse: true,
+          fpsLimit: 0,
+        },
       );
       await nextRender();
       mockStdin.emit("data", Buffer.from(sgrClick(15, 0)));
@@ -1545,8 +1655,25 @@ describe("Textarea", () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout(40, 5);
       const app = App.mount(
-        () => Box({ children: [Textarea({ value, onChange: (v) => { received = v; setValue(v); }, width: 20 })] }),
-        { stdin: mockStdin as unknown as NodeJS.ReadStream, stdout: mockStdout as unknown as NodeJS.WriteStream, mouse: true, fpsLimit: 0 },
+        () =>
+          Box({
+            children: [
+              Textarea({
+                value,
+                onChange: (v) => {
+                  received = v;
+                  setValue(v);
+                },
+                width: 20,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          mouse: true,
+          fpsLimit: 0,
+        },
       );
       await nextRender();
       mockStdin.emit("data", Buffer.from(sgrClick(2, 3)));
@@ -1639,12 +1766,15 @@ describe("Textarea", () => {
 
     it("total rendered width is exactly W columns when scrollbar is visible", () => {
       const { app, buf } = mountApp(() =>
-        Box({ children: [Textarea({ value: sixLines, width: W, maxHeight: 3 })] }),
+        Box({
+          children: [Textarea({ value: sixLines, width: W, maxHeight: 3 })],
+        }),
       );
 
       for (let row = 0; row < 3; row++) {
         assert.strictEqual(
-          buf.getSymbol(W, row), " ",
+          buf.getSymbol(W, row),
+          " ",
           `Column ${W} row ${row} should be empty — component must not exceed W`,
         );
       }
@@ -1654,7 +1784,9 @@ describe("Textarea", () => {
 
     it("scrollbar character appears at column W-1", () => {
       const { app, buf } = mountApp(() =>
-        Box({ children: [Textarea({ value: sixLines, width: W, maxHeight: 3 })] }),
+        Box({
+          children: [Textarea({ value: sixLines, width: W, maxHeight: 3 })],
+        }),
       );
 
       const col = W - 1;
@@ -1680,7 +1812,8 @@ describe("Textarea", () => {
       const col = W - 1;
       for (let row = 0; row < 3; row++) {
         assert.notStrictEqual(
-          buf.getSymbol(col, row), "X",
+          buf.getSymbol(col, row),
+          "X",
           `Text must not render at column ${col} row ${row} when scrollbar is visible`,
         );
       }
@@ -1700,7 +1833,8 @@ describe("Textarea", () => {
       // (which would be W-3 if a scrollbar wrongly reserved a column).
       const col = W - 1 - 1; // W-1 minus paddingEnd
       assert.strictEqual(
-        buf.getSymbol(col, 0), "Y",
+        buf.getSymbol(col, 0),
+        "Y",
         `Text should render at column ${col} (W - 1 - paddingEnd) without scrollbar`,
       );
 
@@ -1710,26 +1844,38 @@ describe("Textarea", () => {
     it("padding does not push the scrollbar outside the component width", () => {
       // Default theme: input has paddingStart:1, paddingEnd:1
       const { app, buf } = mountApp(() =>
-        Box({ children: [Textarea({ value: sixLines, width: W, maxHeight: 3 })] }),
+        Box({
+          children: [Textarea({ value: sixLines, width: W, maxHeight: 3 })],
+        }),
       );
 
       // Scrollbar must be within columns 0..W-1
       assert.strictEqual(
-        buf.getSymbol(W, 0), " ",
+        buf.getSymbol(W, 0),
+        " ",
         "Column W must be empty — scrollbar must not overflow",
       );
 
       // Scrollbar must exist somewhere within the W columns
       let scrollbarCol = -1;
       for (let col = 0; col < W; col++) {
-        if (isScrollbarChar(buf.getSymbol(col, 0)) ||
-            isScrollbarChar(buf.getSymbol(col, 1)) ||
-            isScrollbarChar(buf.getSymbol(col, 2))) {
+        if (
+          isScrollbarChar(buf.getSymbol(col, 0)) ||
+          isScrollbarChar(buf.getSymbol(col, 1)) ||
+          isScrollbarChar(buf.getSymbol(col, 2))
+        ) {
           scrollbarCol = col;
         }
       }
-      assert.ok(scrollbarCol >= 0, "Scrollbar should exist within the W-column boundary");
-      assert.strictEqual(scrollbarCol, W - 1, `Scrollbar should be at column ${W - 1}, not ${scrollbarCol}`);
+      assert.ok(
+        scrollbarCol >= 0,
+        "Scrollbar should exist within the W-column boundary",
+      );
+      assert.strictEqual(
+        scrollbarCol,
+        W - 1,
+        `Scrollbar should be at column ${W - 1}, not ${scrollbarCol}`,
+      );
 
       app.unmount();
     });

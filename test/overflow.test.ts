@@ -4,8 +4,8 @@ import { Buffer as RenderBuffer } from "../src/core/buffer.ts";
 import { DEFAULT_FLEX_STYLE, computeLayout } from "../src/core/layout.ts";
 import {
   Box,
-  type Rect,
   DEFAULT_INHERITED_STYLE,
+  type Rect,
   Text,
 } from "../src/core/runtime.ts";
 
@@ -62,7 +62,12 @@ describe("overflow clipping", () => {
 
     // Paint parent
     if (parent.render) {
-      parent.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, FULL_CLIP);
+      parent.render(
+        { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 3 },
+        buffer,
+        DEFAULT_INHERITED_STYLE,
+        FULL_CLIP,
+      );
     }
 
     // The text should be at row 2 within the parent's bounds
@@ -86,7 +91,12 @@ describe("overflow clipping", () => {
     const buffer = new RenderBuffer(10, 10);
 
     if (parent.render) {
-      parent.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 2 }, buffer, DEFAULT_INHERITED_STYLE, FULL_CLIP);
+      parent.render(
+        { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 2 },
+        buffer,
+        DEFAULT_INHERITED_STYLE,
+        FULL_CLIP,
+      );
     }
 
     // Background should fill the parent area
@@ -111,7 +121,12 @@ describe("overflow clipping", () => {
 
     const buffer = new RenderBuffer(15, 15);
     if (parent.render) {
-      parent.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 3 }, buffer, DEFAULT_INHERITED_STYLE, FULL_CLIP);
+      parent.render(
+        { x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 3 },
+        buffer,
+        DEFAULT_INHERITED_STYLE,
+        FULL_CLIP,
+      );
     }
 
     // Content above the parent (negative y) should be clipped
@@ -195,7 +210,12 @@ describe("Rect intersection", () => {
     const zeroClip: Rect = { x: 0, y: 0, width: 0, height: 0 };
 
     if (textNode.render) {
-      textNode.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 1 }, buffer, DEFAULT_INHERITED_STYLE, zeroClip);
+      textNode.render(
+        { x: 0, y: 0, screenX: 0, screenY: 0, width: 5, height: 1 },
+        buffer,
+        DEFAULT_INHERITED_STYLE,
+        zeroClip,
+      );
     }
 
     // Nothing should be written

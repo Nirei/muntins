@@ -100,7 +100,7 @@ export class EventDispatcher {
     const target = root.hitTest(layoutResult, input.x, input.y);
 
     const hoverTarget = target
-      ? target.pathToRoot().find((n) => n.onHover) ?? null
+      ? (target.pathToRoot().find((n) => n.onHover) ?? null)
       : null;
 
     if (hoverTarget !== this.hoverState.currentNode) {

@@ -7,11 +7,11 @@ import {
   computeLayout,
 } from "../../src/core/layout.ts";
 import {
-  type Rect,
   DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
   type InheritedStyle,
   type Node,
+  type Rect,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { Progress } from "../../src/ui/Progress.ts";

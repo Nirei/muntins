@@ -20,7 +20,7 @@ import {
   setupKeyboardInput,
   setupResizeHandler,
   setupTerminal,
-  teardownTerminal
+  teardownTerminal,
 } from "../src/core/input.ts";
 
 describe("input event types", () => {

@@ -1,7 +1,7 @@
 import { DEFAULT_FLEX_STYLE } from "../layout.ts";
-import { onCleanup } from "../signals.ts";
 import { App } from "../runtime/App.ts";
 import { Node } from "../runtime/Node.ts";
+import { onCleanup } from "../signals.ts";
 
 /** Props for Portal component. */
 export interface PortalProps {
@@ -32,7 +32,7 @@ export function Portal(props: PortalProps): Node {
   if (root) {
     // Root exists - attach children immediately (dynamic portal via Show/For)
     // Root's children is always a static array (created by Box)
-    const rootChildren = root.children as Node[] ?? [];
+    const rootChildren = (root.children as Node[]) ?? [];
     if (!root.children) root.children = rootChildren;
     rootChildren.push(...children);
     for (const child of children) {

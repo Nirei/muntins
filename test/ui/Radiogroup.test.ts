@@ -78,7 +78,12 @@ describe("RadioGroup", () => {
       assert.ok(glyph0?.render);
 
       const buffer0 = new RenderBuffer(1, 1);
-      glyph0.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 1, height: 1 }, buffer0, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+      glyph0.render(
+        { x: 0, y: 0, screenX: 0, screenY: 0, width: 1, height: 1 },
+        buffer0,
+        DEFAULT_INHERITED_STYLE,
+        DEFAULT_CLIP,
+      );
       assert.strictEqual(buffer0.getSymbol(0, 0), "○");
 
       // Check second option (selected)
@@ -90,7 +95,12 @@ describe("RadioGroup", () => {
       assert.ok(glyph1?.render);
 
       const buffer1 = new RenderBuffer(1, 1);
-      glyph1.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 1, height: 1 }, buffer1, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+      glyph1.render(
+        { x: 0, y: 0, screenX: 0, screenY: 0, width: 1, height: 1 },
+        buffer1,
+        DEFAULT_INHERITED_STYLE,
+        DEFAULT_CLIP,
+      );
       assert.strictEqual(buffer1.getSymbol(0, 0), "●");
     });
 
@@ -453,7 +463,11 @@ describe("RadioGroup", () => {
     });
 
     it("direction: row renders horizontally", () => {
-      const node = RadioGroup({ value: "a", options, style: { flexDirection: "row" } });
+      const node = RadioGroup({
+        value: "a",
+        options,
+        style: { flexDirection: "row" },
+      });
 
       const style =
         typeof node.style === "function" ? node.style() : node.style;
@@ -464,7 +478,11 @@ describe("RadioGroup", () => {
       const [direction, setDirection] = createSignal<"row" | "column">(
         "column",
       );
-      const node = RadioGroup({ value: "a", options, style: { flexDirection: direction } });
+      const node = RadioGroup({
+        value: "a",
+        options,
+        style: { flexDirection: direction },
+      });
 
       assert.strictEqual(node.resolveStyle().flexDirection, "column");
 

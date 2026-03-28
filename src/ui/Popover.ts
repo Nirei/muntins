@@ -348,7 +348,7 @@ export function Popover(props: PopoverProps): Node {
                     onKeyPress: handleKeyPress,
                     onMousePress: () => {},
                     focusable: true,
-                    ...styleFallback(props.style, 'popover'),
+                    ...styleFallback(props.style, "popover"),
                     children: props.content(),
                   }),
                 ],

@@ -1,16 +1,13 @@
 import { Box } from "../components/Box.ts";
 import { ScrollArea } from "../components/ScrollArea.ts";
-import { createInputParser, type InputEvent } from "../input.ts";
+import { type InputEvent, createInputParser } from "../input.ts";
 import type { LayoutResult } from "../layout.ts";
-import {
-  enterTuiMode,
-  exitTuiMode,
-} from "../render.ts";
+import { enterTuiMode, exitTuiMode } from "../render.ts";
 import type { Accessor, Setter } from "../signals.ts";
 import { batch, createRoot } from "../signals.ts";
 import { styleFallback } from "../theme.ts";
 import { EventDispatcher } from "./EventDispatcher.ts";
-import { type FocusScope, FocusManager } from "./FocusManager.ts";
+import { FocusManager, type FocusScope } from "./FocusManager.ts";
 import type { Node } from "./Node.ts";
 import { Renderer } from "./Renderer.ts";
 
@@ -115,10 +112,14 @@ export class App {
     this.renderer.layoutResult = value;
   }
   get hoverState() {
-    return (this.events as unknown as Record<string, { currentNode: Node | null }>).hoverState;
+    return (
+      this.events as unknown as Record<string, { currentNode: Node | null }>
+    ).hoverState;
   }
   set hoverState(value: { currentNode: Node | null }) {
-    (this.events as unknown as Record<string, { currentNode: Node | null }>).hoverState = value;
+    (
+      this.events as unknown as Record<string, { currentNode: Node | null }>
+    ).hoverState = value;
   }
   get terminalFocused(): boolean {
     return this.events.terminalFocused;
@@ -131,7 +132,10 @@ export class App {
   private removeSignalHandlers: (() => void) | null = null;
 
   constructor(component: () => Node, options?: MountOptions) {
-    const opts: Required<MountOptions> = { ...DEFAULT_MOUNT_OPTIONS, ...options };
+    const opts: Required<MountOptions> = {
+      ...DEFAULT_MOUNT_OPTIONS,
+      ...options,
+    };
     const { stdin, stdout } = opts;
 
     this.options = opts;
@@ -200,14 +204,14 @@ export class App {
 
       this.root = App.withContext(ctx, () =>
         Box({
-          ...styleFallback(undefined, 'root'),
+          ...styleFallback(undefined, "root"),
           flexDirection: "column",
           children: [contentNode],
         }),
       );
 
       // Attach pending portal children to root
-      const rootChildren = (this.root.children as Node[] ?? []);
+      const rootChildren = (this.root.children as Node[]) ?? [];
       if (!this.root.children) this.root.children = rootChildren;
       for (const children of this.pendingPortalAttachments) {
         rootChildren.push(...children);
@@ -240,7 +244,9 @@ export class App {
     this.rootDispose();
     this.root.clearLayoutSignals();
     this.inputParser.destroy();
-    exitTuiMode(this.options.stdout, { alternateScreen: this.options.alternateScreen });
+    exitTuiMode(this.options.stdout, {
+      alternateScreen: this.options.alternateScreen,
+    });
   }
 
   /**

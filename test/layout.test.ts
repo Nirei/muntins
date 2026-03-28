@@ -2580,7 +2580,13 @@ describe("flexShrink: 0 prevents shrinking in overflow container", () => {
       style: { flexDirection: "column", height: 24 },
       children: [
         {
-          style: { flexDirection: "column", flexShrink: 0, gap: 1, paddingTop: 1, paddingBottom: 1 },
+          style: {
+            flexDirection: "column",
+            flexShrink: 0,
+            gap: 1,
+            paddingTop: 1,
+            paddingBottom: 1,
+          },
           children: Array.from({ length: 30 }, () => ({
             style: { width: 10, height: 1 },
           })),
@@ -2592,8 +2598,11 @@ describe("flexShrink: 0 prevents shrinking in overflow container", () => {
     // Content box intrinsic: paddingTop(1) + 30 items + 29 gaps + paddingBottom(1) = 61
     // flexShrink: 0 means it keeps its full intrinsic size and overflows the parent
     const contentBox = result.children[0];
-    assert.strictEqual(contentBox.height, 61,
-      `Content box with flexShrink:0 should keep intrinsic height (61). Got ${contentBox.height}`);
+    assert.strictEqual(
+      contentBox.height,
+      61,
+      `Content box with flexShrink:0 should keep intrinsic height (61). Got ${contentBox.height}`,
+    );
   });
 });
 
@@ -2633,7 +2642,10 @@ describe("flex shrink with padding", () => {
     const result = computeLayout(node, 50, 22);
 
     // Header should keep height 3 (padding preserved, text has room)
-    assert.strictEqual(result.children[0].height, 3,
-      `Header should be 3 rows (padTop:1 + text:1 + padBot:1), got ${result.children[0].height}`);
+    assert.strictEqual(
+      result.children[0].height,
+      3,
+      `Header should be 3 rows (padTop:1 + text:1 + padBot:1), got ${result.children[0].height}`,
+    );
   });
 });

@@ -2,6 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { Buffer as RenderBuffer } from "../../src/core/buffer.ts";
 import {
+  App,
   Box,
   DEFAULT_INHERITED_STYLE,
   type FocusController,
@@ -12,7 +13,6 @@ import {
   TabFocus,
   Text,
   createRef,
-  App,
   useFocus,
 } from "../../src/core/runtime.ts";
 import { createRoot, createSignal, onCleanup } from "../../src/core/signals.ts";

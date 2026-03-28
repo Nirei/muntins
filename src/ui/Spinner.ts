@@ -55,7 +55,7 @@ export function Spinner(props: SpinnerProps): Node {
 
   const getVariant = (): SpinnerVariant => resolve(variant) ?? "dots";
   const getInterval = (): number =>
-    resolve(interval) ?? (theme('spinner').interval as number);
+    resolve(interval) ?? (theme("spinner").interval as number);
 
   const getFrames = (): string[] => {
     const key = `spinner--${getVariant()}`;

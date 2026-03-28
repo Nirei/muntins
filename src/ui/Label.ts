@@ -58,7 +58,7 @@ export function Label(props: LabelProps): Node {
 
   return Text({
     content: children,
-    ...styleFallback(style, 'label'),
+    ...styleFallback(style, "label"),
     onMousePress: handleMousePress,
   });
 }

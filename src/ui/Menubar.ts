@@ -88,7 +88,7 @@ function defaultRenderMenuItem(props: MenuItemRenderProps): Node {
   return Box({
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: () => theme('menubar--item').gap as number,
+    gap: () => theme("menubar--item").gap as number,
     children: [
       Text({ content: props.item.label }),
       Show({
@@ -103,7 +103,7 @@ function defaultRenderMenuItem(props: MenuItemRenderProps): Node {
  * Default renderer for separators.
  */
 function defaultRenderSeparator(): Node {
-  return Text({ content: () => theme('menubar--separator').content as string });
+  return Text({ content: () => theme("menubar--separator").content as string });
 }
 
 /**

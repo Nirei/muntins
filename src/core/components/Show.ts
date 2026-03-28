@@ -1,7 +1,7 @@
 import { DEFAULT_FLEX_STYLE } from "../layout.ts";
-import { createEffect, createRoot, onCleanup } from "../signals.ts";
 import { App } from "../runtime/App.ts";
 import { Node } from "../runtime/Node.ts";
+import { createEffect, createRoot, onCleanup } from "../signals.ts";
 
 /** Props for Show component. */
 export interface ShowProps<T> {

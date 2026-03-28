@@ -73,7 +73,7 @@ export interface DrawerProps {
  * ```
  */
 export function Drawer(props: DrawerProps): Node {
-  const t = () => theme('drawer');
+  const t = () => theme("drawer");
   const isOpen = () => resolve(props.open) ?? false;
   const getSide = () => resolve(props.side) ?? (t().side as DrawerSide);
   const getSize = () => resolve(props.size) ?? (t().size as number);

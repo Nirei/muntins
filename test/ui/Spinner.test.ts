@@ -105,7 +105,12 @@ describe("Spinner", () => {
       // Render and check content
       if (node.render) {
         const buffer = new RenderBuffer(10, 1);
-        node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+        node.render(
+          { x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 },
+          buffer,
+          DEFAULT_INHERITED_STYLE,
+          DEFAULT_CLIP,
+        );
         // First frame of dots variant
         assert.strictEqual(buffer.getSymbol(0, 0), "⠋");
       }
@@ -140,7 +145,12 @@ describe("Spinner", () => {
       assert.ok(node);
       if (node.render) {
         const buffer = new RenderBuffer(10, 1);
-        node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+        node.render(
+          { x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 },
+          buffer,
+          DEFAULT_INHERITED_STYLE,
+          DEFAULT_CLIP,
+        );
         // First frame of line variant is "-"
         assert.strictEqual(buffer.getSymbol(0, 0), "-");
       }
@@ -158,7 +168,12 @@ describe("Spinner", () => {
       assert.ok(node);
       if (node.render) {
         const buffer = new RenderBuffer(10, 1);
-        node.render({ x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 }, buffer, DEFAULT_INHERITED_STYLE, DEFAULT_CLIP);
+        node.render(
+          { x: 0, y: 0, screenX: 0, screenY: 0, width: 10, height: 1 },
+          buffer,
+          DEFAULT_INHERITED_STYLE,
+          DEFAULT_CLIP,
+        );
         // First frame of arc variant is "◜"
         assert.strictEqual(buffer.getSymbol(0, 0), "◜");
       }

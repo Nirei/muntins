@@ -72,7 +72,7 @@ export function Input(props: InputProps): Node {
     value: props.value,
     onChange: props.onChange,
     placeholder: props.placeholder,
-    width: props.width ?? (theme('input').width as number),
+    width: props.width ?? (theme("input").width as number),
     disabled: props.disabled,
     focusable: props.focusable,
     autoFocus: props.autoFocus,

@@ -1,17 +1,17 @@
-import {
-  DEFAULT_COLOR
-} from "../buffer.ts";
+import { DEFAULT_COLOR } from "../buffer.ts";
 import type {
   ActivateEvent,
   KeyEvent,
   MouseEvent,
-  ScrollEvent
+  ScrollEvent,
 } from "../input.ts";
 import {
   DEFAULT_FLEX_STYLE,
   type FlexStyle,
-  type ReactiveFlexStyle
+  type ReactiveFlexStyle,
 } from "../layout.ts";
+import { compact } from "../objects.ts";
+import { rectOverlaps } from "../rects.ts";
 import {
   type BorderProp,
   type BorderStyleName,
@@ -19,11 +19,14 @@ import {
   getBorderStyleName,
   parseBorderProp,
   renderBorder,
-  resolveInheritable
+  resolveInheritable,
 } from "../render.ts";
-import { compact } from "../objects.ts";
-import { rectOverlaps } from "../rects.ts";
-import { type InheritableProps, Node, type EventHandlerProps, type Ref } from "../runtime/Node.ts";
+import {
+  type EventHandlerProps,
+  type InheritableProps,
+  Node,
+  type Ref,
+} from "../runtime/Node.ts";
 import { resolve } from "../signals.ts";
 import { Text } from "./Text.ts";
 
@@ -31,7 +34,8 @@ import { Text } from "./Text.ts";
 export type BoxChild = Node | string | (() => string);
 
 /** Props for Box component. */
-export interface BoxProps extends Partial<ReactiveFlexStyle & InheritableProps & EventHandlerProps> {
+export interface BoxProps
+  extends Partial<ReactiveFlexStyle & InheritableProps & EventHandlerProps> {
   children?: BoxChild | BoxChild[];
   border?: BorderProp | (() => BorderProp);
   borderStyle?: BorderStyleName | (() => BorderStyleName);
@@ -39,7 +43,6 @@ export interface BoxProps extends Partial<ReactiveFlexStyle & InheritableProps &
   autoFocus?: boolean;
   ref?: Ref;
 }
-
 
 /**
  * Creates a Box node - a layout container that supports reactive styles and event handlers.
@@ -49,31 +52,30 @@ export interface BoxProps extends Partial<ReactiveFlexStyle & InheritableProps &
  * Size is determined by flexbox layout based on its children.
  */
 export function Box({
-    children: childrenProp,
-    backgroundColor,
-    border,
-    borderColor,
-    borderStyle,
-    color,
-    bold,
-    dim,
-    italic,
-    underline,
-    strikethrough,
-    inverse,
-    focusable,
-    autoFocus,
-    ref,
-    onKeyPress,
-    onMousePress,
-    onMouseRelease,
-    onMouseMove,
-    onScroll,
-    onHover,
-    onActivate,
-    ...styleProps
-  }: BoxProps): Node {
-
+  children: childrenProp,
+  backgroundColor,
+  border,
+  borderColor,
+  borderStyle,
+  color,
+  bold,
+  dim,
+  italic,
+  underline,
+  strikethrough,
+  inverse,
+  focusable,
+  autoFocus,
+  ref,
+  onKeyPress,
+  onMousePress,
+  onMouseRelease,
+  onMouseMove,
+  onScroll,
+  onHover,
+  onActivate,
+  ...styleProps
+}: BoxProps): Node {
   const normalizeChild = (child: BoxChild): Node => {
     if (typeof child === "string") {
       return Text({ content: child });
@@ -138,10 +140,7 @@ export function Box({
     render(bounds, buffer, inherited, clip) {
       if (!rectOverlaps(bounds, clip)) return;
 
-      const bg = resolveInheritable(
-        backgroundColor,
-        inherited.backgroundColor,
-      );
+      const bg = resolveInheritable(backgroundColor, inherited.backgroundColor);
 
       const hasBg = bg !== inherited.backgroundColor;
       if (hasBg) {

@@ -101,7 +101,7 @@ export function Dialog(props: DialogProps): Node {
                   Box({
                     focusable: true,
                     onKeyPress: handleKeyPress,
-                    ...styleFallback(props.style, 'dialog'),
+                    ...styleFallback(props.style, "dialog"),
                     children: props.children,
                   }),
                 ],

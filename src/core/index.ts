@@ -84,7 +84,6 @@ export {
 export { TabFocus, type TabFocusProps } from "./components/TabFocus.ts";
 export { useFocus } from "./components/useFocus.ts";
 
-
 // Render (pass-through)
 export {
   BORDER_CHARS,

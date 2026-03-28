@@ -1,7 +1,15 @@
-import { App, FocusManager, type FocusScope, DEFAULT_MOUNT_OPTIONS, type RuntimeContext, Renderer, EventDispatcher } from "../src/core/runtime.ts";
+import type { LayoutResult } from "../src/core/layout.ts";
+import {
+  App,
+  DEFAULT_MOUNT_OPTIONS,
+  EventDispatcher,
+  FocusManager,
+  type FocusScope,
+  Renderer,
+  type RuntimeContext,
+} from "../src/core/runtime.ts";
 import type { Node } from "../src/core/runtime.ts";
 import type { Accessor, Setter } from "../src/core/signals.ts";
-import type { LayoutResult } from "../src/core/layout.ts";
 
 interface HoverState {
   currentNode: Node | null;
@@ -11,14 +19,17 @@ interface HoverState {
  * Create a minimal App instance for unit testing.
  * Skips terminal setup, input parsing, and signal handlers.
  */
-export function createTestApp(root: Node, overrides?: {
-  focusedNode?: Accessor<Node | null>;
-  setFocusedNode?: Setter<Node | null>;
-  rootScope?: FocusScope;
-  layoutResult?: LayoutResult | null;
-  hoverState?: HoverState;
-  terminalFocused?: boolean;
-}): App {
+export function createTestApp(
+  root: Node,
+  overrides?: {
+    focusedNode?: Accessor<Node | null>;
+    setFocusedNode?: Setter<Node | null>;
+    rootScope?: FocusScope;
+    layoutResult?: LayoutResult | null;
+    hoverState?: HoverState;
+    terminalFocused?: boolean;
+  },
+): App {
   const app = Object.create(App.prototype) as App;
 
   const focus = new FocusManager();
@@ -26,8 +37,13 @@ export function createTestApp(root: Node, overrides?: {
 
   const renderer = Object.create(Renderer.prototype) as Renderer;
   renderer.layoutResult = overrides?.layoutResult ?? {
-    x: 0, y: 0, screenX: 0, screenY: 0,
-    width: 80, height: 24, children: [],
+    x: 0,
+    y: 0,
+    screenX: 0,
+    screenY: 0,
+    width: 80,
+    height: 24,
+    children: [],
   };
   (renderer as unknown as Record<string, unknown>).active = false;
   (renderer as unknown as Record<string, unknown>).scheduled = false;
@@ -44,7 +60,8 @@ export function createTestApp(root: Node, overrides?: {
     () => renderer.layoutResult,
   );
   if (overrides?.hoverState) {
-    (events as unknown as Record<string, unknown>).hoverState = overrides.hoverState;
+    (events as unknown as Record<string, unknown>).hoverState =
+      overrides.hoverState;
   }
   if (overrides?.terminalFocused !== undefined) {
     events.terminalFocused = overrides.terminalFocused;

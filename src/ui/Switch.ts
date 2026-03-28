@@ -82,19 +82,19 @@ export function Switch(props: SwitchProps): Node {
     onActivate: handleActivate,
     onKeyPress: handleKeyPress,
     onMousePress: handleMousePress,
-    ...styleFallback(props.style, 'switch'),
+    ...styleFallback(props.style, "switch"),
     children: [
       Text({
         content: () => {
-          const t = theme('switch');
+          const t = theme("switch");
           return isChecked()
             ? (t.checkedChar as string)
             : (t.uncheckedChar as string);
         },
         ...styleFallback(
           undefined,
-          () => isDisabled() ? 'switch--disabled' : '',
-          () => isChecked() ? 'switch--checked' : 'switch--unchecked',
+          () => (isDisabled() ? "switch--disabled" : ""),
+          () => (isChecked() ? "switch--checked" : "switch--unchecked"),
         ),
       }),
     ],

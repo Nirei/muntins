@@ -100,9 +100,9 @@ export function Button(props: ButtonProps): Node {
     onHover: setIsHovered,
     ...styleFallback(
       props.style,
-      () => isDisabled() ? 'button--disabled' : '',
-      () => isHovered() ? 'button--hover' : '',
-      'button',
+      () => (isDisabled() ? "button--disabled" : ""),
+      () => (isHovered() ? "button--hover" : ""),
+      "button",
     ),
     children: props.children,
   });

@@ -53,4 +53,7 @@ export {
 } from "./Menubar.ts";
 
 // Layout
-export { ScrollArea, type ScrollAreaProps } from "../core/components/ScrollArea.ts";
+export {
+  ScrollArea,
+  type ScrollAreaProps,
+} from "../core/components/ScrollArea.ts";

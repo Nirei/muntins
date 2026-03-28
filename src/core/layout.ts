@@ -352,7 +352,8 @@ function computeAutoMin(box: LayoutBox): void {
 
   const visible: LayoutBox[] = [];
   for (const child of box.children) {
-    if (child.style.display === "none" || child.style.position === "absolute") continue;
+    if (child.style.display === "none" || child.style.position === "absolute")
+      continue;
     visible.push(child);
   }
 

@@ -169,7 +169,8 @@ function SettingsPanel() {
                         onChange: setNotifications,
                       }),
                       Label({
-                        children: () => (notifications() ? "Enabled" : "Disabled"),
+                        children: () =>
+                          notifications() ? "Enabled" : "Disabled",
                         for: switchRef,
                       }),
                     ],

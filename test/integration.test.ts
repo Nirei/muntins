@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 import * as readline from "node:readline";
 import { describe, it } from "node:test";
 import {
+  App,
   Box,
   For,
   Show,
@@ -12,16 +13,15 @@ import {
   createEffect,
   createMemo,
   createSignal,
-  App,
   onCleanup,
 } from "../src/index.ts";
 import { Input } from "../src/ui/Input.ts";
+import { Label } from "../src/ui/Label.ts";
+import { RadioGroup } from "../src/ui/Radiogroup.ts";
+import { Select } from "../src/ui/Select.ts";
 import { Separator } from "../src/ui/Separator.ts";
 import { Switch } from "../src/ui/Switch.ts";
-import { RadioGroup } from "../src/ui/Radiogroup.ts";
-import { Label } from "../src/ui/Label.ts";
 import { Textarea } from "../src/ui/Textarea.ts";
-import { Select } from "../src/ui/Select.ts";
 
 /**
  * Virtual terminal screen that simulates a real terminal.
@@ -1829,7 +1829,10 @@ describe("integration", () => {
       assert.ok(screen.contains("Line 2"), "Line 2 should be visible");
 
       // Lines beyond viewport should NOT be visible (clipped by scroll)
-      assert.ok(!screen.contains("Line 25"), "Line 25 should be off-screen initially");
+      assert.ok(
+        !screen.contains("Line 25"),
+        "Line 25 should be off-screen initially",
+      );
 
       app.unmount();
     });
@@ -1865,7 +1868,10 @@ describe("integration", () => {
             flexGrow: 1,
             focusable: true,
             onKeyPress: (key) => {
-              if (key.name === "escape") { appRef.current?.unmount(); return true; }
+              if (key.name === "escape") {
+                appRef.current?.unmount();
+                return true;
+              }
               return false;
             },
             children: [
@@ -1884,19 +1890,24 @@ describe("integration", () => {
                         children: [
                           // Header with padding
                           Box({
-                            paddingStart: 2, paddingEnd: 2,
-                            paddingTop: 1, paddingBottom: 1,
+                            paddingStart: 2,
+                            paddingEnd: 2,
+                            paddingTop: 1,
+                            paddingBottom: 1,
                             children: [Text({ content: "Header", bold: true })],
                           }),
                           // Content with padding, gaps, and nested borders
                           Box({
                             flexDirection: "column",
-                            paddingStart: 2, paddingEnd: 2, paddingBottom: 1,
+                            paddingStart: 2,
+                            paddingEnd: 2,
+                            paddingBottom: 1,
                             gap: 1,
                             children: [
                               // Section with margin
                               Box({
-                                flexDirection: "column", marginTop: 1,
+                                flexDirection: "column",
+                                marginTop: 1,
                                 children: [
                                   Text({ content: "Section 1" }),
                                   Separator({ style: { marginTop: 0 } }),
@@ -1904,21 +1915,49 @@ describe("integration", () => {
                               }),
                               // Rows with bordered inputs
                               Box({
-                                flexDirection: "row", gap: 2,
+                                flexDirection: "row",
+                                gap: 2,
                                 children: [
-                                  Box({ width: 14, children: [Text({ content: "Field 1" })] }),
-                                  Box({ border: "single", children: [Input({ value: val, onChange: setVal, width: 28 })] }),
+                                  Box({
+                                    width: 14,
+                                    children: [Text({ content: "Field 1" })],
+                                  }),
+                                  Box({
+                                    border: "single",
+                                    children: [
+                                      Input({
+                                        value: val,
+                                        onChange: setVal,
+                                        width: 28,
+                                      }),
+                                    ],
+                                  }),
                                 ],
                               }),
                               Box({
-                                flexDirection: "row", gap: 2,
+                                flexDirection: "row",
+                                gap: 2,
                                 children: [
-                                  Box({ width: 14, children: [Text({ content: "Field 2" })] }),
-                                  Box({ border: "single", children: [Textarea({ value: val, onChange: setVal, width: 28, maxHeight: 3 })] }),
+                                  Box({
+                                    width: 14,
+                                    children: [Text({ content: "Field 2" })],
+                                  }),
+                                  Box({
+                                    border: "single",
+                                    children: [
+                                      Textarea({
+                                        value: val,
+                                        onChange: setVal,
+                                        width: 28,
+                                        maxHeight: 3,
+                                      }),
+                                    ],
+                                  }),
                                 ],
                               }),
                               Box({
-                                flexDirection: "column", marginTop: 1,
+                                flexDirection: "column",
+                                marginTop: 1,
                                 children: [
                                   Text({ content: "Section 2" }),
                                   Separator({ style: { marginTop: 0 } }),
@@ -1928,7 +1967,8 @@ describe("integration", () => {
                               Text({ content: "Row B" }),
                               Text({ content: "Row C" }),
                               Box({
-                                flexDirection: "column", marginTop: 1,
+                                flexDirection: "column",
+                                marginTop: 1,
                                 children: [
                                   Text({ content: "Section 3" }),
                                   Separator({ style: { marginTop: 0 } }),
@@ -1938,11 +1978,19 @@ describe("integration", () => {
                               Text({ content: "Row E" }),
                               // Bottom buttons — these MUST be reachable
                               Box({
-                                flexDirection: "row", justifyContent: "flex-end",
-                                gap: 2, marginTop: 2,
+                                flexDirection: "row",
+                                justifyContent: "flex-end",
+                                gap: 2,
+                                marginTop: 2,
                                 children: [
-                                  Box({ border: "single", children: [Text({ content: " Cancel " })] }),
-                                  Box({ border: "single", children: [Text({ content: " Save " })] }),
+                                  Box({
+                                    border: "single",
+                                    children: [Text({ content: " Cancel " })],
+                                  }),
+                                  Box({
+                                    border: "single",
+                                    children: [Text({ content: " Save " })],
+                                  }),
                                 ],
                               }),
                             ],
@@ -1995,8 +2043,12 @@ describe("integration", () => {
       }) as unknown as NodeJS.WriteStream;
 
       const [username, setUsername] = createSignal("johndoe");
-      const [bio, setBio] = createSignal("Software developer\nLoves building TUIs");
-      const [theme, setTheme] = createSignal<"light" | "dark" | "system">("dark");
+      const [bio, setBio] = createSignal(
+        "Software developer\nLoves building TUIs",
+      );
+      const [theme, setTheme] = createSignal<"light" | "dark" | "system">(
+        "dark",
+      );
       const [notifications, setNotifications] = createSignal(true);
       const [sound, setSound] = createSignal(false);
       const [country, setCountry] = createSignal("us");
@@ -2013,7 +2065,11 @@ describe("integration", () => {
         });
       }
 
-      function FormRow(props: { label: string; children: ReturnType<typeof Box>; alignTop?: boolean }) {
+      function FormRow(props: {
+        label: string;
+        children: ReturnType<typeof Box>;
+        alignTop?: boolean;
+      }) {
         return Box({
           flexDirection: "row",
           gap: 2,
@@ -2032,7 +2088,10 @@ describe("integration", () => {
             flexGrow: 1,
             focusable: true,
             onKeyPress: (key) => {
-              if (key.name === "escape") { appRef.current?.unmount(); return true; }
+              if (key.name === "escape") {
+                appRef.current?.unmount();
+                return true;
+              }
               return false;
             },
             children: [
@@ -2051,12 +2110,19 @@ describe("integration", () => {
                         borderStyle: "round" as const,
                         children: [
                           Box({
-                            paddingStart: 2, paddingEnd: 2, paddingTop: 1, paddingBottom: 1,
-                            children: [Text({ content: "Settings", bold: true })],
+                            paddingStart: 2,
+                            paddingEnd: 2,
+                            paddingTop: 1,
+                            paddingBottom: 1,
+                            children: [
+                              Text({ content: "Settings", bold: true }),
+                            ],
                           }),
                           Box({
                             flexDirection: "column",
-                            paddingStart: 2, paddingEnd: 2, paddingBottom: 1,
+                            paddingStart: 2,
+                            paddingEnd: 2,
+                            paddingBottom: 1,
                             gap: 1,
                             children: [
                               SectionHeader("Profile"),
@@ -2064,34 +2130,59 @@ describe("integration", () => {
                                 label: "Username",
                                 children: Box({
                                   border: "single",
-                                  children: [Input({ value: username, onChange: setUsername, width: 28, autoFocus: true })],
+                                  children: [
+                                    Input({
+                                      value: username,
+                                      onChange: setUsername,
+                                      width: 28,
+                                      autoFocus: true,
+                                    }),
+                                  ],
                                 }),
                               }),
                               FormRow({
-                                label: "Bio", alignTop: true,
+                                label: "Bio",
+                                alignTop: true,
                                 children: Box({
                                   border: "single",
-                                  children: [Textarea({ value: bio, onChange: setBio, width: 28, maxHeight: 3 })],
+                                  children: [
+                                    Textarea({
+                                      value: bio,
+                                      onChange: setBio,
+                                      width: 28,
+                                      maxHeight: 3,
+                                    }),
+                                  ],
                                 }),
                               }),
                               SectionHeader("Preferences"),
                               FormRow({
                                 label: "Theme",
                                 children: RadioGroup({
-                                  value: theme, onChange: setTheme, style: { flexDirection: "row" },
+                                  value: theme,
+                                  onChange: setTheme,
+                                  style: { flexDirection: "row" },
                                   options: [
                                     { value: "light" as const, label: "Light" },
                                     { value: "dark" as const, label: "Dark" },
-                                    { value: "system" as const, label: "System" },
+                                    {
+                                      value: "system" as const,
+                                      label: "System",
+                                    },
                                   ],
                                 }),
                               }),
                               FormRow({
                                 label: "Notifications",
                                 children: Box({
-                                  flexDirection: "row", gap: 1, alignItems: "center",
+                                  flexDirection: "row",
+                                  gap: 1,
+                                  alignItems: "center",
                                   children: [
-                                    Switch({ checked: notifications, onChange: setNotifications }),
+                                    Switch({
+                                      checked: notifications,
+                                      onChange: setNotifications,
+                                    }),
                                     Label({ children: "Enabled" }),
                                   ],
                                 }),
@@ -2099,9 +2190,14 @@ describe("integration", () => {
                               FormRow({
                                 label: "Sound",
                                 children: Box({
-                                  flexDirection: "row", gap: 1, alignItems: "center",
+                                  flexDirection: "row",
+                                  gap: 1,
+                                  alignItems: "center",
                                   children: [
-                                    Switch({ checked: sound, onChange: setSound }),
+                                    Switch({
+                                      checked: sound,
+                                      onChange: setSound,
+                                    }),
                                     Label({ children: "Disabled" }),
                                   ],
                                 }),
@@ -2110,7 +2206,8 @@ describe("integration", () => {
                               FormRow({
                                 label: "Country",
                                 children: Select({
-                                  value: country, onChange: setCountry,
+                                  value: country,
+                                  onChange: setCountry,
                                   options: [
                                     { value: "us", label: "United States" },
                                     { value: "uk", label: "United Kingdom" },
@@ -2119,10 +2216,19 @@ describe("integration", () => {
                                 }),
                               }),
                               Box({
-                                flexDirection: "row", justifyContent: "flex-end", gap: 2, marginTop: 2,
+                                flexDirection: "row",
+                                justifyContent: "flex-end",
+                                gap: 2,
+                                marginTop: 2,
                                 children: [
-                                  Box({ border: "single", children: [Text({ content: " Cancel " })] }),
-                                  Box({ border: "single", children: [Text({ content: " Save " })] }),
+                                  Box({
+                                    border: "single",
+                                    children: [Text({ content: " Cancel " })],
+                                  }),
+                                  Box({
+                                    border: "single",
+                                    children: [Text({ content: " Save " })],
+                                  }),
                                 ],
                               }),
                             ],
@@ -2140,7 +2246,10 @@ describe("integration", () => {
       appRef.current = app;
 
       // Settings header should be visible
-      assert.ok(screen.contains("Settings"), "Settings header should be visible");
+      assert.ok(
+        screen.contains("Settings"),
+        "Settings header should be visible",
+      );
 
       // Send mouse wheel-down events to scroll past viewport
       for (let i = 0; i < 24; i++) {
@@ -2197,7 +2306,9 @@ describe("integration", () => {
                         width: 52,
                         border: true,
                         children: Array.from({ length: 30 }, (_, i) =>
-                          Text({ content: `Row ${String(i + 1).padStart(2, "0")}` }),
+                          Text({
+                            content: `Row ${String(i + 1).padStart(2, "0")}`,
+                          }),
                         ),
                       }),
                     ],
@@ -2209,7 +2320,10 @@ describe("integration", () => {
         { stdin, stdout, mouse: true },
       );
 
-      assert.ok(screen.contains("Row 01"), "Row 01 should be visible initially");
+      assert.ok(
+        screen.contains("Row 01"),
+        "Row 01 should be visible initially",
+      );
 
       // Send 24 mouse wheel-down events (SGR encoding: button 65 = scroll down)
       for (let i = 0; i < 24; i++) {
@@ -2246,7 +2360,10 @@ describe("integration", () => {
         !row0.includes("Centered"),
         `Text should be centered, not at row 0. Row 0: '${row0}'`,
       );
-      assert.ok(screen.contains("Centered"), "Text should be visible somewhere");
+      assert.ok(
+        screen.contains("Centered"),
+        "Text should be visible somewhere",
+      );
 
       app.unmount();
     });
@@ -2276,7 +2393,10 @@ describe("integration", () => {
         !row0.includes("CENTERED"),
         `Text should be centered, not at row 0. Row 0: '${row0}'`,
       );
-      assert.ok(screen.contains("CENTERED"), "Text should be visible somewhere");
+      assert.ok(
+        screen.contains("CENTERED"),
+        "Text should be visible somewhere",
+      );
 
       app.unmount();
     });
@@ -2284,10 +2404,10 @@ describe("integration", () => {
     it("hides scrollbar when content fits viewport", () => {
       const { stdin, stdout, screen } = createMockStreams();
 
-      const app = App.mount(
-        () => Text({ content: "short content" }),
-        { stdin, stdout },
-      );
+      const app = App.mount(() => Text({ content: "short content" }), {
+        stdin,
+        stdout,
+      });
 
       // When content fits the viewport, no scrollbar should be visible
       const content = screen.getContent();

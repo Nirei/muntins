@@ -49,7 +49,7 @@ export function Separator(props: SeparatorProps): Node {
     height: () => (isHorizontal() ? 1 : "auto"),
     // Stretch to fill available space in the cross-axis
     alignSelf: "stretch",
-    ...styleFallback(style, 'separator'),
+    ...styleFallback(style, "separator"),
   };
 
   return Box(boxProps as Parameters<typeof Box>[0]);

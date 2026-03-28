@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { Buffer as RenderBuffer } from "../../src/core/buffer.ts";
+import { ScrollArea } from "../../src/core/components/ScrollArea.ts";
 import {
   App,
   Box,
@@ -10,7 +11,6 @@ import {
   createRef,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
-import { ScrollArea } from "../../src/core/components/ScrollArea.ts";
 
 // Helper to create mock stdin for mount tests
 function createMockStdin() {
@@ -119,7 +119,11 @@ function scrollEvent(direction: "up" | "down", x = 0, y = 0) {
   };
 }
 
-function mountScrollArea(props: Omit<Parameters<typeof ScrollArea>[0], 'children'> & { children: Parameters<typeof ScrollArea>[0]['children'] }) {
+function mountScrollArea(
+  props: Omit<Parameters<typeof ScrollArea>[0], "children"> & {
+    children: Parameters<typeof ScrollArea>[0]["children"];
+  },
+) {
   const stdin = createMockStdin();
   const stdout = createMockStdout();
   let scrollNode: ReturnType<typeof ScrollArea> | undefined;
@@ -128,7 +132,11 @@ function mountScrollArea(props: Omit<Parameters<typeof ScrollArea>[0], 'children
       scrollNode = ScrollArea(props);
       return scrollNode;
     },
-    { stdin: stdin as unknown as NodeJS.ReadStream, stdout: stdout as unknown as NodeJS.WriteStream, scroll: false },
+    {
+      stdin: stdin as unknown as NodeJS.ReadStream,
+      stdout: stdout as unknown as NodeJS.WriteStream,
+      scroll: false,
+    },
   );
   if (!scrollNode) throw new Error("ScrollArea was not created during mount");
   return { app, node: scrollNode, stdin, stdout };
@@ -176,9 +184,7 @@ describe("ScrollArea", () => {
     it("renders scrollbar with track and thumb characters when content overflows", () => {
       const { app, node } = mountScrollArea({
         height: 3,
-        children: [
-          Text({ content: "1\n2\n3\n4\n5\n6" }),
-        ],
+        children: [Text({ content: "1\n2\n3\n4\n5\n6" })],
       });
 
       // Get the scrollbar node (second child)

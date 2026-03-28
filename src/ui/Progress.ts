@@ -64,13 +64,14 @@ export function Progress(props: ProgressProps): Node {
   const { value, width, color, backgroundColor, style } = props;
 
   const getValue = (): number => clampValue(resolve(value) ?? 0);
-  const getWidth = (): number => resolve(width) ?? (theme('progress').width as number);
+  const getWidth = (): number =>
+    resolve(width) ?? (theme("progress").width as number);
 
   // Generate progress bar string reactively
   const getContent = (): string => {
     const barWidth = getWidth();
     const currentValue = getValue();
-    const blocks = theme('progress').chars as string[];
+    const blocks = theme("progress").chars as string[];
 
     // Calculate total eighths filled
     const totalEighths = Math.round(

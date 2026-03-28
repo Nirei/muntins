@@ -633,7 +633,10 @@ describe("Buffer class", () => {
       assert.ok(output.includes("B"), "should output the painted cell");
       // Count total cells emitted: all 5*3=15 cells should be output
       // since front was invalidated. Check that spaces are emitted too.
-      assert.ok(output.includes(" "), "should output spaces to clear stale terminal content");
+      assert.ok(
+        output.includes(" "),
+        "should output spaces to clear stale terminal content",
+      );
     });
   });
 });

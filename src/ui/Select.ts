@@ -147,14 +147,12 @@ export function Select<T>(props: SelectProps<T>): Node {
     content: () =>
       Box({
         flexDirection: "column",
-        ...styleFallback(undefined, 'select--dropdown'),
+        ...styleFallback(undefined, "select--dropdown"),
         focusable: false,
         children: props.options.map((opt, index) =>
           Box({
             onMousePress: handleOptionMousePress(index),
-            children: [
-              Text({ content: opt.label }),
-            ],
+            children: [Text({ content: opt.label })],
           }),
         ),
       }),
@@ -168,20 +166,22 @@ export function Select<T>(props: SelectProps<T>): Node {
         flexGrow: 1,
         flexDirection: "row",
         justifyContent: "space-between",
-        ...styleFallback(props.style, 'select--trigger', 'input'),
+        ...styleFallback(props.style, "select--trigger", "input"),
         children: [
           Text({
             content: selectedLabel,
-            dim: () => isDisabled() && (theme('select--disabled').dim as boolean),
+            dim: () =>
+              isDisabled() && (theme("select--disabled").dim as boolean),
           }),
           Text({
             content: () => {
-              const t = theme('select--indicator');
+              const t = theme("select--indicator");
               return isOpen()
                 ? (t.openChar as string)
                 : (t.closedChar as string);
             },
-            dim: () => isDisabled() && (theme('select--disabled').dim as boolean),
+            dim: () =>
+              isDisabled() && (theme("select--disabled").dim as boolean),
           }),
         ],
       });
