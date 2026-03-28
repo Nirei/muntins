@@ -82,9 +82,8 @@ function FormRow(props: {
 function SettingsPanel() {
   return Box({
     flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    flexGrow: 1,
+    alignItems: "flex-start",
+    justifyContent: "flex-end",
     children: [
       // Main card
       Box({
@@ -92,22 +91,19 @@ function SettingsPanel() {
         width: 52,
         border: true,
         borderStyle: "round",
+        paddingStart: 2,
+        paddingEnd: 2,
+        paddingTop: 1,
+        paddingBottom: 1,
         children: [
           // Header
           Box({
-            paddingStart: 2,
-            paddingEnd: 2,
-            paddingTop: 1,
-            paddingBottom: 1,
             children: [Text({ content: "Settings", bold: true })],
           }),
 
           // Content
           Box({
             flexDirection: "column",
-            paddingStart: 2,
-            paddingEnd: 2,
-            paddingBottom: 1,
             gap: 1,
             children: [
               // Profile section
@@ -144,7 +140,6 @@ function SettingsPanel() {
                 children: RadioGroup({
                   value: theme,
                   onChange: setTheme,
-                  direction: "row",
                   options: [
                     { value: "light" as const, label: "Light" },
                     { value: "dark" as const, label: "Dark" },
@@ -264,7 +259,6 @@ function SettingsPanel() {
 
       // Help text
       Box({
-        marginTop: 1,
         children: [
           Text({
             content:
