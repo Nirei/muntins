@@ -25,6 +25,9 @@
     "paddingStart": 1,
     "paddingEnd": 1
   },
+  "select--dropdown--highlight": {
+    "backgroundColor": "$primary"
+  },
   "select--indicator": { "openChar": "▲", "closedChar": "▼" },
   "select--disabled": { "dim": true },
   "textarea": { "width": 40 },

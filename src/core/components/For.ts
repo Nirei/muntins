@@ -5,12 +5,14 @@ import {
   createEffect,
   createRoot,
   createSignal,
+  type MaybeAccessor,
   onCleanup,
+  resolve,
 } from "../signals.ts";
 
 /** Props for For component. */
 export interface ForProps<T> {
-  each: () => T[];
+  each: MaybeAccessor<T[]>;
   render: (item: () => T, index: () => number) => Node;
   key?: (item: T) => unknown;
 }
@@ -97,7 +99,7 @@ export function For<T>(props: ForProps<T>): Node {
   };
 
   createEffect(() => {
-    const currentItems = items();
+    const currentItems = resolve(items);
 
     const keyCounts = new Map<unknown, number>();
     for (const item of currentItems) {

@@ -3,7 +3,7 @@
 import type { KeyEvent, MouseEvent } from "../core/input.ts";
 import type { ReactiveFlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
-import { Box, Text } from "../core/runtime.ts";
+import { Box, For, Text } from "../core/runtime.ts";
 import { type MaybeAccessor, createSignal, resolve } from "../core/signals.ts";
 import { styleFallback, theme } from "../core/theme.ts";
 import { Popover } from "./Popover.ts";
@@ -147,14 +147,22 @@ export function Select<T>(props: SelectProps<T>): Node {
     content: () =>
       Box({
         flexDirection: "column",
-        ...styleFallback(undefined, "select--dropdown"),
         focusable: false,
-        children: props.options.map((opt, index) =>
-          Box({
-            onMousePress: handleOptionMousePress(index),
-            children: [Text({ content: opt.label })],
-          }),
-        ),
+        children: For({
+          each: props.options,
+          render: (opt, index) => {
+            const isHighlighted = () => highlightedIndex() === index();
+            return Box({
+              ...styleFallback(
+                undefined,
+                () => (isHighlighted() ? "select--dropdown--highlight" : ""),
+                "select--dropdown",
+              ),
+              onMousePress: handleOptionMousePress(index()),
+              children: [Text({ content: opt().label })],
+            });
+          },
+        }),
       }),
     children: (anchorProps) => {
       const node = Box({
@@ -170,8 +178,9 @@ export function Select<T>(props: SelectProps<T>): Node {
         children: [
           Text({
             content: selectedLabel,
-            dim: () =>
-              isDisabled() && (theme("select--disabled").dim as boolean),
+            ...styleFallback(undefined, () =>
+              isDisabled() ? "select-disabled" : "",
+            ),
           }),
           Text({
             content: () => {
@@ -180,8 +189,9 @@ export function Select<T>(props: SelectProps<T>): Node {
                 ? (t.openChar as string)
                 : (t.closedChar as string);
             },
-            dim: () =>
-              isDisabled() && (theme("select--disabled").dim as boolean),
+            ...styleFallback(undefined, () =>
+              isDisabled() ? "select-disabled" : "",
+            ),
           }),
         ],
       });
