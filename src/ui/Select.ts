@@ -166,6 +166,7 @@ export function Select<T>(props: SelectProps<T>): Node {
       }),
     children: (anchorProps) => {
       const node = Box({
+        ...styleFallback(props.style, "select--trigger", "input"),
         ref: anchorProps.ref,
         focusable: props.focusable ?? true,
         autoFocus: props.autoFocus,
@@ -174,24 +175,23 @@ export function Select<T>(props: SelectProps<T>): Node {
         flexGrow: 1,
         flexDirection: "row",
         justifyContent: "space-between",
-        ...styleFallback(props.style, "select--trigger", "input"),
         children: [
           Text({
-            content: selectedLabel,
             ...styleFallback(undefined, () =>
-              isDisabled() ? "select-disabled" : "",
+              isDisabled() ? "select--disabled" : "",
             ),
+            content: selectedLabel,
           }),
           Text({
+            ...styleFallback(undefined, () =>
+              isDisabled() ? "select--disabled" : "",
+            ),
             content: () => {
               const t = theme("select--indicator");
               return isOpen()
                 ? (t.openChar as string)
                 : (t.closedChar as string);
             },
-            ...styleFallback(undefined, () =>
-              isDisabled() ? "select-disabled" : "",
-            ),
           }),
         ],
       });

@@ -2,7 +2,14 @@
 
 import type { Color } from "./buffer.ts";
 import { DEFAULT_COLOR } from "./buffer.ts";
+import { DEFAULT_FLEX_STYLE } from "./layout.ts";
+import { DEFAULT_INHERITED_STYLE } from "./render.ts";
 import { createSignal, resolve } from "./signals.ts";
+
+const STYLE_KEYS = [
+  ...Object.keys(DEFAULT_FLEX_STYLE),
+  ...Object.keys(DEFAULT_INHERITED_STYLE),
+];
 
 /**
  * Compact color string for JSON theme files.
@@ -175,30 +182,15 @@ export function styleFallback(
   instanceStyle: Record<string, unknown> | undefined,
   ...themeKeys: (string | (() => string))[]
 ): Record<string, unknown> {
-  // Create reactive slices for theme keys
-  const slices = themeKeys.map((key) => () => getTheme()[resolve(key)] ?? {});
-
-  // Collect all keys across all slices and instance style
-  const allKeys = new Set<string>();
-  if (instanceStyle) {
-    for (const key of Object.keys(instanceStyle)) {
-      allKeys.add(key);
-    }
-  }
-  for (const slice of slices) {
-    for (const key of Object.keys(slice())) {
-      allKeys.add(key);
-    }
-  }
-
   const result: Record<string, unknown> = {};
-  for (const key of allKeys) {
+  for (const key of STYLE_KEYS) {
     if (instanceStyle?.[key] !== undefined) {
       result[key] = instanceStyle[key];
     } else {
       result[key] = () => {
-        for (const slice of slices) {
-          const val = slice()[key];
+        for (const themeKey of themeKeys) {
+          const slice = getTheme()[resolve(themeKey)] ?? {}
+          const val = slice[key]
           if (val !== undefined) return val;
         }
         return undefined;

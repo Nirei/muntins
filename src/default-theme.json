@@ -1,10 +1,10 @@
 {
   "tokens": {
+    "fg": "#dce1de",
     "bg": "#1f2421",
     "primary": "#216869",
     "accent": "#49a078",
     "muted": "#9cc5a1",
-    "fg": "#dce1de",
     "surface": "#2e3532",
     "error": "#c45d5d"
   },
@@ -19,6 +19,7 @@
     "unselectedChar": "○"
   },
   "radio-group--label": { "color": "$muted" },
+  "radio-group--focused": { "color": "$accent" },
   "radio-group--disabled": { "dim": true, "color": "$muted" },
   "select--dropdown": {
     "backgroundColor": "$surface",
@@ -30,6 +31,7 @@
   },
   "select--indicator": { "openChar": "▲", "closedChar": "▼" },
   "select--disabled": { "dim": true },
+  "select--trigger": {},
   "textarea": { "width": 40 },
   "textarea--cursor": { "inverse": true },
   "textarea--placeholder": { "dim": true },
