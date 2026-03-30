@@ -79,191 +79,171 @@ function FormRow(props: {
   });
 }
 
-function SettingsPanel() {
+function SettingsCard() {
   return Box({
     flexDirection: "column",
-    alignItems: "flex-start",
-    justifyContent: "flex-end",
+    width: 52,
+    border: true,
+    borderStyle: "round",
+    paddingStart: 2,
+    paddingEnd: 2,
+    paddingTop: 1,
+    paddingBottom: 1,
     children: [
-      // Main card
+      // Header
+      Box({
+        children: [Text({ content: "Settings", bold: true })],
+      }),
+
+      // Content
       Box({
         flexDirection: "column",
-        width: 52,
-        border: true,
-        borderStyle: "round",
-        paddingStart: 2,
-        paddingEnd: 2,
-        paddingTop: 1,
-        paddingBottom: 1,
+        gap: 1,
         children: [
-          // Header
-          Box({
-            children: [Text({ content: "Settings", bold: true })],
+          // Profile section
+          SectionHeader("Profile"),
+
+          FormRow({
+            label: "Username",
+            children: Input({
+              value: username,
+              onChange: setUsername,
+              width: 28,
+              placeholder: "Enter username",
+              autoFocus: true,
+            }),
           }),
 
-          // Content
-          Box({
-            flexDirection: "column",
-            gap: 1,
-            children: [
-              // Profile section
-              SectionHeader("Profile"),
+          FormRow({
+            label: "Bio",
+            alignTop: true,
+            children: Textarea({
+              value: bio,
+              onChange: setBio,
+              width: 28,
+              maxHeight: 3,
+              placeholder: "Tell us about yourself",
+            }),
+          }),
 
-              FormRow({
-                label: "Username",
-                children: Input({
-                  value: username,
-                  onChange: setUsername,
-                  width: 28,
-                  placeholder: "Enter username",
-                  autoFocus: true,
-                }),
-              }),
+          // Preferences section
+          SectionHeader("Preferences"),
 
-              FormRow({
-                label: "Bio",
-                alignTop: true,
-                children: Textarea({
-                  value: bio,
-                  onChange: setBio,
-                  width: 28,
-                  maxHeight: 3,
-                  placeholder: "Tell us about yourself",
-                }),
-              }),
+          FormRow({
+            label: "Theme",
+            children: RadioGroup({
+              value: theme,
+              onChange: setTheme,
+              options: [
+                { value: "light" as const, label: "Light" },
+                { value: "dark" as const, label: "Dark" },
+                { value: "system" as const, label: "System" },
+              ],
+              style: { gap: 2 },
+            }),
+          }),
 
-              // Preferences section
-              SectionHeader("Preferences"),
-
-              FormRow({
-                label: "Theme",
-                children: RadioGroup({
-                  value: theme,
-                  onChange: setTheme,
-                  options: [
-                    { value: "light" as const, label: "Light" },
-                    { value: "dark" as const, label: "Dark" },
-                    { value: "system" as const, label: "System" },
-                  ],
-                  style: { gap: 2 },
-                }),
-              }),
-
-              FormRow({
-                label: "Notifications",
-                children: (() => {
-                  const switchRef = createRef();
-                  return Box({
-                    flexDirection: "row",
-                    gap: 1,
-                    alignItems: "center",
-                    children: [
-                      Switch({
-                        ref: switchRef,
-                        checked: notifications,
-                        onChange: setNotifications,
-                      }),
-                      Label({
-                        children: () =>
-                          notifications() ? "Enabled" : "Disabled",
-                        for: switchRef,
-                      }),
-                    ],
-                  });
-                })(),
-              }),
-
-              FormRow({
-                label: "Sound",
-                children: (() => {
-                  const switchRef = createRef();
-                  return Box({
-                    flexDirection: "row",
-                    gap: 1,
-                    alignItems: "center",
-                    children: [
-                      Switch({
-                        ref: switchRef,
-                        checked: sound,
-                        onChange: setSound,
-                      }),
-                      Label({
-                        children: () => (sound() ? "Enabled" : "Disabled"),
-                        for: switchRef,
-                      }),
-                    ],
-                  });
-                })(),
-              }),
-
-              // Region section
-              SectionHeader("Region"),
-
-              FormRow({
-                label: "Country",
-                children: Select({
-                  value: country,
-                  onChange: setCountry,
-                  placeholder: "Select country",
-                  options: [
-                    { value: "au", label: "Australia" },
-                    { value: "ca", label: "Canada" },
-                    { value: "fr", label: "France" },
-                    { value: "de", label: "Germany" },
-                    { value: "jp", label: "Japan" },
-                    { value: "uk", label: "United Kingdom" },
-                    { value: "us", label: "United States" },
-                  ],
-                  style: { width: 22 },
-                }),
-              }),
-
-              // Actions
-              Box({
+          FormRow({
+            label: "Notifications",
+            children: (() => {
+              const switchRef = createRef();
+              return Box({
                 flexDirection: "row",
-                justifyContent: "flex-end",
-                gap: 2,
-                marginTop: 2,
+                gap: 1,
+                alignItems: "center",
                 children: [
-                  // Status message
-                  Box({
-                    flexGrow: 1,
-                    children: [
-                      Text({
-                        content: status,
-                        dim: true,
-                      }),
-                    ],
+                  Switch({
+                    ref: switchRef,
+                    checked: notifications,
+                    onChange: setNotifications,
                   }),
-
-                  Button({
-                    children: "Cancel",
-                    onClick: () => {
-                      app.unmount();
-                    },
+                  Label({
+                    children: () => (notifications() ? "Enabled" : "Disabled"),
+                    for: switchRef,
                   }),
+                ],
+              });
+            })(),
+          }),
 
-                  Button({
-                    children: "Save",
-                    onClick: () => {
-                      setStatus("Saved!");
-                      setTimeout(() => setStatus(""), 2000);
-                    },
+          FormRow({
+            label: "Sound",
+            children: (() => {
+              const switchRef = createRef();
+              return Box({
+                flexDirection: "row",
+                gap: 1,
+                alignItems: "center",
+                children: [
+                  Switch({
+                    ref: switchRef,
+                    checked: sound,
+                    onChange: setSound,
+                  }),
+                  Label({
+                    children: () => (sound() ? "Enabled" : "Disabled"),
+                    for: switchRef,
+                  }),
+                ],
+              });
+            })(),
+          }),
+
+          // Region section
+          SectionHeader("Region"),
+
+          FormRow({
+            label: "Country",
+            children: Select({
+              value: country,
+              onChange: setCountry,
+              placeholder: "Select country",
+              options: [
+                { value: "au", label: "Australia" },
+                { value: "ca", label: "Canada" },
+                { value: "fr", label: "France" },
+                { value: "de", label: "Germany" },
+                { value: "jp", label: "Japan" },
+                { value: "uk", label: "United Kingdom" },
+                { value: "us", label: "United States" },
+              ],
+              style: { width: 22 },
+            }),
+          }),
+
+          // Actions
+          Box({
+            flexDirection: "row",
+            justifyContent: "flex-end",
+            gap: 2,
+            marginTop: 2,
+            children: [
+              // Status message
+              Box({
+                flexGrow: 1,
+                children: [
+                  Text({
+                    content: status,
+                    dim: true,
                   }),
                 ],
               }),
-            ],
-          }),
-        ],
-      }),
 
-      // Help text
-      Box({
-        children: [
-          Text({
-            content:
-              "Tab/Mouse to navigate  |  Enter/Space/Click to interact  |  Esc to quit",
-            dim: true,
+              Button({
+                children: "Cancel",
+                onClick: () => {
+                  app.unmount();
+                },
+              }),
+
+              Button({
+                children: "Save",
+                onClick: () => {
+                  setStatus("Saved!");
+                  setTimeout(() => setStatus(""), 2000);
+                },
+              }),
+            ],
           }),
         ],
       }),
@@ -274,6 +254,9 @@ function SettingsPanel() {
 function Settings() {
   return Box({
     flexGrow: 1,
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
     focusable: true,
     onKeyPress: (key) => {
       if (key.name === "escape" || (key.ctrl && key.name === "c")) {
@@ -284,7 +267,21 @@ function Settings() {
     },
     children: [
       TabFocus({
-        children: [SettingsPanel()],
+        children: [SettingsCard()],
+      }),
+
+      // Help text
+      Box({
+        position: "absolute",
+        bottom: 0,
+        justifyContent: "center",
+        children: [
+          Text({
+            content:
+              "Tab/Mouse to navigate  |  Enter/Space/Click to interact  |  Esc to quit",
+            dim: true,
+          }),
+        ],
       }),
     ],
   });
