@@ -3,7 +3,7 @@
 import type { KeyEvent, MouseEvent } from "../core/input.ts";
 import type { ReactiveFlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
-import { Box, For, Text } from "../core/runtime.ts";
+import { Box, createRef, For, Text, useFocus } from "../core/runtime.ts";
 import { type MaybeAccessor, createSignal, resolve } from "../core/signals.ts";
 import { styleFallback, theme } from "../core/theme.ts";
 import { Popover } from "./Popover.ts";
@@ -66,7 +66,10 @@ export interface SelectProps<T> {
 export function Select<T>(props: SelectProps<T>): Node {
   const [isOpen, setIsOpen] = createSignal(false);
   const [highlightedIndex, setHighlightedIndex] = createSignal(0);
+  const ref = createRef(props.ref);
+  const focus = useFocus();
 
+  const isFocused = () => focus.current() === ref.current;
   const getValue = () => resolve(props.value);
   const isDisabled = () => resolve(props.disabled) ?? false;
   const getPlaceholder = () => resolve(props.placeholder) ?? "";
@@ -166,7 +169,12 @@ export function Select<T>(props: SelectProps<T>): Node {
       }),
     children: (anchorProps) => {
       const node = Box({
-        ...styleFallback(props.style, "select--trigger", "input"),
+        ...styleFallback(
+          props.style,
+          () => isFocused() ? "select--focused" : "",
+          "select--trigger",
+          "input",
+        ),
         ref: anchorProps.ref,
         focusable: props.focusable ?? true,
         autoFocus: props.autoFocus,
@@ -196,8 +204,8 @@ export function Select<T>(props: SelectProps<T>): Node {
         ],
       });
 
-      if (props.ref) {
-        props.ref.current = node;
+      if (ref) {
+        ref.current = node;
       }
 
       return node;

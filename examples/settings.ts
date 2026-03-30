@@ -43,7 +43,7 @@ const [bio, setBio] = createSignal("Software developer\nLoves building TUIs");
 const [theme, setTheme] = createSignal<"light" | "dark" | "system">("dark");
 const [notifications, setNotifications] = createSignal(true);
 const [sound, setSound] = createSignal(false);
-const [country, setCountry] = createSignal("us");
+const [country, setCountry] = createSignal("es");
 
 // Status message for save feedback
 const [status, setStatus] = createSignal("");
@@ -204,6 +204,7 @@ function SettingsCard() {
                 { value: "fr", label: "France" },
                 { value: "de", label: "Germany" },
                 { value: "jp", label: "Japan" },
+                { value: "es", label: "Spain" },
                 { value: "uk", label: "United Kingdom" },
                 { value: "us", label: "United States" },
               ],

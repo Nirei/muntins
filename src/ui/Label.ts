@@ -3,6 +3,7 @@
 import type { MouseEvent } from "../core/input.ts";
 import type { Node, ReactiveTextStyle, Ref } from "../core/runtime.ts";
 import { App, Text, useFocus } from "../core/runtime.ts";
+import { createEffect, createSignal } from "../core/signals.ts";
 import { styleFallback } from "../core/theme.ts";
 
 /**
@@ -46,8 +47,10 @@ export function Label(props: LabelProps): Node {
 
   // Get focus controller to handle for association
   // Only available within mount context - outside context, for won't work but label still renders
-  const ctx = App.getActiveContext();
-  const focus = ctx ? useFocus() : undefined;
+  const focus = useFocus();
+
+  // Sync with for focused
+  const isFocused = () => focus.current() === forRef?.current;
 
   const handleMousePress = forRef
     ? (_event: MouseEvent) => {
@@ -58,7 +61,7 @@ export function Label(props: LabelProps): Node {
 
   return Text({
     content: children,
-    ...styleFallback(style, "label"),
+    ...styleFallback(style, () => isFocused() ? "label--focused" : "", "label"),
     onMousePress: handleMousePress,
   });
 }

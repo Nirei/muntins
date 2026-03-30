@@ -31,7 +31,7 @@
   },
   "select--indicator": { "openChar": "▲", "closedChar": "▼" },
   "select--disabled": { "dim": true },
-  "select--trigger": {},
+  "select--focused": { "backgroundColor": "$primary" },
   "textarea": { "width": 40 },
   "textarea--cursor": { "inverse": true },
   "textarea--placeholder": { "dim": true },
@@ -61,7 +61,9 @@
     "paddingStart": 1,
     "paddingEnd": 1
   },
+  "button--focused": { "backgroundColor": "$primary" },
   "button--hover": { "backgroundColor": "$primary" },
   "label": { "color": "$muted" },
+  "label--focused": { "color": "$accent" },
   "separator": { "borderColor": "$surface" }
 }

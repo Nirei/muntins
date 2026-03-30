@@ -3,7 +3,7 @@
 import type { ActivateEvent, KeyEvent, MouseEvent } from "../core/input.ts";
 import type { ReactiveFlexStyle } from "../core/layout.ts";
 import type { BoxChild, Node, Ref } from "../core/runtime.ts";
-import { Box } from "../core/runtime.ts";
+import { Box, createRef, useFocus } from "../core/runtime.ts";
 import { type MaybeAccessor, createSignal, resolve } from "../core/signals.ts";
 import { styleFallback } from "../core/theme.ts";
 
@@ -70,6 +70,10 @@ export interface ButtonProps {
 export function Button(props: ButtonProps): Node {
   const isDisabled = () => resolve(props.disabled) ?? false;
   const [isHovered, setIsHovered] = createSignal(false);
+  const ref = createRef(props.ref);
+  const focus = useFocus();
+
+  const isFocused = () => focus.current() === ref.current
 
   const handleActivate = (_event: ActivateEvent): void => {
     if (isDisabled()) return;
@@ -93,7 +97,7 @@ export function Button(props: ButtonProps): Node {
   return Box({
     focusable: props.focusable ?? true,
     autoFocus: props.autoFocus,
-    ref: props.ref,
+    ref: ref,
     onActivate: handleActivate,
     onKeyPress: handleKeyPress,
     onMousePress: handleMousePress,
@@ -101,6 +105,7 @@ export function Button(props: ButtonProps): Node {
     ...styleFallback(
       props.style,
       () => (isDisabled() ? "button--disabled" : ""),
+      () => (isFocused() ? "button--focused" : ""),
       () => (isHovered() ? "button--hover" : ""),
       "button",
     ),
