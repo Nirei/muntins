@@ -5,6 +5,7 @@ TypeScript. SolidJS-style reactivity with CSS flexbox layout.
 
 ## Core Principles
 
+0. **Don't overthink.** Avoid falling into rabbit holes trying to anticipate every possible escenario and just do the thing instead. Work iteratively and limit reasoning to a sane amount before acting.
 1. **Readability and simplicity above all.** Clear code beats clever code.
 2. **Correct by design.** Structure data and types so invalid states are unrepresentable.
 3. **Everything is tested.** No exceptions. Tests verify behaviour, not implementation.
@@ -17,8 +18,8 @@ TypeScript. SolidJS-style reactivity with CSS flexbox layout.
 Tests use Node's built-in test runner (`node:test` + `node:assert`). **Not vitest, not jest.**
 
 ```bash
-npm test                                                        # All tests
 npm run typecheck                                               # tsc --noEmit
+npm test                                                        # All tests
 node --experimental-strip-types --test test/signals.test.ts     # Single file
 node --experimental-strip-types --test --test-name-pattern="createSignal" test/signals.test.ts
 ```
@@ -34,6 +35,8 @@ Always use `npm run typecheck` instead of invoking `tsc` or `npx tsc` directly.
 | Constants (bitmasks) | UPPER_CASE | `BOLD = 1`, `DIM = 2`, `ITALIC = 4` |
 | Files | lowercase/kebab | `signals.ts`, `layout.ts`, `runtime.ts` |
 | Components | PascalCase | `Box()`, `Text()`, `Show()`, `For()` |
+
+**NEVER** use abbreviations for names. Full words, always, without exception.
 
 ### Comment Style
 
