@@ -2090,5 +2090,138 @@ describe("Textarea", () => {
       node.onKeyPress(keyEvent("X", "X"));
       assert.strictEqual(received, "abcdefghijXkl");
     });
+
+    it("cursor visible at end of line that fills content width", async () => {
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout(20, 10);
+      const ref = createRef();
+      const app = App.mount(
+        () =>
+          Box({
+            children: [
+              Textarea({
+                value: "abcdefgh",
+                width: 10,
+                autoFocus: true,
+                ref,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+        },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const buf = app.renderer.buffer;
+      // "abcdefgh" fills content width (8 chars, padding 1 each side = 10).
+      // Cursor is at end (position 8), which should appear on visual row 1.
+      const mods = buf.getModifiers(p, 1);
+      assert.strictEqual(
+        mods & INVERSE,
+        INVERSE,
+        "Cursor should be inverse on visual row 1 at end of full line",
+      );
+      app.unmount();
+    });
+
+    it("cursor visible at wrap boundary in wrapped line", async () => {
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout(20, 10);
+      const ref = createRef();
+      const app = App.mount(
+        () =>
+          Box({
+            children: [
+              Textarea({
+                value: "abcdefghi",
+                width: 10,
+                autoFocus: true,
+                ref,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+        },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      assert.ok(ref.current?.onKeyPress);
+      // Cursor starts at position 9 (end). Move left to position 8 (wrap boundary).
+      ref.current.onKeyPress(keyEvent("left"));
+      app.renderer.flush();
+
+      const buf = app.renderer.buffer;
+      // At position 8 the cursor is at the end of the first visual segment "abcdefgh"
+      // It should be visible on visual row 1 at column 0.
+      const mods = buf.getModifiers(p, 1);
+      assert.strictEqual(
+        mods & INVERSE,
+        INVERSE,
+        "Cursor should be visible at wrap boundary on visual row 1",
+      );
+      app.unmount();
+    });
+
+    it("cursor visible at end of full line before next logical line", async () => {
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout(20, 10);
+      const ref = createRef();
+      const app = App.mount(
+        () =>
+          Box({
+            children: [
+              Textarea({
+                value: "abcdefgh\nbbbbb",
+                width: 10,
+                autoFocus: true,
+                ref,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+        },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      assert.ok(ref.current?.onKeyPress);
+      // Cursor starts at end of "bbbbb" (position 13). Navigate up to
+      // land at end of "abcdefgh" on its overflow row.
+      ref.current.onKeyPress(keyEvent("up"));
+      app.renderer.flush();
+
+      const buf = app.renderer.buffer;
+      const mods = buf.getModifiers(p, 1);
+      assert.strictEqual(
+        mods & INVERSE,
+        INVERSE,
+        "Cursor should be visible on overflow row between full line and next logical line",
+      );
+      app.unmount();
+    });
+
+    it("typing from overflow row inserts at correct position", () => {
+      let received = "";
+      const node = Textarea({
+        value: "abcdefgh",
+        width: 10,
+        onChange: (v) => {
+          received = v;
+        },
+      });
+      assert.ok(node.onKeyPress);
+      // Cursor starts at end (position 8), which is on the overflow row.
+      // Typing should insert after the 8th character.
+      node.onKeyPress(keyEvent("X", "X"));
+      assert.strictEqual(received, "abcdefghX");
+    });
   });
 });

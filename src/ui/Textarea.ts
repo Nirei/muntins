@@ -25,7 +25,12 @@ import {
   resolve,
   untrack,
 } from "../core/signals.ts";
-import { displayWidthToPosition, textLength, wrapLine } from "../core/text.ts";
+import {
+  displayWidthToPosition,
+  lineDisplayWidth,
+  textLength,
+  wrapLine,
+} from "../core/text.ts";
 import { styleFallback, theme } from "../core/theme.ts";
 
 /**
@@ -115,6 +120,7 @@ interface VisualLine {
   globalGraphemeStart: number;
   graphemeCount: number;
   isLastOfLogicalLine: boolean;
+  isCursorOverflow: boolean;
 }
 
 function getVisualLines(text: string, width: number): VisualLine[] {
@@ -126,6 +132,7 @@ function getVisualLines(text: string, width: number): VisualLine[] {
         globalGraphemeStart: 0,
         graphemeCount: gc,
         isLastOfLogicalLine: true,
+        isCursorOverflow: false,
       },
     ];
   }
@@ -144,8 +151,20 @@ function getVisualLines(text: string, width: number): VisualLine[] {
         globalGraphemeStart: globalOffset,
         graphemeCount: textLength(wrapped[j]),
         isLastOfLogicalLine: j === wrapped.length - 1,
+        isCursorOverflow: false,
       });
       globalOffset += textLength(wrapped[j]);
+    }
+
+    const lastWrapped = wrapped[wrapped.length - 1];
+    if (lineDisplayWidth(lastWrapped) === width) {
+      result.push({
+        text: "",
+        globalGraphemeStart: globalOffset,
+        graphemeCount: 0,
+        isLastOfLogicalLine: true,
+        isCursorOverflow: true,
+      });
     }
 
     if (i < logicalLines.length - 1) {
@@ -161,6 +180,7 @@ function getVisualLines(text: string, width: number): VisualLine[] {
           globalGraphemeStart: 0,
           graphemeCount: 0,
           isLastOfLogicalLine: true,
+          isCursorOverflow: false,
         },
       ];
 }
@@ -176,7 +196,13 @@ function cursorToVisualPos(
     const vl = vlines[row];
     const endPos = vl.globalGraphemeStart + vl.graphemeCount;
 
-    if (cursorPos <= endPos) {
+    if (cursorPos < endPos) {
+      return { row, col: cursorPos - vl.globalGraphemeStart };
+    }
+
+    if (cursorPos === endPos) {
+      const next = vlines[row + 1];
+      if (next && next.globalGraphemeStart === cursorPos) continue;
       return { row, col: cursorPos - vl.globalGraphemeStart };
     }
   }
@@ -400,8 +426,11 @@ export function Textarea(props: TextareaProps): Node {
     if (key.name === "up") {
       if (!isMultiline) return false;
       if (visualPos.row > 0) {
-        const targetRow = visualPos.row - 1;
-        setCursorPos(visualPosToCursor(val, targetRow, visualPos.col, cw));
+        const onOverflow = vlines[visualPos.row].isCursorOverflow;
+        const effectiveCol = onOverflow ? cw : visualPos.col;
+        let targetRow = visualPos.row - 1;
+        if (onOverflow && targetRow > 0) targetRow--;
+        setCursorPos(visualPosToCursor(val, targetRow, effectiveCol, cw));
       }
       return true;
     }
@@ -409,8 +438,11 @@ export function Textarea(props: TextareaProps): Node {
     if (key.name === "down") {
       if (!isMultiline) return false;
       if (visualPos.row < vlines.length - 1) {
-        const targetRow = visualPos.row + 1;
-        setCursorPos(visualPosToCursor(val, targetRow, visualPos.col, cw));
+        const onOverflow = vlines[visualPos.row].isCursorOverflow;
+        const effectiveCol = onOverflow ? cw : visualPos.col;
+        let targetRow = visualPos.row + 1;
+        if (onOverflow && targetRow < vlines.length - 1) targetRow++;
+        setCursorPos(visualPosToCursor(val, targetRow, effectiveCol, cw));
       }
       return true;
     }
