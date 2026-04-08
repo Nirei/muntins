@@ -1,5 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
+import { INVERSE } from "../../src/core/buffer.ts";
 import { App, Box, createRef } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { setTheme } from "../../src/core/theme.ts";
@@ -1878,6 +1879,216 @@ describe("Textarea", () => {
       );
 
       app.unmount();
+    });
+  });
+
+  describe("text wrapping", () => {
+    const p = 1;
+
+    it("long line renders across multiple visual rows", () => {
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout(20, 10);
+      const app = App.mount(
+        () =>
+          Box({
+            children: [Textarea({ value: "abcdefghij", width: 10 })],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+        },
+      );
+      const buf = app.renderer.buffer;
+      assert.strictEqual(buf.getSymbol(p, 0), "a");
+      assert.strictEqual(buf.getSymbol(p + 7, 0), "h");
+      assert.strictEqual(buf.getSymbol(p, 1), "i");
+      assert.strictEqual(buf.getSymbol(p + 1, 1), "j");
+      app.unmount();
+    });
+
+    it("typing at end of full line shows character on next visual row", async () => {
+      const [value, setValue] = createSignal("abcdefgh");
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout(20, 10);
+      const ref = createRef();
+      const app = App.mount(
+        () =>
+          Box({
+            children: [
+              Textarea({
+                value,
+                onChange: setValue,
+                width: 10,
+                autoFocus: true,
+                ref,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+        },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      assert.ok(ref.current?.onKeyPress);
+      ref.current.onKeyPress(keyEvent("i", "i"));
+      app.renderer.flush();
+
+      const buf = app.renderer.buffer;
+      assert.strictEqual(buf.getSymbol(p, 0), "a");
+      assert.strictEqual(buf.getSymbol(p + 7, 0), "h");
+      assert.strictEqual(buf.getSymbol(p, 1), "i");
+      app.unmount();
+    });
+
+    it("typing at end of full line preserves text on subsequent lines", async () => {
+      const [value, setValue] = createSignal("abcdefgh\nwhatever");
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout(20, 10);
+      const ref = createRef();
+      const app = App.mount(
+        () =>
+          Box({
+            children: [
+              Textarea({
+                value,
+                onChange: setValue,
+                width: 10,
+                autoFocus: true,
+                ref,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+        },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      assert.ok(ref.current?.onKeyPress);
+      ref.current.onKeyPress(keyEvent("up"));
+      ref.current.onKeyPress(keyEvent("i", "i"));
+      app.renderer.flush();
+
+      const buf = app.renderer.buffer;
+      assert.strictEqual(buf.getSymbol(p, 0), "a");
+      assert.strictEqual(buf.getSymbol(p + 7, 0), "h");
+      assert.strictEqual(buf.getSymbol(p, 1), "i");
+      assert.strictEqual(buf.getSymbol(p, 2), "w");
+      app.unmount();
+    });
+
+    it("cursor visible on wrapped continuation row", async () => {
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout(20, 10);
+      const ref = createRef();
+      const app = App.mount(
+        () =>
+          Box({
+            children: [
+              Textarea({
+                value: "abcdefghi",
+                width: 10,
+                autoFocus: true,
+                ref,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+        },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const buf = app.renderer.buffer;
+      const mods = buf.getModifiers(p + 1, 1);
+      assert.strictEqual(
+        mods & INVERSE,
+        INVERSE,
+        "Cursor should be inverse on visual row 1",
+      );
+      app.unmount();
+    });
+
+    it("Home goes to start of current visual row", () => {
+      let received = "";
+      const node = Textarea({
+        value: "abcdefghi",
+        width: 10,
+        onChange: (v) => {
+          received = v;
+        },
+      });
+      assert.ok(node.onKeyPress);
+      node.onKeyPress(keyEvent("home"));
+      node.onKeyPress(keyEvent("X", "X"));
+      assert.strictEqual(received, "abcdefghXi");
+    });
+
+    it("End goes to end of current visual row, not logical line end", () => {
+      let received = "";
+      const node = Textarea({
+        value: "abcdefghijklmnopqrst",
+        width: 10,
+        onChange: (v) => {
+          received = v;
+        },
+      });
+      assert.ok(node.onKeyPress);
+      // Cursor starts at end (position 20). Move left to position 10
+      for (let i = 0; i < 10; i++) {
+        node.onKeyPress(keyEvent("left"));
+      }
+      // Press End - should go to end of visual row 1 (position 16), not logical end (20)
+      node.onKeyPress(keyEvent("end"));
+      node.onKeyPress(keyEvent("X", "X"));
+      assert.strictEqual(received, "abcdefghijklmnopXqrst");
+    });
+
+    it("Up arrow moves to previous visual row within same logical line", () => {
+      let received = "";
+      const node = Textarea({
+        value: "abcdefghijkl",
+        width: 10,
+        onChange: (v) => {
+          received = v;
+        },
+      });
+      assert.ok(node.onKeyPress);
+      // Cursor at end (position 12). Move left to position 10 (visual row 1, column 2)
+      node.onKeyPress(keyEvent("left"));
+      node.onKeyPress(keyEvent("left"));
+      // Press Up - should go to visual row 0, column 2 (position 2)
+      node.onKeyPress(keyEvent("up"));
+      node.onKeyPress(keyEvent("X", "X"));
+      assert.strictEqual(received, "abXcdefghijkl");
+    });
+
+    it("Down arrow moves to next visual row within same logical line", () => {
+      let received = "";
+      const node = Textarea({
+        value: "abcdefghijkl",
+        width: 10,
+        onChange: (v) => {
+          received = v;
+        },
+      });
+      assert.ok(node.onKeyPress);
+      // Cursor at end (position 12). Move to start, then right to position 2 (visual row 0, column 2)
+      node.onKeyPress(keyEvent("home"));
+      node.onKeyPress(keyEvent("right"));
+      node.onKeyPress(keyEvent("right"));
+      // Press Down - should go to visual row 1, column 2 (position 10)
+      node.onKeyPress(keyEvent("down"));
+      node.onKeyPress(keyEvent("X", "X"));
+      assert.strictEqual(received, "abcdefghijXkl");
     });
   });
 });

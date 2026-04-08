@@ -25,7 +25,7 @@ import {
   resolve,
   untrack,
 } from "../core/signals.ts";
-import { displayWidthToPosition, textLength } from "../core/text.ts";
+import { displayWidthToPosition, textLength, wrapLine } from "../core/text.ts";
 import { styleFallback, theme } from "../core/theme.ts";
 
 /**
@@ -108,6 +108,93 @@ function lineColToPos(text: string, cursor: CursorPosition): number {
 
   const currentLine = lines[cursor.line] ?? "";
   return pos + Math.min(cursor.column, textLength(currentLine));
+}
+
+interface VisualLine {
+  text: string;
+  globalGraphemeStart: number;
+  graphemeCount: number;
+  isLastOfLogicalLine: boolean;
+}
+
+function getVisualLines(text: string, width: number): VisualLine[] {
+  if (width <= 0) {
+    const gc = textLength(text);
+    return [
+      {
+        text,
+        globalGraphemeStart: 0,
+        graphemeCount: gc,
+        isLastOfLogicalLine: true,
+      },
+    ];
+  }
+
+  const logicalLines = text.split("\n");
+  const result: VisualLine[] = [];
+  let globalOffset = 0;
+
+  for (let i = 0; i < logicalLines.length; i++) {
+    const line = logicalLines[i];
+    const wrapped = wrapLine(line, width);
+
+    for (let j = 0; j < wrapped.length; j++) {
+      result.push({
+        text: wrapped[j],
+        globalGraphemeStart: globalOffset,
+        graphemeCount: textLength(wrapped[j]),
+        isLastOfLogicalLine: j === wrapped.length - 1,
+      });
+      globalOffset += textLength(wrapped[j]);
+    }
+
+    if (i < logicalLines.length - 1) {
+      globalOffset += 1;
+    }
+  }
+
+  return result.length > 0
+    ? result
+    : [
+        {
+          text: "",
+          globalGraphemeStart: 0,
+          graphemeCount: 0,
+          isLastOfLogicalLine: true,
+        },
+      ];
+}
+
+function cursorToVisualPos(
+  text: string,
+  cursorPos: number,
+  width: number,
+): { row: number; col: number } {
+  const vlines = getVisualLines(text, width);
+
+  for (let row = 0; row < vlines.length; row++) {
+    const vl = vlines[row];
+    const endPos = vl.globalGraphemeStart + vl.graphemeCount;
+
+    if (cursorPos <= endPos) {
+      return { row, col: cursorPos - vl.globalGraphemeStart };
+    }
+  }
+
+  const last = vlines[vlines.length - 1];
+  return { row: vlines.length - 1, col: last.graphemeCount };
+}
+
+function visualPosToCursor(
+  text: string,
+  row: number,
+  col: number,
+  width: number,
+): number {
+  const vlines = getVisualLines(text, width);
+  const clampedRow = Math.max(0, Math.min(row, vlines.length - 1));
+  const vl = vlines[clampedRow];
+  return vl.globalGraphemeStart + Math.min(col, vl.graphemeCount);
 }
 
 /**
@@ -208,6 +295,23 @@ export function Textarea(props: TextareaProps): Node {
   let lastScreenX = 0;
   let lastScreenY = 0;
 
+  const themeStyle = styleFallback(props.style, "textarea", "input");
+
+  const getPadding = (side: "paddingStart" | "paddingEnd"): number => {
+    const val = themeStyle[side];
+    return (
+      ((typeof val === "function" ? (val as () => number)() : val) as number) ??
+      0
+    );
+  };
+
+  const contentWidth = () => {
+    const ps = getPadding("paddingStart");
+    const pe = getPadding("paddingEnd");
+    if (getMaxHeight() === undefined) return getWidth() - ps - pe;
+    return getWidth() - ps - pe - 1;
+  };
+
   createEffect(() => {
     const val = getValue();
     const len = textLength(val);
@@ -221,14 +325,15 @@ export function Textarea(props: TextareaProps): Node {
     if (maxHeight === undefined) return; // No scrolling without maxHeight
 
     const val = getValue();
-    const cursorLineCol = posToLineCol(val, cursorPos());
-    const cursorLine = cursorLineCol.line;
+    const cw = contentWidth();
+    const visualPos = cursorToVisualPos(val, cursorPos(), cw);
+    const cursorRow = visualPos.row;
     const currentScrollTop = untrack(scrollTop);
 
-    if (cursorLine < currentScrollTop) {
-      setScrollTop(cursorLine);
-    } else if (cursorLine >= currentScrollTop + maxHeight) {
-      setScrollTop(cursorLine - maxHeight + 1);
+    if (cursorRow < currentScrollTop) {
+      setScrollTop(cursorRow);
+    } else if (cursorRow >= currentScrollTop + maxHeight) {
+      setScrollTop(cursorRow - maxHeight + 1);
     }
   });
 
@@ -254,7 +359,11 @@ export function Textarea(props: TextareaProps): Node {
     if (maxHeight === undefined) return;
 
     const val = getValue();
-    const lineCount = val.length === 0 ? 1 : val.split("\n").length;
+    const cw = contentWidth();
+    const vlines = isMultiline
+      ? getVisualLines(val, cw)
+      : getVisualLines(val, 0);
+    const lineCount = val.length === 0 ? 1 : vlines.length;
     const maxScroll = Math.max(0, lineCount - maxHeight);
 
     if (untrack(scrollTop) > maxScroll) {
@@ -268,8 +377,11 @@ export function Textarea(props: TextareaProps): Node {
     const val = getValue();
     const pos = cursorPos();
     const len = textLength(val);
-    const lines = val.split("\n");
-    const cursorLineCol = posToLineCol(val, pos);
+    const cw = contentWidth();
+    const vlines = isMultiline
+      ? getVisualLines(val, cw)
+      : getVisualLines(val, 0);
+    const visualPos = cursorToVisualPos(val, pos, isMultiline ? cw : 0);
 
     if (key.name === "left") {
       if (pos > 0) {
@@ -287,38 +399,40 @@ export function Textarea(props: TextareaProps): Node {
 
     if (key.name === "up") {
       if (!isMultiline) return false;
-      if (cursorLineCol.line > 0) {
-        const prevLineLen = textLength(lines[cursorLineCol.line - 1]);
-        const newCol = Math.min(cursorLineCol.column, prevLineLen);
-        setCursorPos(
-          lineColToPos(val, { line: cursorLineCol.line - 1, column: newCol }),
-        );
+      if (visualPos.row > 0) {
+        const targetRow = visualPos.row - 1;
+        setCursorPos(visualPosToCursor(val, targetRow, visualPos.col, cw));
       }
       return true;
     }
 
     if (key.name === "down") {
       if (!isMultiline) return false;
-      if (cursorLineCol.line < lines.length - 1) {
-        const nextLineLen = textLength(lines[cursorLineCol.line + 1]);
-        const newCol = Math.min(cursorLineCol.column, nextLineLen);
-        setCursorPos(
-          lineColToPos(val, { line: cursorLineCol.line + 1, column: newCol }),
-        );
+      if (visualPos.row < vlines.length - 1) {
+        const targetRow = visualPos.row + 1;
+        setCursorPos(visualPosToCursor(val, targetRow, visualPos.col, cw));
       }
       return true;
     }
 
     if (key.name === "home" || (key.ctrl && key.name === "a")) {
-      setCursorPos(lineColToPos(val, { line: cursorLineCol.line, column: 0 }));
+      if (isMultiline) {
+        setCursorPos(visualPosToCursor(val, visualPos.row, 0, cw));
+      } else {
+        setCursorPos(0);
+      }
       return true;
     }
 
     if (key.name === "end" || (key.ctrl && key.name === "e")) {
-      const currentLineLen = textLength(lines[cursorLineCol.line]);
-      setCursorPos(
-        lineColToPos(val, { line: cursorLineCol.line, column: currentLineLen }),
-      );
+      if (isMultiline) {
+        const vl = vlines[visualPos.row];
+        setCursorPos(
+          visualPosToCursor(val, visualPos.row, vl.graphemeCount, cw),
+        );
+      } else {
+        setCursorPos(len);
+      }
       return true;
     }
 
@@ -340,33 +454,33 @@ export function Textarea(props: TextareaProps): Node {
     }
 
     if (key.ctrl && key.name === "k") {
-      const currentLineEnd = lineColToPos(val, {
-        line: cursorLineCol.line,
-        column: textLength(lines[cursorLineCol.line]),
-      });
+      const vl = vlines[visualPos.row];
+      const visualRowEnd = vl.globalGraphemeStart + vl.graphemeCount;
 
-      if (pos === currentLineEnd && cursorLineCol.line < lines.length - 1) {
+      if (
+        pos === visualRowEnd &&
+        vl.isLastOfLogicalLine &&
+        visualPos.row < vlines.length - 1
+      ) {
         const beforeCursor = val.slice(0, posToCharIndex(val, pos));
         const afterCursor = val.slice(posToCharIndex(val, pos + 1));
         props.onChange?.(beforeCursor + afterCursor);
       } else {
         const beforeCursor = val.slice(0, posToCharIndex(val, pos));
-        const afterLine = val.slice(posToCharIndex(val, currentLineEnd));
-        props.onChange?.(beforeCursor + afterLine);
+        const afterVisualRow = val.slice(posToCharIndex(val, visualRowEnd));
+        props.onChange?.(beforeCursor + afterVisualRow);
       }
       return true;
     }
 
     if (key.ctrl && key.name === "u") {
-      const currentLineStart = lineColToPos(val, {
-        line: cursorLineCol.line,
-        column: 0,
-      });
+      const vl = vlines[visualPos.row];
+      const visualRowStart = vl.globalGraphemeStart;
 
-      const beforeLine = val.slice(0, posToCharIndex(val, currentLineStart));
+      const beforeVisualRow = val.slice(0, posToCharIndex(val, visualRowStart));
       const afterCursor = val.slice(posToCharIndex(val, pos));
-      props.onChange?.(beforeLine + afterCursor);
-      setCursorPos(currentLineStart);
+      props.onChange?.(beforeVisualRow + afterCursor);
+      setCursorPos(visualRowStart);
       return true;
     }
 
@@ -396,17 +510,20 @@ export function Textarea(props: TextareaProps): Node {
     if (isDisabled()) return;
 
     const val = getValue();
-    const lines = val.split("\n");
+    const cw = contentWidth();
+    const vlines = isMultiline
+      ? getVisualLines(val, cw)
+      : getVisualLines(val, 0);
 
     const relCol = event.x - lastScreenX;
     const relRow = event.y - lastScreenY;
 
+    const row = Math.max(0, Math.min(relRow, vlines.length - 1));
+    const vl = vlines[row];
     const displayCol = isMultiline ? relCol : relCol + scrollLeft();
-    const row = Math.max(0, Math.min(relRow, lines.length - 1));
-    const line = lines[row];
-    const col = displayColumnToGraphemePos(line, Math.max(0, displayCol));
+    const col = displayColumnToGraphemePos(vl.text, Math.max(0, displayCol));
 
-    setCursorPos(lineColToPos(val, { line: row, column: col }));
+    setCursorPos(vl.globalGraphemeStart + Math.min(col, vl.graphemeCount));
   };
 
   const isFocused = (): boolean => {
@@ -414,27 +531,14 @@ export function Textarea(props: TextareaProps): Node {
     return focusedNodeAccessor() === focusableNode;
   };
 
-  const themeStyle = styleFallback(props.style, "textarea", "input");
-
-  const getPadding = (side: "paddingStart" | "paddingEnd"): number => {
-    const val = themeStyle[side];
-    return (
-      ((typeof val === "function" ? (val as () => number)() : val) as number) ??
-      0
-    );
-  };
-
-  const contentWidth = () => {
-    if (getMaxHeight() === undefined) return getWidth();
-    const ps = getPadding("paddingStart");
-    const pe = getPadding("paddingEnd");
-    return getWidth() - ps - pe - 1;
-  };
-
   const contentNode = new Node({
     style: () => {
       const val = getValue();
-      const lineCount = val.length === 0 ? 1 : val.split("\n").length;
+      const cw = contentWidth();
+      const vlines = isMultiline
+        ? getVisualLines(val, cw)
+        : getVisualLines(val, 0);
+      const lineCount = val.length === 0 ? 1 : vlines.length;
 
       return {
         ...DEFAULT_FLEX_STYLE,
@@ -446,7 +550,11 @@ export function Textarea(props: TextareaProps): Node {
 
     measure(_availableWidth: number, _availableHeight: number) {
       const val = getValue();
-      const lineCount = val.length === 0 ? 1 : val.split("\n").length;
+      const cw = contentWidth();
+      const vlines = isMultiline
+        ? getVisualLines(val, cw)
+        : getVisualLines(val, 0);
+      const lineCount = val.length === 0 ? 1 : vlines.length;
       return { width: contentWidth(), height: lineCount };
     },
 
@@ -468,6 +576,7 @@ export function Textarea(props: TextareaProps): Node {
       const disabledDim = theme("textarea--disabled").dim as boolean;
 
       const hScroll = isMultiline ? 0 : scrollLeft();
+      const cw = contentWidth();
 
       if (val.length === 0 && placeholder.length > 0) {
         renderTextareaContent(
@@ -485,6 +594,7 @@ export function Textarea(props: TextareaProps): Node {
           hScroll,
           clip,
           cursorInverse,
+          isMultiline ? cw : 0,
         );
         return;
       }
@@ -506,6 +616,7 @@ export function Textarea(props: TextareaProps): Node {
         hScroll,
         clip,
         cursorInverse,
+        isMultiline ? cw : 0,
       );
     },
   });
@@ -571,31 +682,42 @@ function renderTextareaContent(
   scrollLeft = 0,
   clip?: Rect,
   cursorInverse = true,
+  cw = 0,
 ): void {
-  const lines = text.split("\n");
-  let globalGraphemeIndex = 0;
+  const vlines = getVisualLines(text, cw);
 
-  // Helper to check if a position is within the clip bounds
   const inClip = (cx: number, cy: number): boolean =>
     !clip || rectContains(clip, cx, cy);
 
-  for (let row = 0; row < Math.min(lines.length, height); row++) {
-    const line = lines[row];
-    let displayCol = 0; // Position in display coordinates
-    let graphemeIdx = 0; // Index of grapheme in this line
+  let cursorVisualRow = -1;
+  let cursorVisualCol = -1;
+  if (showCursor) {
+    const vp = cursorToVisualPos(text, cursorPos, cw);
+    cursorVisualRow = vp.row;
+    cursorVisualCol = vp.col;
+  }
+
+  for (let row = 0; row < Math.min(vlines.length, height); row++) {
+    const vl = vlines[row];
+    let displayCol = 0;
+    let graphemeIdx = 0;
     const screenY = y + row;
 
-    for (const grapheme of graphemes(line)) {
+    for (const grapheme of graphemes(vl.text)) {
       const graphemeWidth = graphemeDisplayWidth(grapheme);
 
-      // Check if this grapheme is visible (after scrollLeft, before width)
       const visibleStart = displayCol - scrollLeft;
       const isVisible =
         visibleStart + graphemeWidth > 0 && visibleStart < width;
 
       if (isVisible) {
         let modifiers = dim ? DIM : 0;
-        if (showCursor && cursorInverse && globalGraphemeIndex === cursorPos) {
+        if (
+          showCursor &&
+          cursorInverse &&
+          row === cursorVisualRow &&
+          graphemeIdx === cursorVisualCol
+        ) {
           modifiers |= INVERSE;
         }
 
@@ -616,43 +738,30 @@ function renderTextareaContent(
 
       displayCol += graphemeWidth;
       graphemeIdx++;
-      globalGraphemeIndex++;
 
-      // Stop if we've gone past the visible area
       if (displayCol - scrollLeft >= width) break;
     }
 
-    // Cursor at end of line (before newline)
     if (
       showCursor &&
-      globalGraphemeIndex === cursorPos &&
-      displayCol - scrollLeft < width &&
-      row < lines.length - 1
+      row === cursorVisualRow &&
+      cursorVisualCol === vl.graphemeCount
     ) {
-      const renderCol = displayCol - scrollLeft;
-      const screenX = x + renderCol;
-      if (renderCol >= 0 && inClip(screenX, screenY)) {
-        buffer.set(screenX, screenY, " ", fg, bg, cursorInverse ? INVERSE : 0);
-      }
-    }
-
-    if (row < lines.length - 1) {
-      globalGraphemeIndex++;
-    }
-  }
-
-  // Cursor at end of text
-  if (showCursor && cursorPos === textLength(text)) {
-    const cursorLineCol = posToLineCol(text, cursorPos);
-
-    if (cursorLineCol.line < height) {
-      const line = lines[cursorLineCol.line] ?? "";
-      const cursorCol =
-        displayWidthToPosition(line, cursorLineCol.column) - scrollLeft;
-      const screenX = x + cursorCol;
-      const screenY = y + cursorLineCol.line;
-      if (cursorCol >= 0 && cursorCol < width && inClip(screenX, screenY)) {
-        buffer.set(screenX, screenY, " ", fg, bg, cursorInverse ? INVERSE : 0);
+      const cursorDisplayCol =
+        displayWidthToPosition(vl.text, cursorVisualCol) - scrollLeft;
+      if (
+        cursorDisplayCol >= 0 &&
+        cursorDisplayCol < width &&
+        inClip(x + cursorDisplayCol, screenY)
+      ) {
+        buffer.set(
+          x + cursorDisplayCol,
+          screenY,
+          " ",
+          fg,
+          bg,
+          cursorInverse ? INVERSE : 0,
+        );
       }
     }
   }
