@@ -8,78 +8,7 @@ import {
 } from "../../src/core/runtime.ts";
 import { createRoot, createSignal } from "../../src/core/signals.ts";
 import { Spinner } from "../../src/ui/Spinner.ts";
-
-// Helper to create mock stdin/stdout for mount tests
-function createMockStdin() {
-  const handlers = new Map<string, Array<(...args: unknown[]) => void>>();
-  return {
-    isTTY: true,
-    setRawMode: function () {
-      return this;
-    },
-    on: function (event: string, handler: (...args: unknown[]) => void) {
-      const list = handlers.get(event) ?? [];
-      list.push(handler);
-      handlers.set(event, list);
-      return this;
-    },
-    off: function (event: string, handler: (...args: unknown[]) => void) {
-      const list = handlers.get(event);
-      if (list) {
-        const idx = list.indexOf(handler);
-        if (idx >= 0) list.splice(idx, 1);
-      }
-      return this;
-    },
-    emit: (event: string, ...args: unknown[]) => {
-      const list = handlers.get(event);
-      if (list) {
-        for (const h of list) h(...args);
-      }
-      return true;
-    },
-    resume: () => {},
-    pause: () => {},
-    listenerCount: (event: string) => handlers.get(event)?.length ?? 0,
-    _handlers: handlers,
-  };
-}
-
-function createMockStdout(cols = 80, rows = 24) {
-  const handlers = new Map<string, Array<() => void>>();
-  return {
-    isTTY: true,
-    columns: cols,
-    rows: rows,
-    written: "",
-    write: function (s: string) {
-      this.written += s;
-      return true;
-    },
-    on: function (event: string, handler: () => void) {
-      const list = handlers.get(event) ?? [];
-      list.push(handler);
-      handlers.set(event, list);
-      return this;
-    },
-    off: function (event: string, handler: () => void) {
-      const list = handlers.get(event);
-      if (list) {
-        const idx = list.indexOf(handler);
-        if (idx >= 0) list.splice(idx, 1);
-      }
-      return this;
-    },
-    emit: (event: string) => {
-      const list = handlers.get(event);
-      if (list) {
-        for (const h of list) h();
-      }
-      return true;
-    },
-    _handlers: handlers,
-  };
-}
+import { createMockStdin, createMockStdout } from "../test-helpers.ts";
 
 describe("Spinner", () => {
   describe("initial rendering", () => {

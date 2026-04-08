@@ -1,59 +1,16 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { type Color, Buffer as RenderBuffer } from "../../src/core/buffer.ts";
-import {
-  type LayoutNode,
-  type LayoutResult,
-  computeLayout,
-} from "../../src/core/layout.ts";
+import { computeLayout } from "../../src/core/layout.ts";
 import {
   DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
-  type InheritedStyle,
   type Node,
-  type Rect,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { Progress } from "../../src/ui/Progress.ts";
+import { paintTree, toLayoutNode } from "../test-helpers.ts";
 
-// Helper to convert Node tree to LayoutNode tree for computeLayout
-function toLayoutNode(node: Node): LayoutNode {
-  const style = typeof node.style === "function" ? node.style() : node.style;
-  const children =
-    typeof node.children === "function"
-      ? (node.children as () => Node[])()
-      : node.children;
-  return {
-    style,
-    measure: node.measure,
-    children: children?.map(toLayoutNode),
-  };
-}
-
-// Helper to paint a node tree recursively
-function paintTree(
-  node: Node,
-  layout: LayoutResult,
-  buffer: RenderBuffer,
-  inherited: InheritedStyle,
-  clip: Rect,
-): void {
-  if (node.render) {
-    node.render(layout, buffer, inherited, clip);
-  }
-
-  const children =
-    typeof node.children === "function"
-      ? (node.children as () => Node[])()
-      : (node.children ?? []);
-  const childLayouts = layout.children ?? [];
-
-  for (let i = 0; i < children.length && i < childLayouts.length; i++) {
-    paintTree(children[i], childLayouts[i], buffer, inherited, clip);
-  }
-}
-
-// Helper to render a Progress node to a buffer
 function renderProgress(node: Node, width: number): RenderBuffer {
   const buffer = new RenderBuffer(width + 5, 1);
   const layoutNode = toLayoutNode(node);

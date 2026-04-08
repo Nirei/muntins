@@ -1,64 +1,24 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { Buffer as RenderBuffer } from "../../src/core/buffer.ts";
-import {
-  type LayoutNode,
-  type LayoutResult,
-  computeLayout,
-} from "../../src/core/layout.ts";
+import { type LayoutResult, computeLayout } from "../../src/core/layout.ts";
 import {
   App,
   Box,
   DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
-  type InheritedStyle,
   type Node,
-  type Rect,
   createRef,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { Input } from "../../src/ui/Input.ts";
+import {
+  createMockStdin,
+  createMockStdout,
+  paintTree,
+  toLayoutNode,
+} from "../test-helpers.ts";
 
-// Helper to convert Node tree to LayoutNode tree for computeLayout
-function toLayoutNode(node: Node): LayoutNode {
-  const style = typeof node.style === "function" ? node.style() : node.style;
-  const children =
-    typeof node.children === "function"
-      ? (node.children as () => Node[])()
-      : node.children;
-  return {
-    style,
-    measure: node.measure,
-    children: children?.map(toLayoutNode),
-  };
-}
-
-// Helper to paint a node tree recursively (simplified version of runtime's paintNode)
-function paintTree(
-  node: Node,
-  layout: LayoutResult,
-  buffer: RenderBuffer,
-  inherited: InheritedStyle,
-  clip: Rect,
-): void {
-  // Paint this node if it has a render function
-  if (node.render) {
-    node.render(layout, buffer, inherited, clip);
-  }
-
-  // Paint children
-  const children =
-    typeof node.children === "function"
-      ? (node.children as () => Node[])()
-      : (node.children ?? []);
-  const childLayouts = layout.children ?? [];
-
-  for (let i = 0; i < children.length && i < childLayouts.length; i++) {
-    paintTree(children[i], childLayouts[i], buffer, inherited, clip);
-  }
-}
-
-// Helper to render an Input node to a buffer
 function renderInput(node: Node, width: number, height: number): RenderBuffer {
   const buffer = new RenderBuffer(width, height);
   const layoutNode = toLayoutNode(node);
@@ -67,79 +27,6 @@ function renderInput(node: Node, width: number, height: number): RenderBuffer {
   return buffer;
 }
 
-// Helper to create mock stdin for mount tests
-function createMockStdin() {
-  const handlers = new Map<string, Array<(...args: unknown[]) => void>>();
-  return {
-    isTTY: true,
-    setRawMode: function () {
-      return this;
-    },
-    on: function (event: string, handler: (...args: unknown[]) => void) {
-      const list = handlers.get(event) ?? [];
-      list.push(handler);
-      handlers.set(event, list);
-      return this;
-    },
-    off: function (event: string, handler: (...args: unknown[]) => void) {
-      const list = handlers.get(event);
-      if (list) {
-        const idx = list.indexOf(handler);
-        if (idx >= 0) list.splice(idx, 1);
-      }
-      return this;
-    },
-    emit: (event: string, ...args: unknown[]) => {
-      const list = handlers.get(event);
-      if (list) {
-        for (const h of list) h(...args);
-      }
-      return true;
-    },
-    resume: () => {},
-    pause: () => {},
-    listenerCount: (event: string) => handlers.get(event)?.length ?? 0,
-    _handlers: handlers,
-  };
-}
-
-function createMockStdout(cols = 80, rows = 24) {
-  const handlers = new Map<string, Array<() => void>>();
-  return {
-    isTTY: true,
-    columns: cols,
-    rows: rows,
-    written: "",
-    write: function (s: string) {
-      this.written += s;
-      return true;
-    },
-    on: function (event: string, handler: () => void) {
-      const list = handlers.get(event) ?? [];
-      list.push(handler);
-      handlers.set(event, list);
-      return this;
-    },
-    off: function (event: string, handler: () => void) {
-      const list = handlers.get(event);
-      if (list) {
-        const idx = list.indexOf(handler);
-        if (idx >= 0) list.splice(idx, 1);
-      }
-      return this;
-    },
-    emit: (event: string) => {
-      const list = handlers.get(event);
-      if (list) {
-        for (const h of list) h();
-      }
-      return true;
-    },
-    _handlers: handlers,
-  };
-}
-
-// Helper to create a mouse press event
 function mousePress(x: number, y: number, target: object = {}) {
   return {
     type: "mouse" as const,
@@ -154,7 +41,6 @@ function mousePress(x: number, y: number, target: object = {}) {
   };
 }
 
-// Helper to create a basic key event
 function keyEvent(
   name: string,
   char = "",

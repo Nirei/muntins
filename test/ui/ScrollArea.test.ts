@@ -11,113 +11,12 @@ import {
   createRef,
 } from "../../src/core/runtime.ts";
 import { createSignal } from "../../src/core/signals.ts";
-
-// Helper to create mock stdin for mount tests
-function createMockStdin() {
-  const handlers = new Map<string, Array<(...args: unknown[]) => void>>();
-  return {
-    isTTY: true,
-    setRawMode: function () {
-      return this;
-    },
-    on: function (event: string, handler: (...args: unknown[]) => void) {
-      const list = handlers.get(event) ?? [];
-      list.push(handler);
-      handlers.set(event, list);
-      return this;
-    },
-    off: function (event: string, handler: (...args: unknown[]) => void) {
-      const list = handlers.get(event);
-      if (list) {
-        const idx = list.indexOf(handler);
-        if (idx >= 0) list.splice(idx, 1);
-      }
-      return this;
-    },
-    emit: (event: string, ...args: unknown[]) => {
-      const list = handlers.get(event);
-      if (list) {
-        for (const h of list) h(...args);
-      }
-      return true;
-    },
-    resume: () => {},
-    pause: () => {},
-    listenerCount: (event: string) => handlers.get(event)?.length ?? 0,
-    _handlers: handlers,
-  };
-}
-
-function createMockStdout(cols = 80, rows = 24) {
-  const handlers = new Map<string, Array<() => void>>();
-  return {
-    isTTY: true,
-    columns: cols,
-    rows: rows,
-    written: "",
-    write: function (s: string) {
-      this.written += s;
-      return true;
-    },
-    on: function (event: string, handler: () => void) {
-      const list = handlers.get(event) ?? [];
-      list.push(handler);
-      handlers.set(event, list);
-      return this;
-    },
-    off: function (event: string, handler: () => void) {
-      const list = handlers.get(event);
-      if (list) {
-        const idx = list.indexOf(handler);
-        if (idx >= 0) list.splice(idx, 1);
-      }
-      return this;
-    },
-    emit: (event: string) => {
-      const list = handlers.get(event);
-      if (list) {
-        for (const h of list) h();
-      }
-      return true;
-    },
-    _handlers: handlers,
-  };
-}
-
-// Helper to create a key event
-function keyEvent(
-  name: string,
-  opts: Partial<{
-    ctrl: boolean;
-    alt: boolean;
-    shift: boolean;
-  }> = {},
-) {
-  return {
-    type: "key" as const,
-    name,
-    char: name.length === 1 ? name : "",
-    ctrl: opts.ctrl ?? false,
-    alt: opts.alt ?? false,
-    shift: opts.shift ?? false,
-    sequence: name,
-    target: {},
-  };
-}
-
-// Helper to create a scroll event
-function scrollEvent(direction: "up" | "down", x = 0, y = 0) {
-  return {
-    type: "scroll" as const,
-    direction,
-    x,
-    y,
-    ctrl: false,
-    alt: false,
-    shift: false,
-    target: {},
-  };
-}
+import {
+  createMockStdin,
+  createMockStdout,
+  keyEvent,
+  scrollEvent,
+} from "../test-helpers.ts";
 
 function mountScrollArea(
   props: Omit<Parameters<typeof ScrollArea>[0], "children"> & {
