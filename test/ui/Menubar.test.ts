@@ -55,6 +55,41 @@ function sendKey(mockStdin: MockStdin, name: string, sequence?: string): void {
   mockStdin.emit("keypress", seq, { name, sequence: seq });
 }
 
+function mountWithHighlightTracking() {
+  const mockStdin = createMockStdin();
+  const mockStdout = createMockStdout();
+  let currentHighlight = "";
+  const app = App.mount(
+    () =>
+      Box({
+        children: [
+          Menubar({
+            menus: createSampleMenus(),
+            autoFocus: true,
+            renderMenuItem: (props) => {
+              return Text({
+                content: () => {
+                  if (props.highlighted()) currentHighlight = props.item.label;
+                  return props.item.label;
+                },
+              });
+            },
+          }),
+        ],
+      }),
+    {
+      stdin: mockStdin as unknown as NodeJS.ReadStream,
+      stdout: mockStdout as unknown as NodeJS.WriteStream,
+      fpsLimit: 0,
+    },
+  );
+  return {
+    mockStdin,
+    app,
+    getHighlight: () => currentHighlight,
+  };
+}
+
 describe("Menubar", () => {
   describe("rendering", () => {
     it("renders all menu labels", () => {
@@ -193,149 +228,58 @@ describe("Menubar", () => {
       app.unmount();
     });
 
-    it("down arrow opens focused menu", async () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
+    for (const key of ["down", "enter", "space"] as const) {
+      it(`${key} opens focused menu`, async () => {
+        const mockStdin = createMockStdin();
+        const mockStdout = createMockStdout();
 
-      const app = App.mount(
-        () =>
-          Box({
-            height: 10,
-            children: [
-              Menubar({
-                menus: createSampleMenus(),
-                autoFocus: true,
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-          fpsLimit: 0,
-        },
-      );
+        const app = App.mount(
+          () =>
+            Box({
+              height: 10,
+              children: [
+                Menubar({
+                  menus: createSampleMenus(),
+                  autoFocus: true,
+                }),
+              ],
+            }),
+          {
+            stdin: mockStdin as unknown as NodeJS.ReadStream,
+            stdout: mockStdout as unknown as NodeJS.WriteStream,
+            fpsLimit: 0,
+          },
+        );
 
-      // Menu items not visible initially
-      assert.ok(!mockStdout.written.includes("New"));
+        assert.ok(!mockStdout.written.includes("New"));
 
-      // Open menu with down arrow
-      sendKey(mockStdin, "down");
-      await nextRender();
+        sendKey(mockStdin, key);
+        await nextRender();
 
-      // Now menu items should be visible
-      assert.ok(mockStdout.written.includes("New"));
-      assert.ok(mockStdout.written.includes("Open"));
+        assert.ok(mockStdout.written.includes("New"));
+        assert.ok(mockStdout.written.includes("Open"));
 
-      app.unmount();
-    });
-
-    it("enter opens focused menu", async () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
-
-      const app = App.mount(
-        () =>
-          Box({
-            height: 10,
-            children: [
-              Menubar({
-                menus: createSampleMenus(),
-                autoFocus: true,
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-          fpsLimit: 0,
-        },
-      );
-
-      sendKey(mockStdin, "enter");
-      await nextRender();
-      assert.ok(mockStdout.written.includes("New"));
-
-      app.unmount();
-    });
-
-    it("space opens focused menu", async () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
-
-      const app = App.mount(
-        () =>
-          Box({
-            height: 10,
-            children: [
-              Menubar({
-                menus: createSampleMenus(),
-                autoFocus: true,
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-          fpsLimit: 0,
-        },
-      );
-
-      sendKey(mockStdin, "space");
-      await nextRender();
-      assert.ok(mockStdout.written.includes("New"));
-
-      app.unmount();
-    });
+        app.unmount();
+      });
+    }
   });
 
   describe("keyboard navigation - open menu", () => {
     it("up/down navigates menu items (skips separators)", async () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
+      const { mockStdin, app, getHighlight } = mountWithHighlightTracking();
 
-      let currentHighlight = "";
-      const app = App.mount(
-        () =>
-          Box({
-            children: [
-              Menubar({
-                menus: createSampleMenus(),
-                autoFocus: true,
-                renderMenuItem: (props) => {
-                  return Text({
-                    content: () => {
-                      if (props.highlighted())
-                        currentHighlight = props.item.label;
-                      return props.item.label;
-                    },
-                  });
-                },
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-          fpsLimit: 0,
-        },
-      );
-
-      // Open menu
       sendKey(mockStdin, "down");
       await nextRender();
 
-      // First item (New) should be highlighted
-      assert.strictEqual(currentHighlight, "New");
+      assert.strictEqual(getHighlight(), "New");
 
-      // Navigate down
       sendKey(mockStdin, "down");
       await nextRender();
-      assert.strictEqual(currentHighlight, "Open");
+      assert.strictEqual(getHighlight(), "Open");
 
-      // Navigate down again - should skip separator and go to Exit
       sendKey(mockStdin, "down");
       await nextRender();
-      assert.strictEqual(currentHighlight, "Exit");
+      assert.strictEqual(getHighlight(), "Exit");
 
       app.unmount();
     });
@@ -465,95 +409,35 @@ describe("Menubar", () => {
     });
 
     it("home jumps to first item", async () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
+      const { mockStdin, app, getHighlight } = mountWithHighlightTracking();
 
-      let currentHighlight = "";
-      const app = App.mount(
-        () =>
-          Box({
-            children: [
-              Menubar({
-                menus: createSampleMenus(),
-                autoFocus: true,
-                renderMenuItem: (props) => {
-                  return Text({
-                    content: () => {
-                      if (props.highlighted())
-                        currentHighlight = props.item.label;
-                      return props.item.label;
-                    },
-                  });
-                },
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-          fpsLimit: 0,
-        },
-      );
+      sendKey(mockStdin, "down");
+      await nextRender();
+      sendKey(mockStdin, "down");
+      await nextRender();
+      sendKey(mockStdin, "down");
+      await nextRender();
+      sendKey(mockStdin, "down");
+      await nextRender();
+      assert.strictEqual(getHighlight(), "Exit");
 
-      // Open menu and navigate to last
-      sendKey(mockStdin, "down");
-      await nextRender();
-      sendKey(mockStdin, "down");
-      await nextRender();
-      sendKey(mockStdin, "down");
-      await nextRender();
-      sendKey(mockStdin, "down");
-      await nextRender();
-      assert.strictEqual(currentHighlight, "Exit");
-
-      // Jump to first
       sendKey(mockStdin, "home");
       await nextRender();
-      assert.strictEqual(currentHighlight, "New");
+      assert.strictEqual(getHighlight(), "New");
 
       app.unmount();
     });
 
     it("end jumps to last item", async () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
+      const { mockStdin, app, getHighlight } = mountWithHighlightTracking();
 
-      let currentHighlight = "";
-      const app = App.mount(
-        () =>
-          Box({
-            children: [
-              Menubar({
-                menus: createSampleMenus(),
-                autoFocus: true,
-                renderMenuItem: (props) => {
-                  return Text({
-                    content: () => {
-                      if (props.highlighted())
-                        currentHighlight = props.item.label;
-                      return props.item.label;
-                    },
-                  });
-                },
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-          fpsLimit: 0,
-        },
-      );
-
-      // Open menu
       sendKey(mockStdin, "down");
       await nextRender();
-      assert.strictEqual(currentHighlight, "New");
+      assert.strictEqual(getHighlight(), "New");
 
-      // Jump to last
       sendKey(mockStdin, "end");
       await nextRender();
-      assert.strictEqual(currentHighlight, "Exit");
+      assert.strictEqual(getHighlight(), "Exit");
 
       app.unmount();
     });

@@ -189,154 +189,61 @@ describe("Toast", () => {
   });
 
   describe("positions", () => {
-    it("renders with default position bottom-right", () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
+    const positions = [
+      {
+        name: "default bottom-right",
+        position: undefined,
+        content: "BottomRight",
+      },
+      { name: "top-left", position: "top-left" as const, content: "TopLeft" },
+      {
+        name: "top-right",
+        position: "top-right" as const,
+        content: "TopRight",
+      },
+      {
+        name: "top-center",
+        position: "top-center" as const,
+        content: "TopCenter",
+      },
+      {
+        name: "bottom-left",
+        position: "bottom-left" as const,
+        content: "BottomLeft",
+      },
+      {
+        name: "bottom-center",
+        position: "bottom-center" as const,
+        content: "BottomCenter",
+      },
+    ];
 
-      const app = App.mount(
-        () =>
-          Box({
-            children: [
-              Toast({
-                children: "BottomRight",
-                duration: 0,
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-        },
-      );
+    for (const { name, position, content } of positions) {
+      it(`renders at ${name} position`, () => {
+        const mockStdin = createMockStdin();
+        const mockStdout = createMockStdout();
 
-      assert.ok(mockStdout.written.includes("BottomRight"));
-      app.unmount();
-    });
+        const app = App.mount(
+          () =>
+            Box({
+              children: [
+                Toast({
+                  children: content,
+                  position,
+                  duration: 0,
+                }),
+              ],
+            }),
+          {
+            stdin: mockStdin as unknown as NodeJS.ReadStream,
+            stdout: mockStdout as unknown as NodeJS.WriteStream,
+          },
+        );
 
-    it("renders at top-left position", () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
-
-      const app = App.mount(
-        () =>
-          Box({
-            children: [
-              Toast({
-                children: "TopLeft",
-                position: "top-left",
-                duration: 0,
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-        },
-      );
-
-      assert.ok(mockStdout.written.includes("TopLeft"));
-      app.unmount();
-    });
-
-    it("renders at top-right position", () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
-
-      const app = App.mount(
-        () =>
-          Box({
-            children: [
-              Toast({
-                children: "TopRight",
-                position: "top-right",
-                duration: 0,
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-        },
-      );
-
-      assert.ok(mockStdout.written.includes("TopRight"));
-      app.unmount();
-    });
-
-    it("renders at top-center position", () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
-
-      const app = App.mount(
-        () =>
-          Box({
-            children: [
-              Toast({
-                children: "TopCenter",
-                position: "top-center",
-                duration: 0,
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-        },
-      );
-
-      assert.ok(mockStdout.written.includes("TopCenter"));
-      app.unmount();
-    });
-
-    it("renders at bottom-left position", () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
-
-      const app = App.mount(
-        () =>
-          Box({
-            children: [
-              Toast({
-                children: "BottomLeft",
-                position: "bottom-left",
-                duration: 0,
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-        },
-      );
-
-      assert.ok(mockStdout.written.includes("BottomLeft"));
-      app.unmount();
-    });
-
-    it("renders at bottom-center position", () => {
-      const mockStdin = createMockStdin();
-      const mockStdout = createMockStdout();
-
-      const app = App.mount(
-        () =>
-          Box({
-            children: [
-              Toast({
-                children: "BottomCenter",
-                position: "bottom-center",
-                duration: 0,
-              }),
-            ],
-          }),
-        {
-          stdin: mockStdin as unknown as NodeJS.ReadStream,
-          stdout: mockStdout as unknown as NodeJS.WriteStream,
-        },
-      );
-
-      assert.ok(mockStdout.written.includes("BottomCenter"));
-      app.unmount();
-    });
+        assert.ok(mockStdout.written.includes(content));
+        app.unmount();
+      });
+    }
 
     it("accepts reactive position prop", () => {
       const mockStdin = createMockStdin();
