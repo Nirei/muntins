@@ -73,7 +73,7 @@ export function Button(props: ButtonProps): Node {
   const ref = createRef(props.ref);
   const focus = useFocus();
 
-  const isFocused = () => focus.current() === ref.current
+  const isFocused = () => focus.current() === ref.current;
 
   const handleActivate = (_event: ActivateEvent): void => {
     if (isDisabled()) return;

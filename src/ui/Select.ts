@@ -3,7 +3,7 @@
 import type { KeyEvent, MouseEvent } from "../core/input.ts";
 import type { ReactiveFlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
-import { Box, createRef, For, Text, useFocus } from "../core/runtime.ts";
+import { Box, For, Text, createRef, useFocus } from "../core/runtime.ts";
 import { type MaybeAccessor, createSignal, resolve } from "../core/signals.ts";
 import { styleFallback, theme } from "../core/theme.ts";
 import { Popover } from "./Popover.ts";
@@ -171,7 +171,7 @@ export function Select<T>(props: SelectProps<T>): Node {
       const node = Box({
         ...styleFallback(
           props.style,
-          () => isFocused() ? "select--focused" : "",
+          () => (isFocused() ? "select--focused" : ""),
           "select--trigger",
           "input",
         ),

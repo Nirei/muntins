@@ -27,7 +27,7 @@ export interface Ref {
  * When a node is disposed (e.g., via Show/For), the ref still holds
  * the stale reference. Users should check node validity before use,
  * or set ref.current = null in an onCleanup callback if needed.
- * 
+ *
  * Allows passing another ref, in which case, it will passthrough.
  * This provides ergonomics for Components that need to capture their
  * parent's ref.

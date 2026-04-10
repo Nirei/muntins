@@ -189,8 +189,8 @@ export function styleFallback(
     } else {
       result[key] = () => {
         for (const themeKey of themeKeys) {
-          const slice = getTheme()[resolve(themeKey)] ?? {}
-          const val = slice[key]
+          const slice = getTheme()[resolve(themeKey)] ?? {};
+          const val = slice[key];
           if (val !== undefined) return val;
         }
         return undefined;

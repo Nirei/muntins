@@ -3,7 +3,7 @@
 import type { KeyEvent, MouseEvent } from "../core/input.ts";
 import type { ReactiveFlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime.ts";
-import { Box, createRef, For, Text, useFocus } from "../core/runtime.ts";
+import { Box, For, Text, createRef, useFocus } from "../core/runtime.ts";
 import {
   type Accessor,
   type MaybeAccessor,
@@ -75,7 +75,10 @@ function defaultRenderOption<T>(props: RadioOptionRenderProps<T>): Node {
         },
         ...styleFallback(
           undefined,
-          () => (props.highlighted() && props.focused() ? "radio-group--focused" : ""),
+          () =>
+            props.highlighted() && props.focused()
+              ? "radio-group--focused"
+              : "",
           () => (props.disabled() ? "radio-group--disabled" : ""),
           "radio-group",
         ),
@@ -84,8 +87,7 @@ function defaultRenderOption<T>(props: RadioOptionRenderProps<T>): Node {
         content: props.option.label,
         ...styleFallback(
           undefined,
-          () =>
-            props.disabled() ? "radio-group--disabled" : "",
+          () => (props.disabled() ? "radio-group--disabled" : ""),
           "radio-group--label",
         ),
       }),
@@ -120,8 +122,8 @@ function defaultRenderOption<T>(props: RadioOptionRenderProps<T>): Node {
 export function RadioGroup<T>(props: RadioGroupProps<T>): Node {
   const [highlightedIndex, setHighlightedIndex] = createSignal(0);
   const ref = createRef(props.ref);
-  const focus = useFocus()
-  const focused = () => focus.current() === ref.current
+  const focus = useFocus();
+  const focused = () => focus.current() === ref.current;
 
   const getValue = () => resolve(props.value);
   const isDisabled = () => resolve(props.disabled) ?? false;
@@ -181,18 +183,20 @@ export function RadioGroup<T>(props: RadioGroupProps<T>): Node {
     ref: ref,
     onKeyPress: handleKeyPress,
     ...styleFallback(props.style, "radio-group"),
-    children: For({ each: props.options, render: ((opt, index) =>
-      Box({
-        onMousePress: handleOptionMousePress(index()),
-        children: [
-          defaultRenderOption({
-            option: opt(),
-            focused,
-            highlighted: () => highlightedIndex() === index(),
-            disabled: isDisabled,
-          }),
-        ],
-      }))
+    children: For({
+      each: props.options,
+      render: (opt, index) =>
+        Box({
+          onMousePress: handleOptionMousePress(index()),
+          children: [
+            defaultRenderOption({
+              option: opt(),
+              focused,
+              highlighted: () => highlightedIndex() === index(),
+              disabled: isDisabled,
+            }),
+          ],
+        }),
     }),
   });
 }

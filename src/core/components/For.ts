@@ -2,10 +2,10 @@ import { DEFAULT_FLEX_STYLE } from "../layout.ts";
 import { App } from "../runtime/App.ts";
 import { Node } from "../runtime/Node.ts";
 import {
+  type MaybeAccessor,
   createEffect,
   createRoot,
   createSignal,
-  type MaybeAccessor,
   onCleanup,
   resolve,
 } from "../signals.ts";

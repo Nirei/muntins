@@ -61,7 +61,11 @@ export function Label(props: LabelProps): Node {
 
   return Text({
     content: children,
-    ...styleFallback(style, () => isFocused() ? "label--focused" : "", "label"),
+    ...styleFallback(
+      style,
+      () => (isFocused() ? "label--focused" : ""),
+      "label",
+    ),
     onMousePress: handleMousePress,
   });
 }
