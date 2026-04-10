@@ -215,6 +215,7 @@ export function ScrollArea(props: ScrollAreaProps): Node {
   const contentBox = Box({
     flexDirection: "column",
     flexShrink: 0,
+    minWidth: 0,
     marginTop: () => -getScrollTop(),
     ...(props.minHeight !== undefined ? { minHeight: props.minHeight } : {}),
     ref: contentRef,
@@ -246,6 +247,7 @@ export function ScrollArea(props: ScrollAreaProps): Node {
     children: [
       Box({
         flexGrow: 1,
+        minWidth: 0,
         flexDirection: "column",
         overflow: "hidden",
         maxHeight: props.height,

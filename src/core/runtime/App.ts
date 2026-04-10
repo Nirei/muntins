@@ -177,7 +177,10 @@ export class App {
           if (base.height === "auto") {
             return {
               ...base,
-              minHeight: Math.max(base.minHeight, stdout.rows),
+              minHeight: Math.max(
+                typeof base.minHeight === "number" ? base.minHeight : 0,
+                stdout.rows,
+              ),
             };
           }
           return base;

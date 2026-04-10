@@ -33,9 +33,9 @@ export interface FlexStyle {
   flexBasis: number | "auto";
   width: number | "auto";
   height: number | "auto";
-  minWidth: number;
+  minWidth: number | "auto";
   maxWidth: number | null;
-  minHeight: number;
+  minHeight: number | "auto";
   maxHeight: number | null;
   paddingTop: number;
   paddingEnd: number;
@@ -117,9 +117,9 @@ export const DEFAULT_FLEX_STYLE: FlexStyle = {
   flexBasis: "auto",
   width: "auto",
   height: "auto",
-  minWidth: 0,
+  minWidth: "auto",
   maxWidth: null,
-  minHeight: 0,
+  minHeight: "auto",
   maxHeight: null,
   paddingTop: 0,
   paddingEnd: 0,
@@ -262,8 +262,11 @@ function clamp(
 }
 
 function clampBoxSize(box: LayoutBox): void {
-  box.width = clamp(box.width, box.style.minWidth, box.style.maxWidth);
-  box.height = clamp(box.height, box.style.minHeight, box.style.maxHeight);
+  const minW = typeof box.style.minWidth === "number" ? box.style.minWidth : 0;
+  const minH =
+    typeof box.style.minHeight === "number" ? box.style.minHeight : 0;
+  box.width = clamp(box.width, minW, box.style.maxWidth);
+  box.height = clamp(box.height, minH, box.style.maxHeight);
 }
 
 function isSpaceJustify(justify: FlexStyle["justifyContent"]): boolean {
@@ -334,14 +337,17 @@ function getHeightPaddingBorder(style: FlexStyle): number {
 
 /**
  * Compute automatic minimum sizes for a layout box (CSS min-width:auto / min-height:auto).
- * Must be called bottom-up so children's autoMin values are already set.
+ * Must be called after children are resolved so their autoMin values are set.
  *
- * For leaf nodes (with measure): the minimum is the intrinsic measured size.
+ * For leaf nodes (with measure): autoMin is 0. This matches the practical
+ * behavior needed for terminal UIs where horizontal overflow is never useful.
+ * Text wrapping and overflow:hidden handle visual containment.
+ *
  * For containers: padding + border + children's minimums along the main axis.
  */
 function computeAutoMin(box: LayoutBox): void {
   if (box.node.measure) {
-    box.autoMinWidth = box.width;
+    box.autoMinWidth = 0;
     box.autoMinHeight = box.height;
     return;
   }
@@ -541,15 +547,29 @@ function calculateIntrinsicSize(
   return contentSize + paddingBorder;
 }
 
-function resolveIntrinsicSize(box: LayoutBox): void {
+/**
+ * Resolves intrinsic sizes recursively, top-down, propagating available width
+ * from parent to children. This ensures leaf measure functions receive a
+ * constrained width when the container has a definite size, enabling text
+ * wrapping and proper flex distribution.
+ *
+ * The available width for a child depends on the parent's flex direction:
+ * - Column parent: children share the cross-axis width, so availableWidth
+ *   is the parent's content width.
+ * - Row parent: children share the main-axis width, so availableWidth
+ *   is the row's content width as an upper bound for each child.
+ */
+function resolveIntrinsicSizeRecursive(
+  box: LayoutBox,
+  availableWidth: number,
+): void {
   const style = box.style;
   const isRoot = box.parent === null;
 
-  // Determine parent's flex direction to know which axis flexBasis applies to
   const parentIsRow = box.parent?.style.flexDirection === "row";
   const parentIsColumn = box.parent?.style.flexDirection === "column";
 
-  // 1. If flexBasis is numeric, use it for the main axis (determined by parent's direction)
+  // 1. If flexBasis is numeric, use it for the main axis
   if (typeof style.flexBasis === "number" && box.parent !== null) {
     if (parentIsRow) {
       box.width = style.flexBasis;
@@ -558,7 +578,7 @@ function resolveIntrinsicSize(box: LayoutBox): void {
     }
   }
 
-  // 2. If explicit size, use it (overrides flexBasis if both are set)
+  // 2. If explicit size, use it (overrides flexBasis)
   if (typeof style.width === "number") {
     box.width = style.width;
   }
@@ -566,60 +586,58 @@ function resolveIntrinsicSize(box: LayoutBox): void {
     box.height = style.height;
   }
 
-  // 3. If measure function (leaf node like Text), use it for remaining auto dimensions
-  if (box.node.measure) {
-    // Calculate available space from parent's content area.
-    // If explicit size or flexBasis already set a dimension, use that minus padding and border.
-    // Otherwise Infinity (unconstrained).
-    const paddingStart = style.paddingStart;
-    const paddingEnd = style.paddingEnd;
-    const paddingTop = style.paddingTop;
-    const paddingBottom = style.paddingBottom;
-    const borderStartSize = borderSize(style.borderStart);
-    const borderEndSize = borderSize(style.borderEnd);
-    const borderTopSize = borderSize(style.borderTop);
-    const borderBottomSize = borderSize(style.borderBottom);
+  // Compute this box's content area width for propagating to children
+  const contentWidth = Math.max(
+    0,
+    box.width -
+      style.paddingStart -
+      style.paddingEnd -
+      borderSize(style.borderStart) -
+      borderSize(style.borderEnd),
+  );
 
-    // box.width may already be set by flexBasis or explicit width
+  // If width is still 0 (auto), use the available width from parent
+  const effectiveContentWidth = box.width > 0 ? contentWidth : availableWidth;
+
+  // 3. If measure function (leaf node like Text), measure with constrained width
+  if (box.node.measure) {
     const widthKnown = box.width > 0;
     const heightKnown = box.height > 0;
 
-    const availW = widthKnown
-      ? Math.max(
-          0,
-          box.width -
-            paddingStart -
-            paddingEnd -
-            borderStartSize -
-            borderEndSize,
-        )
-      : Number.POSITIVE_INFINITY;
+    const availW = widthKnown ? contentWidth : effectiveContentWidth;
     const availH = heightKnown
       ? Math.max(
           0,
           box.height -
-            paddingTop -
-            paddingBottom -
-            borderTopSize -
-            borderBottomSize,
+            style.paddingTop -
+            style.paddingBottom -
+            borderSize(style.borderTop) -
+            borderSize(style.borderBottom),
         )
       : Number.POSITIVE_INFINITY;
 
     const measured = box.node.measure(availW, availH);
 
-    // Only use measured size for dimensions not already set
     if (!widthKnown) box.width = measured.width;
     if (!heightKnown) box.height = measured.height;
 
-    // Clamp to min/max and return early
     clampBoxSize(box);
     computeAutoMin(box);
     return;
   }
 
-  // 4. Calculate from children (for containers)
-  // Root's auto dimensions use available space (set before this pass), not intrinsic size
-  // flexBasis only affects main axis, so cross-axis still needs intrinsic calculation
+  // 4. Container: recurse into children with propagated available width
+  const childAvailableWidth =
+    style.flexDirection === "column"
+      ? effectiveContentWidth
+      : effectiveContentWidth;
+
+  for (const child of box.children) {
+    if (child.style.display === "none") continue;
+    resolveIntrinsicSizeRecursive(child, childAvailableWidth);
+  }
+
+  // 5. Compute intrinsic sizes from children (same as before)
   const widthSetByFlexBasis =
     typeof style.flexBasis === "number" && parentIsRow;
   const heightSetByFlexBasis =
@@ -632,10 +650,7 @@ function resolveIntrinsicSize(box: LayoutBox): void {
     box.height = calculateIntrinsicSize(box, "height");
   }
 
-  // 5. Clamp to min/max
   clampBoxSize(box);
-
-  // 6. Compute automatic minimum (bottom-up, children already computed)
   computeAutoMin(box);
 }
 
@@ -688,7 +703,8 @@ function distributeShrinkForLine(
       const baseSize = isRow ? child.width : child.height;
       const explicitMin = isRow ? child.style.minWidth : child.style.minHeight;
       const autoMin = isRow ? child.autoMinWidth : child.autoMinHeight;
-      const effectiveMin = Math.max(explicitMin, autoMin);
+      const effectiveMin =
+        typeof explicitMin === "number" ? explicitMin : autoMin;
       const shrinkable = Math.max(0, baseSize - effectiveMin);
       const weight = child.style.flexShrink * shrinkable;
       shrinkChildren.push(child);
@@ -921,15 +937,9 @@ function positionAbsoluteChildren(
     // If size changed due to stretch constraints, re-compute intrinsic sizes
     // and re-layout the child's descendants
     if (sizeChanged) {
-      // Build bottom-up queue for this subtree and re-run intrinsic sizing
-      const queue: LayoutBox[] = [];
-      const buildQueue = (b: LayoutBox) => {
-        for (const c of b.children) buildQueue(c);
-        queue.push(b);
-      };
-      for (const c of child.children) buildQueue(c);
-      for (const b of queue) {
-        resolveIntrinsicSize(b);
+      const absoluteContentWidth = contentWidth;
+      for (const c of child.children) {
+        resolveIntrinsicSizeRecursive(c, absoluteContentWidth);
       }
       resolveFlexAndPosition(child);
     }
@@ -1219,16 +1229,11 @@ export function computeLayout(
   root.x = 0;
   root.y = 0;
 
-  // 3. Build traversal queues (top-down computed once, bottom-up is reversed copy)
+  // 3. Resolve intrinsic sizes (top-down recursive with width propagation)
+  resolveIntrinsicSizeRecursive(root, root.width);
+
+  // 4. Resolve flex and positions (top-down)
   const topDownQueue = buildTopDownQueue(root);
-  const bottomUpQueue = [...topDownQueue].reverse();
-
-  // 4. Pass 2: Resolve intrinsic sizes (bottom-up)
-  for (const box of bottomUpQueue) {
-    resolveIntrinsicSize(box);
-  }
-
-  // 5. Pass 3: Resolve flex and positions (top-down)
   for (const box of topDownQueue) {
     resolveFlexAndPosition(box);
   }
