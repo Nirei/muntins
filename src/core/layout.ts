@@ -347,6 +347,12 @@ function getHeightPaddingBorder(style: FlexStyle): number {
  */
 function computeAutoMin(box: LayoutBox): void {
   if (box.node.measure) {
+    // CSS spec: overflow != visible ⇒ automatic minimum size is 0
+    if (box.style.overflow !== "visible") {
+      box.autoMinWidth = 0;
+      box.autoMinHeight = 0;
+      return;
+    }
     box.autoMinWidth = 0;
     box.autoMinHeight = box.height;
     return;
@@ -370,8 +376,10 @@ function computeAutoMin(box: LayoutBox): void {
   }
 
   const isRow = style.flexDirection === "row";
+  const isWrap = style.flexWrap === "wrap";
   let mainSum = 0;
   let crossMax = 0;
+  let mainMax = 0;
 
   for (let i = 0; i < visible.length; i++) {
     const child = visible[i];
@@ -382,14 +390,19 @@ function computeAutoMin(box: LayoutBox): void {
     const crossMargin = getCrossMargin(cs, isRow);
     mainSum += childMainMin + mainMargin + (i > 0 ? style.gap : 0);
     crossMax = Math.max(crossMax, childCrossMin + crossMargin);
+    mainMax = Math.max(mainMax, childMainMin + mainMargin);
   }
 
+  // With flex-wrap, items flow to multiple lines so the minimum is one
+  // line's worth (tallest single item) rather than all items stacked.
+  const mainAutoMin = isWrap ? mainMax : mainSum;
+
   if (isRow) {
-    box.autoMinWidth = hPB + mainSum;
+    box.autoMinWidth = hPB + mainAutoMin;
     box.autoMinHeight = vPB + crossMax;
   } else {
     box.autoMinWidth = hPB + crossMax;
-    box.autoMinHeight = vPB + mainSum;
+    box.autoMinHeight = vPB + mainAutoMin;
   }
 }
 

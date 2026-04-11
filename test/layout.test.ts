@@ -2852,3 +2852,98 @@ describe("flex shrink with padding", () => {
     });
   });
 });
+
+describe("overflow hidden reduces auto-min", () => {
+  it("container with overflow hidden has zero content auto-min", () => {
+    const node: LayoutNode = {
+      style: { width: 80, height: 10, flexDirection: "column" },
+      children: [
+        { style: {}, measure: () => ({ width: 10, height: 3 }) },
+        {
+          style: { flexGrow: 1, overflow: "hidden" },
+          measure: () => ({ width: 10, height: 8 }),
+        },
+      ],
+    };
+
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(
+      result.children[0].height + result.children[1].height,
+      10,
+      `Children should sum to 10, got ${result.children[0].height} + ${result.children[1].height}`,
+    );
+  });
+});
+
+describe("wrapping container auto-min", () => {
+  it("flexWrap container auto-min uses single-line max not total sum", () => {
+    const node: LayoutNode = {
+      style: { width: 80, height: 10, flexDirection: "column" },
+      children: [
+        { style: {}, measure: () => ({ width: 10, height: 1 }) },
+        {
+          style: {
+            flexDirection: "column",
+            flexWrap: "wrap",
+            flexGrow: 1,
+            gap: 1,
+          },
+          children: Array.from({ length: 8 }, () => ({
+            style: { height: 3, minHeight: 1 },
+            children: [{ style: {}, measure: () => ({ width: 7, height: 1 }) }],
+          })),
+        },
+      ],
+    };
+
+    const result = computeLayout(node, 80, 24);
+    const grid = result.children[1];
+
+    assert.ok(
+      grid.height <= 9,
+      `Grid should fit in remaining 9 rows, got ${grid.height}`,
+    );
+  });
+});
+
+describe("fixed width in row", () => {
+  it("width:36 flexShrink:0 is not crushed by sibling with long content", () => {
+    const node: LayoutNode = {
+      style: { width: 80, flexDirection: "row", gap: 1 },
+      children: [
+        {
+          style: { flexDirection: "column", flexGrow: 1, minWidth: 0 },
+          children: [
+            {
+              style: { overflow: "hidden" },
+              measure: () => ({ width: 200, height: 1 }),
+            },
+          ],
+        },
+        {
+          style: { flexDirection: "column", width: 36, flexShrink: 0 },
+          children: [
+            {
+              style: {},
+              measure: () => ({ width: 10, height: 1 }),
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = computeLayout(node, 80, 24);
+
+    assert.strictEqual(
+      result.children[1].width,
+      36,
+      `Right column with width:36 flexShrink:0 should stay at 36, got ${result.children[1].width}`,
+    );
+    assert.strictEqual(
+      result.children[0].width + 1 + result.children[1].width,
+      80,
+      `Left + gap + right should equal 80, got ${result.children[0].width} + 1 + ${result.children[1].width}`,
+    );
+  });
+});
