@@ -227,7 +227,7 @@ function StressTest() {
       const word = WORDS[wordIndex];
       setWords((prev) => {
         const next = [...prev, word];
-        return next.length > 80 ? next.slice(-80) : next;
+        return next.length > 2000 ? next.slice(-2000) : next;
       });
     }, 100);
 
@@ -408,7 +408,7 @@ function StressTest() {
                     overflow: "hidden",
                     children: [
                       Text({
-                        content: () => words().slice(-40).join(" "),
+                        content: () => words().slice(-250).join(" "),
                         color: PALETTE.muted,
                         wrap: "wrap" as const,
                       }),
@@ -422,7 +422,8 @@ function StressTest() {
           // Right column: layout stress grid
           Box({
             flexDirection: "column",
-            flexGrow: 1,
+            width: 48,
+            flexShrink: 0,
             border: true,
             borderColor: PALETTE.border,
             borderStyle: "single",
