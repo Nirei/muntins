@@ -37,16 +37,17 @@ import {
   Show,
   TabFocus,
   Text,
+  type VisualLine,
   type WrapMode,
   createRef,
   enterTuiMode,
   exitTuiMode,
   flushFrame,
-  lineDisplayWidth,
+  layoutLine,
   measureText,
+  segmentLine,
   truncateLine,
   useFocus,
-  wrapLine,
 } from "../src/core/runtime.ts";
 import {
   createEffect,
@@ -72,6 +73,24 @@ describe("runtime core types", () => {
   it("DEFAULT_MOUNT_OPTIONS has expected values", () => {
     assert.strictEqual(DEFAULT_MOUNT_OPTIONS.mouse, false);
     assert.strictEqual(DEFAULT_MOUNT_OPTIONS.alternateScreen, true);
+  });
+
+  it("App.mount throws if stdout is not a TTY", () => {
+    const mockStdout = {
+      columns: undefined,
+      rows: undefined,
+      isTTY: false,
+    } as unknown as NodeJS.WriteStream;
+    const mockStdin = {} as NodeJS.ReadStream;
+
+    assert.throws(
+      () =>
+        App.mount(() => new Node({ style: DEFAULT_FLEX_STYLE }), {
+          stdout: mockStdout,
+          stdin: mockStdin,
+        }),
+      { message: "Cannot mount: stdout is not a TTY." },
+    );
   });
 });
 
@@ -1299,47 +1318,53 @@ describe("measureText", () => {
 
 describe("truncateLine", () => {
   it("returns line unchanged if fits", () => {
-    assert.strictEqual(truncateLine("hello", 10, "truncate-end"), "hello");
+    const result = truncateLine("hello", 10, "truncate-end");
+    assert.strictEqual(result.text, "hello");
   });
 
   it("truncates end with ellipsis", () => {
     const result = truncateLine("hello world", 6, "truncate-end");
-    assert.ok(result.endsWith("…"));
-    assert.ok(lineDisplayWidth(result) <= 6);
+    assert.ok(result.text.endsWith("…"));
+    assert.ok(result.displayWidth <= 6);
   });
 
   it("truncates start with ellipsis", () => {
     const result = truncateLine("hello world", 6, "truncate-start");
-    assert.ok(result.startsWith("…"));
-    assert.ok(lineDisplayWidth(result) <= 6);
+    assert.ok(result.text.startsWith("…"));
+    assert.ok(result.displayWidth <= 6);
   });
 
   it("handles truncate mode same as truncate-end", () => {
     const result = truncateLine("hello world", 6, "truncate");
-    assert.ok(result.endsWith("…"));
-    assert.ok(lineDisplayWidth(result) <= 6);
+    assert.ok(result.text.endsWith("…"));
+    assert.ok(result.displayWidth <= 6);
   });
 });
 
-describe("wrapLine", () => {
+describe("layoutLine", () => {
   it("returns single element for short line", () => {
-    const lines = wrapLine("hello", 10);
-    assert.deepStrictEqual(lines, ["hello"]);
+    const lines = layoutLine("hello", 10);
+    assert.strictEqual(lines.length, 1);
+    assert.strictEqual(lines[0].text, "hello");
+    assert.strictEqual(lines[0].displayWidth, 5);
   });
 
   it("wraps at width boundary", () => {
-    const lines = wrapLine("hello world", 5);
+    const lines = layoutLine("hello world", 5);
     assert.strictEqual(lines.length, 3);
   });
 
   it("handles empty line", () => {
-    const lines = wrapLine("", 10);
-    assert.deepStrictEqual(lines, [""]);
+    const lines = layoutLine("", 10);
+    assert.strictEqual(lines.length, 1);
+    assert.strictEqual(lines[0].text, "");
+    assert.strictEqual(lines[0].displayWidth, 0);
   });
 
   it("handles maxWidth of 0 or less", () => {
-    const lines = wrapLine("hello", 0);
-    assert.deepStrictEqual(lines, ["hello"]);
+    const lines = layoutLine("hello", 0);
+    assert.strictEqual(lines.length, 1);
+    assert.strictEqual(lines[0].text, "hello");
   });
 });
 

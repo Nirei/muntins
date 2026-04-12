@@ -11,8 +11,6 @@ import {
   type InheritableColor,
   STRIKETHROUGH,
   UNDERLINE,
-  graphemeDisplayWidth,
-  graphemes,
 } from "./buffer.ts";
 import {
   type Rect,
@@ -21,10 +19,10 @@ import {
   rectOverlaps,
 } from "./rects.ts";
 import {
+  type VisualLine,
   type WrapMode,
-  lineDisplayWidth,
+  layoutLine,
   truncateLine,
-  wrapLine,
 } from "./text.ts";
 
 /**
@@ -391,23 +389,22 @@ export function renderText(
   fillClippedRect(buffer, rect, clip, fg, bg, modifiers);
 
   const lines = text.split("\n");
-  const displayLines =
+  const displayLines: VisualLine[] =
     wrapValue === "wrap"
-      ? lines.flatMap((line) => wrapLine(line, width))
+      ? lines.flatMap((line) => layoutLine(line, width))
       : lines.map((line) => truncateLine(line, width, wrapValue));
 
   for (let row = 0; row < Math.min(displayLines.length, height); row++) {
     const screenY = y + row;
     if (screenY < clip.y || screenY >= clip.y + clip.height) continue;
 
-    const line = displayLines[row];
+    const visualLine = displayLines[row];
     let col = x;
-    for (const char of graphemes(line)) {
-      const charWidth = graphemeDisplayWidth(char);
+    for (const seg of visualLine.segments) {
       if (col >= clip.x && col < clip.x + clip.width) {
-        buffer.set(col, screenY, char, fg, bg, modifiers);
+        buffer.set(col, screenY, seg.grapheme, fg, bg, modifiers);
       }
-      col += charWidth;
+      col += seg.displayWidth;
       if (col >= clip.x + clip.width) break;
     }
   }

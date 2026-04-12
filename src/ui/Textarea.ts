@@ -26,10 +26,9 @@ import {
   untrack,
 } from "../core/signals.ts";
 import {
+  layoutLine as computeLayoutLine,
   displayWidthToPosition,
-  lineDisplayWidth,
   textLength,
-  wrapLine,
 } from "../core/text.ts";
 import { styleFallback, theme } from "../core/theme.ts";
 
@@ -115,7 +114,7 @@ function lineColToPos(text: string, cursor: CursorPosition): number {
   return pos + Math.min(cursor.column, textLength(currentLine));
 }
 
-interface VisualLine {
+interface TextareaVisualLine {
   text: string;
   globalGraphemeStart: number;
   graphemeCount: number;
@@ -123,7 +122,7 @@ interface VisualLine {
   isCursorOverflow: boolean;
 }
 
-function getVisualLines(text: string, width: number): VisualLine[] {
+function getVisualLines(text: string, width: number): TextareaVisualLine[] {
   if (width <= 0) {
     const gc = textLength(text);
     return [
@@ -138,26 +137,26 @@ function getVisualLines(text: string, width: number): VisualLine[] {
   }
 
   const logicalLines = text.split("\n");
-  const result: VisualLine[] = [];
+  const result: TextareaVisualLine[] = [];
   let globalOffset = 0;
 
   for (let i = 0; i < logicalLines.length; i++) {
     const line = logicalLines[i];
-    const wrapped = wrapLine(line, width);
+    const wrapped = computeLayoutLine(line, width);
 
     for (let j = 0; j < wrapped.length; j++) {
       result.push({
-        text: wrapped[j],
+        text: wrapped[j].text,
         globalGraphemeStart: globalOffset,
-        graphemeCount: textLength(wrapped[j]),
+        graphemeCount: textLength(wrapped[j].text),
         isLastOfLogicalLine: j === wrapped.length - 1,
         isCursorOverflow: false,
       });
-      globalOffset += textLength(wrapped[j]);
+      globalOffset += textLength(wrapped[j].text);
     }
 
     const lastWrapped = wrapped[wrapped.length - 1];
-    if (lineDisplayWidth(lastWrapped) === width) {
+    if (lastWrapped.displayWidth === width) {
       result.push({
         text: "",
         globalGraphemeStart: globalOffset,

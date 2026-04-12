@@ -114,45 +114,111 @@ export function displayWidthToPosition(text: string, pos: number): number {
 export type WrapMode = "wrap" | "truncate" | "truncate-end" | "truncate-start";
 
 /**
- * Calculates the display width of a line of text.
+ * A single grapheme cluster with its precomputed display width.
+ *
+ * Produced by `segmentLine()` and used by layout, truncation, and rendering
+ * to avoid redundant Unicode segmentation.
  */
-export function lineDisplayWidth(line: string): number {
+export interface VisualSegment {
+  grapheme: string;
+  displayWidth: number;
+}
+
+/**
+ * A visual line of text produced by `layoutLine()` or `truncateLine()`.
+ *
+ * Carries the plain text, its total display width, and the individual
+ * grapheme segments — eliminating the need for downstream consumers to
+ * re-segment the string.
+ */
+export interface VisualLine {
+  text: string;
+  displayWidth: number;
+  segments: readonly VisualSegment[];
+}
+
+const ELLIPSIS: VisualSegment = { grapheme: "…", displayWidth: 1 };
+
+/**
+ * Segments a line of text into grapheme clusters with precomputed display widths.
+ *
+ * This is the single point where `graphemes()` is called for layout/render
+ * operations. All other functions (`layoutLine`, `truncateLine`, `measureText`)
+ * build on top of this instead of calling `graphemes()` directly.
+ */
+export function segmentLine(line: string): VisualSegment[] {
+  const segments: VisualSegment[] = [];
+  for (const g of graphemes(line)) {
+    segments.push({ grapheme: g, displayWidth: graphemeDisplayWidth(g) });
+  }
+  return segments;
+}
+
+function segmentsToVisualLine(segments: readonly VisualSegment[]): VisualLine {
+  let text = "";
+  let displayWidth = 0;
+  for (const s of segments) {
+    text += s.grapheme;
+    displayWidth += s.displayWidth;
+  }
+  return { text, displayWidth, segments };
+}
+
+function segmentsDisplayWidth(segments: readonly VisualSegment[]): number {
   let width = 0;
-  for (const grapheme of graphemes(line)) {
-    width += graphemeDisplayWidth(grapheme);
+  for (const s of segments) {
+    width += s.displayWidth;
   }
   return width;
 }
 
 /**
- * Wraps a single line of text at grapheme boundaries to fit within maxWidth.
- * Returns an array of wrapped line segments.
+ * Lays out a single line of text, wrapping at grapheme boundaries to fit
+ * within `maxWidth` terminal columns.
+ *
+ * Returns an array of `VisualLine` objects, each carrying the wrapped text,
+ * its total display width, and the individual grapheme segments. Downstream
+ * consumers (rendering, measurement) never need to re-segment.
  */
-export function wrapLine(line: string, maxWidth: number): string[] {
-  if (maxWidth <= 0) return [line];
+export function layoutLine(line: string, maxWidth: number): VisualLine[] {
+  if (maxWidth <= 0) {
+    const segments = segmentLine(line);
+    return segments.length > 0
+      ? [segmentsToVisualLine(segments)]
+      : [{ text: "", displayWidth: 0, segments: [] }];
+  }
 
-  const result: string[] = [];
-  let current = "";
+  const segments = segmentLine(line);
+
+  if (segments.length === 0) {
+    return [{ text: "", displayWidth: 0, segments: [] }];
+  }
+
+  const result: VisualLine[] = [];
+  let currentSegments: VisualSegment[] = [];
   let currentWidth = 0;
 
-  for (const grapheme of graphemes(line)) {
-    const w = graphemeDisplayWidth(grapheme);
-
-    if (currentWidth + w > maxWidth && current.length > 0) {
-      result.push(current);
-      current = "";
+  for (const seg of segments) {
+    if (
+      currentWidth + seg.displayWidth > maxWidth &&
+      currentSegments.length > 0
+    ) {
+      result.push(segmentsToVisualLine(currentSegments));
+      currentSegments = [];
       currentWidth = 0;
     }
 
-    current += grapheme;
-    currentWidth += w;
+    currentSegments.push(seg);
+    currentWidth += seg.displayWidth;
   }
 
-  if (current.length > 0) {
-    result.push(current);
+  if (currentSegments.length > 0) {
+    result.push(segmentsToVisualLine(currentSegments));
   }
 
-  return result.length > 0 ? result : [""];
+  return result.length > 0
+    ? result
+    : [{ text: "", displayWidth: 0, segments: [] }];
 }
 
 /**
@@ -175,19 +241,24 @@ export function measureText(
   const lines = text.split("\n");
 
   if (wrap === "wrap") {
-    const wrappedLines = lines.flatMap((line) =>
-      wrapLine(line, availableWidth),
+    const visualLines = lines.flatMap((line) =>
+      layoutLine(line, availableWidth),
     );
-    const maxWidth = Math.max(
-      ...wrappedLines.map((line) => lineDisplayWidth(line)),
-    );
+    let maxWidth = 0;
+    for (const vl of visualLines) {
+      if (vl.displayWidth > maxWidth) maxWidth = vl.displayWidth;
+    }
     return {
       width: Math.min(maxWidth, availableWidth),
-      height: wrappedLines.length,
+      height: visualLines.length,
     };
   }
 
-  const maxWidth = Math.max(...lines.map((line) => lineDisplayWidth(line)));
+  let maxWidth = 0;
+  for (const line of lines) {
+    const w = segmentsDisplayWidth(segmentLine(line));
+    if (w > maxWidth) maxWidth = w;
+  }
   return {
     width: Math.min(maxWidth, availableWidth),
     height: lines.length,
@@ -197,65 +268,97 @@ export function measureText(
 /**
  * Truncates a line from the end, adding ellipsis.
  */
-function truncateEnd(line: string, maxWidth: number): string {
-  const ellipsis = "…";
-  const ellipsisWidth = 1;
-  const targetWidth = maxWidth - ellipsisWidth;
+function truncateEnd(
+  segments: readonly VisualSegment[],
+  maxWidth: number,
+): VisualLine {
+  const targetWidth = maxWidth - ELLIPSIS.displayWidth;
 
-  if (targetWidth <= 0) return ellipsis.slice(0, maxWidth);
-
-  let result = "";
-  let width = 0;
-
-  for (const grapheme of graphemes(line)) {
-    const w = graphemeDisplayWidth(grapheme);
-    if (width + w > targetWidth) break;
-    result += grapheme;
-    width += w;
+  if (targetWidth <= 0) {
+    return {
+      text: ELLIPSIS.grapheme.slice(0, maxWidth),
+      displayWidth: Math.min(ELLIPSIS.displayWidth, maxWidth),
+      segments: [
+        {
+          grapheme: ELLIPSIS.grapheme.slice(0, maxWidth),
+          displayWidth: Math.min(ELLIPSIS.displayWidth, maxWidth),
+        },
+      ],
+    };
   }
 
-  return result + ellipsis;
+  const kept: VisualSegment[] = [];
+  let width = 0;
+
+  for (const seg of segments) {
+    if (width + seg.displayWidth > targetWidth) break;
+    kept.push(seg);
+    width += seg.displayWidth;
+  }
+
+  const result = [...kept, ELLIPSIS];
+  return segmentsToVisualLine(result);
 }
 
 /**
  * Truncates a line from the start, adding ellipsis.
  */
-function truncateStart(line: string, maxWidth: number): string {
-  const ellipsis = "…";
-  const ellipsisWidth = 1;
-  const targetWidth = maxWidth - ellipsisWidth;
+function truncateStart(
+  segments: readonly VisualSegment[],
+  maxWidth: number,
+): VisualLine {
+  const targetWidth = maxWidth - ELLIPSIS.displayWidth;
 
-  if (targetWidth <= 0) return ellipsis.slice(0, maxWidth);
-
-  const chars = [...graphemes(line)];
-  let result = "";
-  let width = 0;
-
-  for (let i = chars.length - 1; i >= 0; i--) {
-    const w = graphemeDisplayWidth(chars[i]);
-    if (width + w > targetWidth) break;
-    result = chars[i] + result;
-    width += w;
+  if (targetWidth <= 0) {
+    return {
+      text: ELLIPSIS.grapheme.slice(0, maxWidth),
+      displayWidth: Math.min(ELLIPSIS.displayWidth, maxWidth),
+      segments: [
+        {
+          grapheme: ELLIPSIS.grapheme.slice(0, maxWidth),
+          displayWidth: Math.min(ELLIPSIS.displayWidth, maxWidth),
+        },
+      ],
+    };
   }
 
-  return ellipsis + result;
+  const kept: VisualSegment[] = [];
+  let width = 0;
+
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const seg = segments[i];
+    if (width + seg.displayWidth > targetWidth) break;
+    kept.unshift(seg);
+    width += seg.displayWidth;
+  }
+
+  const result = [ELLIPSIS, ...kept];
+  return segmentsToVisualLine(result);
 }
 
 /**
- * Truncates a line to fit within maxWidth, using the specified mode.
- * Returns the line unchanged if it already fits.
+ * Truncates a line to fit within `maxWidth` terminal columns, adding an
+ * ellipsis when truncation occurs. Returns a `VisualLine` with pre-segmented
+ * grapheme data so the caller never needs to re-segment.
+ *
+ * @param line - The source line
+ * @param maxWidth - Maximum display width in terminal columns
+ * @param mode - Direction of truncation
  */
 export function truncateLine(
   line: string,
   maxWidth: number,
   mode: "truncate" | "truncate-end" | "truncate-start",
-): string {
-  const width = lineDisplayWidth(line);
-  if (width <= maxWidth) return line;
-
-  if (mode === "truncate" || mode === "truncate-end") {
-    return truncateEnd(line, maxWidth);
+): VisualLine {
+  const segments = segmentLine(line);
+  const width = segmentsDisplayWidth(segments);
+  if (width <= maxWidth) {
+    return segmentsToVisualLine(segments);
   }
 
-  return truncateStart(line, maxWidth);
+  if (mode === "truncate" || mode === "truncate-end") {
+    return truncateEnd(segments, maxWidth);
+  }
+
+  return truncateStart(segments, maxWidth);
 }

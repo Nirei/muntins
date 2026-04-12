@@ -138,6 +138,10 @@ export class App {
     };
     const { stdin, stdout } = opts;
 
+    if (!stdout.isTTY) {
+      throw new Error("Cannot mount: stdout is not a TTY.");
+    }
+
     this.options = opts;
     this.stdin = stdin;
     this.focus = new FocusManager();

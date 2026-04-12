@@ -104,9 +104,11 @@ export type {
 // Text utilities (pass-through)
 export {
   measureText,
-  lineDisplayWidth,
-  wrapLine,
   truncateLine,
+  segmentLine,
+  layoutLine,
+  type VisualSegment,
+  type VisualLine,
 } from "./text.ts";
 
 // Theme (generic infrastructure — UI layer provides defaults and re-exports)

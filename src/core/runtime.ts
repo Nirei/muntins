@@ -65,9 +65,9 @@ export type { Rect, ScreenRect } from "./rects.ts";
 
 // Pass-through re-exports from text.ts
 export {
-  lineDisplayWidth,
   measureText,
   truncateLine,
-  wrapLine,
+  segmentLine,
+  layoutLine,
 } from "./text.ts";
-export type { WrapMode } from "./text.ts";
+export type { WrapMode, VisualSegment, VisualLine } from "./text.ts";
