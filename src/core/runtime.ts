@@ -68,6 +68,10 @@ export {
   measureText,
   truncateLine,
   segmentLine,
+  segmentText,
   layoutLine,
+  layoutLineFromSegments,
+  truncateLineFromSegments,
+  measureTextFromSegments,
 } from "./text.ts";
 export type { WrapMode, VisualSegment, VisualLine } from "./text.ts";

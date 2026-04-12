@@ -11,6 +11,7 @@ import type { InheritableBool, InheritedStyle } from "../render.ts";
 import { resolveInheritable } from "../render.ts";
 import type { Accessor } from "../signals.ts";
 import { createSignal, resolve } from "../signals.ts";
+import type { VisualSegment } from "../text.ts";
 
 /**
  * A mutable reference to a node.
@@ -128,6 +129,12 @@ export class Node implements EventHandlerProps {
   _inheritableProps?: InheritableProps;
 
   _parent?: Node;
+
+  /**
+   * Cached segmented text data for the last content that was measured.
+   * Written by measure, read by render — avoids re-segmenting the same text.
+   */
+  _textSegments?: { sourceText: string; lines: VisualSegment[][] };
 
   focusable?: boolean;
   autoFocus?: boolean;

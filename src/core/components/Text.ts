@@ -4,7 +4,14 @@ import { type ReactiveTextStyle, renderText } from "../render.ts";
 import { App } from "../runtime/App.ts";
 import { type EventHandlerProps, Node, type Ref } from "../runtime/Node.ts";
 import { createEffect } from "../signals.ts";
-import { type WrapMode, measureText } from "../text.ts";
+import {
+  type VisualLine,
+  type WrapMode,
+  layoutLineFromSegments,
+  measureTextFromSegments,
+  segmentText,
+  truncateLineFromSegments,
+} from "../text.ts";
 
 /** Props for Text component. */
 export interface TextProps
@@ -50,6 +57,13 @@ export function Text(props: TextProps): Node {
   const getWrap = (): WrapMode =>
     (typeof wrap === "function" ? wrap() : wrap) ?? "wrap";
 
+  function ensureSegments(node: Node, text: string) {
+    if (node._textSegments?.sourceText !== text) {
+      node._textSegments = segmentText(text);
+    }
+    return node._textSegments.lines;
+  }
+
   const node = new Node({
     style: DEFAULT_FLEX_STYLE,
     focusable,
@@ -80,14 +94,30 @@ export function Text(props: TextProps): Node {
     },
 
     measure(availableWidth: number, _availableHeight: number) {
-      return measureText(getContent(), availableWidth, getWrap());
+      const text = getContent();
+      const wrapMode = getWrap();
+      const segmentedLines = ensureSegments(node, text);
+      return measureTextFromSegments(segmentedLines, availableWidth, wrapMode);
     },
 
     render(bounds, buffer, inherited, clip) {
+      const text = getContent();
+      const wrapMode = getWrap();
+      const segmentedLines = ensureSegments(node, text);
+
+      const displayLines: VisualLine[] =
+        wrapMode === "wrap"
+          ? segmentedLines.flatMap((line) =>
+              layoutLineFromSegments(line, bounds.width),
+            )
+          : segmentedLines.map((line) =>
+              truncateLineFromSegments(line, bounds.width, wrapMode),
+            );
+
       renderText(
         buffer,
         bounds,
-        getContent(),
+        displayLines,
         {
           color,
           backgroundColor,
@@ -97,7 +127,6 @@ export function Text(props: TextProps): Node {
           underline,
           strikethrough,
           inverse,
-          wrap: getWrap(),
         },
         inherited,
         clip,

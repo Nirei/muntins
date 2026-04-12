@@ -106,7 +106,11 @@ export {
   measureText,
   truncateLine,
   segmentLine,
+  segmentText,
   layoutLine,
+  layoutLineFromSegments,
+  truncateLineFromSegments,
+  measureTextFromSegments,
   type VisualSegment,
   type VisualLine,
 } from "./text.ts";

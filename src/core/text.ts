@@ -154,6 +154,126 @@ export function segmentLine(line: string): VisualSegment[] {
   return segments;
 }
 
+/**
+ * Segments all lines of a text string. Returns the source text and
+ * a per-line array of `VisualSegment[]` for reuse across measure and render.
+ */
+export function segmentText(text: string): {
+  sourceText: string;
+  lines: VisualSegment[][];
+} {
+  const sourceLines = text.split("\n");
+  const lines: VisualSegment[][] = [];
+  for (const line of sourceLines) {
+    lines.push(segmentLine(line));
+  }
+  return { sourceText: text, lines };
+}
+
+/**
+ * Wrap pre-segmented lines at width boundaries. Skips the segmentation step
+ * entirely — used when segments were already computed during measure.
+ */
+export function layoutLineFromSegments(
+  segments: VisualSegment[],
+  maxWidth: number,
+): VisualLine[] {
+  if (maxWidth <= 0) {
+    return segments.length > 0
+      ? [segmentsToVisualLine(segments)]
+      : [{ text: "", displayWidth: 0, segments: [] }];
+  }
+
+  if (segments.length === 0) {
+    return [{ text: "", displayWidth: 0, segments: [] }];
+  }
+
+  const result: VisualLine[] = [];
+  let currentSegments: VisualSegment[] = [];
+  let currentWidth = 0;
+
+  for (const seg of segments) {
+    if (
+      currentWidth + seg.displayWidth > maxWidth &&
+      currentSegments.length > 0
+    ) {
+      result.push(segmentsToVisualLine(currentSegments));
+      currentSegments = [];
+      currentWidth = 0;
+    }
+
+    currentSegments.push(seg);
+    currentWidth += seg.displayWidth;
+  }
+
+  if (currentSegments.length > 0) {
+    result.push(segmentsToVisualLine(currentSegments));
+  }
+
+  return result.length > 0
+    ? result
+    : [{ text: "", displayWidth: 0, segments: [] }];
+}
+
+/**
+ * Truncate pre-segmented lines to fit maxWidth. Skips the segmentation step
+ * entirely — used when segments were already computed during measure.
+ */
+export function truncateLineFromSegments(
+  segments: VisualSegment[],
+  maxWidth: number,
+  mode: "truncate" | "truncate-end" | "truncate-start",
+): VisualLine {
+  const width = segmentsDisplayWidth(segments);
+  if (width <= maxWidth) {
+    return segmentsToVisualLine(segments);
+  }
+
+  if (mode === "truncate" || mode === "truncate-end") {
+    return truncateEnd(segments, maxWidth);
+  }
+
+  return truncateStart(segments, maxWidth);
+}
+
+/**
+ * Measure text dimensions from pre-segmented lines.
+ * Returns `{ width: 0, height: 0 }` for empty text.
+ */
+export function measureTextFromSegments(
+  segmentedLines: VisualSegment[][],
+  availableWidth: number,
+  wrap: WrapMode,
+): { width: number; height: number } {
+  if (segmentedLines.length === 0) {
+    return { width: 0, height: 0 };
+  }
+
+  if (wrap === "wrap") {
+    const visualLines = segmentedLines.flatMap((line) =>
+      layoutLineFromSegments(line, availableWidth),
+    );
+    let maxWidth = 0;
+    for (const vl of visualLines) {
+      if (vl.displayWidth > maxWidth) maxWidth = vl.displayWidth;
+    }
+    return {
+      width: Math.min(maxWidth, availableWidth),
+      height: visualLines.length,
+    };
+  }
+
+  let maxWidth = 0;
+  for (const segments of segmentedLines) {
+    const w = segmentsDisplayWidth(segments);
+    if (w > maxWidth) maxWidth = w;
+  }
+  return {
+    width: Math.min(maxWidth, availableWidth),
+    height: segmentedLines.length,
+  };
+}
+
 function segmentsToVisualLine(segments: readonly VisualSegment[]): VisualLine {
   let text = "";
   let displayWidth = 0;

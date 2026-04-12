@@ -18,12 +18,7 @@ import {
   rectContains,
   rectOverlaps,
 } from "./rects.ts";
-import {
-  type VisualLine,
-  type WrapMode,
-  layoutLine,
-  truncateLine,
-} from "./text.ts";
+import type { VisualLine, WrapMode } from "./text.ts";
 
 /**
  * Inherited style values passed down through the node tree during paint.
@@ -364,13 +359,16 @@ export function fillClippedRect(
 }
 
 /**
- * Renders text into the buffer with styling and wrapping/truncation.
+ * Renders pre-laid-out visual lines into the buffer with styling.
  * Fills the entire area with background color first to clear any stale content.
+ *
+ * This is a pure painting function — all text segmentation and layout
+ * (wrapping/truncation) must be done before calling this.
  */
 export function renderText(
   buffer: Buffer,
   rect: ScreenRect,
-  text: string,
+  displayLines: readonly VisualLine[],
   props: TextRenderProps,
   inherited: InheritedStyle,
   clip: Rect,
@@ -384,15 +382,8 @@ export function renderText(
     inherited.backgroundColor,
   );
   const modifiers = computeModifiers(props, inherited);
-  const wrapValue = props.wrap ?? "wrap";
 
   fillClippedRect(buffer, rect, clip, fg, bg, modifiers);
-
-  const lines = text.split("\n");
-  const displayLines: VisualLine[] =
-    wrapValue === "wrap"
-      ? lines.flatMap((line) => layoutLine(line, width))
-      : lines.map((line) => truncateLine(line, width, wrapValue));
 
   for (let row = 0; row < Math.min(displayLines.length, height); row++) {
     const screenY = y + row;
