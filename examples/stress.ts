@@ -408,7 +408,7 @@ function StressTest() {
                     overflow: "hidden",
                     children: [
                       Text({
-                        content: () => words().slice(-250).join(" "),
+                        content: () => words().join(" "),
                         color: PALETTE.muted,
                         wrap: "wrap" as const,
                       }),

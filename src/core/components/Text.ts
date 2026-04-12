@@ -3,7 +3,7 @@ import { DEFAULT_FLEX_STYLE } from "../layout.ts";
 import { type ReactiveTextStyle, renderText } from "../render.ts";
 import { App } from "../runtime/App.ts";
 import { type EventHandlerProps, Node, type Ref } from "../runtime/Node.ts";
-import { createEffect } from "../signals.ts";
+import { createEffect, type MaybeAccessor, resolve } from "../signals.ts";
 import {
   type VisualLine,
   type WrapMode,
@@ -16,8 +16,8 @@ import {
 /** Props for Text component. */
 export interface TextProps
   extends Partial<ReactiveTextStyle & EventHandlerProps> {
-  content: string | (() => string);
-  wrap?: WrapMode | (() => WrapMode);
+  content: MaybeAccessor<string>;
+  wrap?: MaybeAccessor<WrapMode>;
   focusable?: boolean;
   autoFocus?: boolean;
   ref?: Ref;
@@ -53,9 +53,8 @@ export function Text(props: TextProps): Node {
     wrap,
   } = props;
 
-  const getContent = typeof content === "function" ? content : () => content;
-  const getWrap = (): WrapMode =>
-    (typeof wrap === "function" ? wrap() : wrap) ?? "wrap";
+  const getContent = () => resolve(content);
+  const getWrap = () => resolve(wrap) ?? "wrap";
 
   function ensureSegments(node: Node, text: string) {
     if (node._textSegments?.sourceText !== text) {
@@ -63,6 +62,13 @@ export function Text(props: TextProps): Node {
     }
     return node._textSegments.lines;
   }
+
+  let displayLinesCache: {
+    sourceText: string;
+    width: number;
+    wrapMode: WrapMode;
+    lines: VisualLine[];
+  } | null = null;
 
   const node = new Node({
     style: DEFAULT_FLEX_STYLE,
@@ -105,19 +111,30 @@ export function Text(props: TextProps): Node {
       const wrapMode = getWrap();
       const segmentedLines = ensureSegments(node, text);
 
-      const displayLines: VisualLine[] =
-        wrapMode === "wrap"
-          ? segmentedLines.flatMap((line) =>
-              layoutLineFromSegments(line, bounds.width),
-            )
-          : segmentedLines.map((line) =>
-              truncateLineFromSegments(line, bounds.width, wrapMode),
-            );
+      const cached = displayLinesCache;
+      const lines =
+        cached?.sourceText === text &&
+        cached.width === bounds.width &&
+        cached.wrapMode === wrapMode
+          ? cached.lines
+          : wrapMode === "wrap"
+            ? segmentedLines.flatMap((line) =>
+                layoutLineFromSegments(line, bounds.width),
+              )
+            : segmentedLines.map((line) =>
+                truncateLineFromSegments(line, bounds.width, wrapMode),
+              );
 
+      displayLinesCache = {
+        sourceText: text,
+        width: bounds.width,
+        wrapMode,
+        lines,
+      };
       renderText(
         buffer,
         bounds,
-        displayLines,
+        lines,
         {
           color,
           backgroundColor,
