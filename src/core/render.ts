@@ -392,7 +392,11 @@ export function renderText(
     const visualLine = displayLines[row];
     let col = x;
     for (const seg of visualLine.segments) {
-      if (col >= clip.x && col < clip.x + clip.width) {
+      if (
+        col >= clip.x &&
+        col + seg.displayWidth <= clip.x + clip.width &&
+        col < clip.x + clip.width
+      ) {
         buffer.set(col, screenY, seg.grapheme, fg, bg, modifiers);
       }
       col += seg.displayWidth;
