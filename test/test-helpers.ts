@@ -59,7 +59,7 @@ export function createTestApp(
   (renderer as unknown as Record<string, unknown>).timeout = null;
   (renderer as unknown as Record<string, unknown>).stdout = process.stdout;
   (renderer as unknown as Record<string, unknown>).fpsLimit = 0;
-  (renderer as unknown as Record<string, unknown>).relayoutScheduled = false;
+  (renderer as unknown as Record<string, unknown>).needsRebind = false;
   (app as unknown as Record<string, unknown>).renderer = renderer;
 
   const events = new EventDispatcher(

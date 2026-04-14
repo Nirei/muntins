@@ -32,7 +32,7 @@ export class Renderer {
   private scheduled = false;
   private lastFlushTime = 0;
   private timeout: ReturnType<typeof setTimeout> | null = null;
-  private relayoutScheduled = false;
+  private needsRebind = false;
 
   constructor(
     stdout: NodeJS.WriteStream,
@@ -64,10 +64,8 @@ export class Renderer {
 
   /** Schedule a relayout for when Show/For create new children. */
   scheduleRelayout(): void {
-    if (this.relayoutScheduled) return;
-    this.relayoutScheduled = true;
-
-    queueMicrotask(() => this.doRelayout());
+    this.needsRebind = true;
+    this.scheduleFlush();
   }
 
   /** Perform an immediate flush (used for initial render). */
@@ -90,17 +88,9 @@ export class Renderer {
     this.bindNodes(root, layoutResult, inherited, clip);
   }
 
-  /** Handle terminal resize: resize buffer, recompute layout, update signals. */
+  /** Handle terminal resize: resize buffer and schedule a flush. */
   handleResize(width: number, height: number): void {
     this.buffer.resize(width, height);
-
-    const root = this.getRoot();
-    const layoutNode = root.toLayoutNode();
-    const layoutResult = computeLayout(layoutNode, width, height);
-    this.layoutResult = layoutResult;
-
-    this.updateAllLayoutSignals(root, layoutResult);
-
     this.scheduleFlush();
   }
 
@@ -150,6 +140,12 @@ export class Renderer {
 
     this.updateAllLayoutSignals(root, layoutResult);
 
+    if (this.needsRebind) {
+      this.needsRebind = false;
+      const { clip, inherited } = this.createRootAccessors();
+      this.bindNodes(root, layoutResult, inherited, clip, true);
+    }
+
     this.buffer.clear();
 
     const rootClip: Rect = {
@@ -164,26 +160,6 @@ export class Renderer {
     if (output.length > 0) {
       flushFrame(this.stdout, output);
     }
-  }
-
-  private doRelayout(): void {
-    this.relayoutScheduled = false;
-
-    const root = this.getRoot();
-    const layoutNode = root.toLayoutNode();
-    const layoutResult = computeLayout(
-      layoutNode,
-      this.stdout.columns,
-      this.stdout.rows,
-    );
-    this.layoutResult = layoutResult;
-
-    this.updateAllLayoutSignals(root, layoutResult);
-
-    const { clip, inherited } = this.createRootAccessors();
-    this.bindNodes(root, layoutResult, inherited, clip, true);
-
-    this.scheduleFlush();
   }
 
   private paintTree(root: Node, layoutResult: LayoutResult, clip: Rect): void {
