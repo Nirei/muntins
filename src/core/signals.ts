@@ -328,6 +328,27 @@ function updateIfNecessary(node: Computation): void {
 }
 
 /**
+ * Drains onMount callbacks for a node. Sets mounts to null after draining
+ * so future onMount calls inside re-executions are ignored.
+ * Runs callbacks in the node's owner context so onCleanup works.
+ */
+function drainMounts(node: Computation): void {
+  if (!node.mounts) return;
+  const mounts = node.mounts;
+  node.mounts = null;
+
+  const prevOwner = currentOwner;
+  currentOwner = node;
+  try {
+    for (const mount of mounts) {
+      mount();
+    }
+  } finally {
+    currentOwner = prevOwner;
+  }
+}
+
+/**
  * Re-executes a computation with dependency tracking.
  * For memos, stores the computed value and stops propagation if unchanged.
  * Cleans up node's cleanups and disposes children before re-executing.
@@ -340,23 +361,7 @@ function update(node: Computation): void {
   try {
     const oldValue = node.value;
     executeWithTracking(node);
-
-    // Run mount callbacks after initial execution (mounts is null after first drain)
-    if (node.mounts) {
-      const mounts = node.mounts;
-      node.mounts = null; // Mark as drained so future onMount calls are ignored
-
-      // Run mounts in owner context so onCleanup works inside mount callbacks
-      const prevOwner = currentOwner;
-      currentOwner = node;
-      try {
-        for (const mount of mounts) {
-          mount();
-        }
-      } finally {
-        currentOwner = prevOwner;
-      }
-    }
+    drainMounts(node);
 
     // Memos: equality check for stopping propagation
     // If value changed, mark observers Dirty so they recompute.
@@ -652,7 +657,9 @@ export function createRoot<T>(
   currentOwner = root;
 
   try {
-    return fn(() => dispose(root));
+    const result = fn(() => dispose(root));
+    drainMounts(root);
+    return result;
   } finally {
     currentOwner = prevOwner;
   }

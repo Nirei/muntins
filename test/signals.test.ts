@@ -977,6 +977,62 @@ describe("onMount", () => {
     assert.strictEqual(mountRuns, 2); // new effect's onMount ran
   });
 
+  it("fires in createRoot after callback completes", () => {
+    let mountRan = false;
+    const order: string[] = [];
+
+    createRoot(() => {
+      order.push("root body");
+      onMount(() => {
+        mountRan = true;
+        order.push("mount");
+      });
+    });
+
+    assert.strictEqual(mountRan, true);
+    assert.deepStrictEqual(order, ["root body", "mount"]);
+  });
+
+  it("fires in createRoot before createRoot returns", () => {
+    let mountRan = false;
+    createRoot(() => {
+      onMount(() => {
+        mountRan = true;
+      });
+    });
+    assert.strictEqual(mountRan, true);
+  });
+
+  it("onMount in createRoot can register onCleanup", () => {
+    let cleanupRan = false;
+
+    const dispose = createRoot((dispose) => {
+      onMount(() => {
+        onCleanup(() => {
+          cleanupRan = true;
+        });
+      });
+      return dispose;
+    });
+
+    assert.strictEqual(cleanupRan, false);
+    dispose();
+    assert.strictEqual(cleanupRan, true);
+  });
+
+  it("onMount in createRoot does not fire after dispose", () => {
+    let mountCount = 0;
+
+    createRoot((dispose) => {
+      onMount(() => {
+        mountCount++;
+      });
+      dispose();
+    });
+
+    assert.strictEqual(mountCount, 1);
+  });
+
   it("warns when called outside reactive context", () => {
     // Capture console.warn
     const originalWarn = console.warn;
