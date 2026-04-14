@@ -140,9 +140,9 @@ interface ReadlineKey {
  */
 export function isPrintable(char: string | undefined): boolean {
   if (!char || char.length === 0) return false;
-  const code = char.charCodeAt(0);
-  // Printable ASCII and beyond, excluding control characters
-  return code >= 0x20 && code !== 0x7f;
+  const code = char.codePointAt(0);
+  if (code === undefined) return false;
+  return code >= 0x20 && code !== 0x7f && !(code >= 0xd800 && code <= 0xdfff);
 }
 
 /**

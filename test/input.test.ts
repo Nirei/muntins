@@ -375,8 +375,8 @@ describe("keyboard input", () => {
       sequence: familyEmoji,
     });
 
-    // isPrintable checks charCodeAt(0), which is the first codepoint
-    // The first codepoint (0x1F468) is printable, so the whole string is kept
+    // isPrintable checks codePointAt(0), which correctly handles
+    // supplementary-plane characters as a single code point
     assert.strictEqual(event?.char, familyEmoji);
     assert.strictEqual(event?.sequence, familyEmoji);
   });
@@ -400,6 +400,17 @@ describe("keyboard input", () => {
   it("isPrintable returns false for undefined/empty", () => {
     assert.strictEqual(isPrintable(undefined), false);
     assert.strictEqual(isPrintable(""), false);
+  });
+
+  it("isPrintable handles supplementary-plane characters via codePointAt", () => {
+    assert.strictEqual(isPrintable("\u{1F600}"), true);
+    assert.strictEqual(isPrintable("\u{4DBF}"), true);
+    assert.strictEqual(isPrintable("\u{20000}"), true);
+  });
+
+  it("isPrintable returns false for surrogate code points", () => {
+    const surrogate = "\uD800";
+    assert.strictEqual(isPrintable(surrogate), false);
   });
 
   it("setupKeyboardInput cleanup removes listener", () => {
