@@ -16,7 +16,6 @@ import {
   isPrintable,
   mapKeypressToEvent,
   parseMouseSequence,
-  registerCleanup,
   setupKeyboardInput,
   setupResizeHandler,
   setupTerminal,
@@ -217,67 +216,6 @@ describe("terminal setup", () => {
     assert.ok(written.includes("\x1b[?2004l")); // bracketed paste off
     assert.ok(written.includes("\x1b[?1004l")); // focus off
     assert.ok(written.includes("\x1b[?1000l")); // mouse off
-  });
-
-  it("registerCleanup returns unregister function", () => {
-    let cleanupCalled = false;
-    const unregister = registerCleanup(() => {
-      cleanupCalled = true;
-    });
-
-    // Immediately unregister so we don't affect other tests
-    unregister();
-
-    // Calling unregister again should be a no-op (no error)
-    unregister();
-    assert.strictEqual(cleanupCalled, false);
-  });
-
-  it("registerCleanup does not install signal or error handlers", () => {
-    const handlers = [
-      "SIGINT",
-      "SIGTERM",
-      "SIGHUP",
-      "uncaughtException",
-      "unhandledRejection",
-    ] as const;
-
-    const before = handlers.map((h) => process.listenerCount(h));
-    const unregister = registerCleanup(() => {});
-
-    try {
-      const after = handlers.map((h) => process.listenerCount(h));
-      for (let i = 0; i < handlers.length; i++) {
-        assert.strictEqual(
-          after[i],
-          before[i],
-          `registerCleanup should not add a ${handlers[i]} handler`,
-        );
-      }
-    } finally {
-      unregister();
-    }
-  });
-
-  it("registerCleanup installs only an exit handler", () => {
-    const before = process.listenerCount("exit");
-    const unregister = registerCleanup(() => {});
-
-    try {
-      assert.strictEqual(
-        process.listenerCount("exit"),
-        before + 1,
-        "registerCleanup should add exactly one exit handler",
-      );
-    } finally {
-      unregister();
-    }
-
-    assert.strictEqual(
-      process.listenerCount("exit"),
-      before,
-      "unregister should remove the exit handler",
-    );
   });
 });
 

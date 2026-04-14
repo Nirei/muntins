@@ -1116,37 +1116,7 @@ export function createInputParser(
     }
   };
 
-  const unregisterCleanup = registerCleanup(cleanup);
-  cleanups.push(unregisterCleanup);
-
   return {
     destroy: cleanup,
-  };
-}
-
-/**
- * Register a cleanup handler for the process `exit` event.
- *
- * A terminal left in raw mode is unusable. This ensures cleanup runs
- * when the process exits, regardless of cause (normal exit, signal,
- * uncaught exception). The handler is the sole safety net — the library
- * does NOT install signal, exception, or rejection handlers that call
- * `process.exit`.
- *
- * @returns Unregister function to remove the handler (for tests/cleanup)
- */
-export function registerCleanup(cleanup: () => void): () => void {
-  let registered = true;
-
-  const onExit = () => {
-    if (registered) cleanup();
-  };
-
-  process.on("exit", onExit);
-
-  return () => {
-    if (!registered) return;
-    registered = false;
-    process.off("exit", onExit);
   };
 }
