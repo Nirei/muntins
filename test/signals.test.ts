@@ -713,6 +713,42 @@ describe("batch", () => {
     assert.strictEqual(result, 42);
   });
 
+  it("processes remaining effects after one throws during flush", () => {
+    const [a, setA] = createSignal(0);
+    const [b, setB] = createSignal(0);
+    let bObserved = -1;
+
+    createRoot(() => {
+      createEffect(() => {
+        const val = a();
+        if (val === 1) throw new Error("effect error");
+      });
+
+      createEffect(() => {
+        bObserved = b();
+      });
+    });
+
+    assert.strictEqual(bObserved, 0);
+
+    assert.throws(() => {
+      batch(() => {
+        setA(1);
+        setB(1);
+      });
+    }, /effect error/);
+
+    assert.strictEqual(bObserved, 1);
+
+    setB(2);
+    assert.strictEqual(bObserved, 2);
+
+    batch(() => {
+      setB(3);
+    });
+    assert.strictEqual(bObserved, 3);
+  });
+
   it("restores state and flushes on exception", () => {
     const [count, setCount] = createSignal(0);
     let runs = 0;

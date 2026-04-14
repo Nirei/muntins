@@ -424,10 +424,18 @@ function runTopLevelEffect(node: Computation): void {
  * Called when the outermost batch completes.
  */
 function flushBatchQueue(): void {
+  const errors: unknown[] = [];
   for (const node of batchQueue) {
-    updateIfNecessary(node);
+    try {
+      updateIfNecessary(node);
+    } catch (err) {
+      errors.push(err);
+    }
   }
   batchQueue.clear();
+  if (errors.length === 1) throw errors[0];
+  if (errors.length > 1)
+    throw new AggregateError(errors, "Multiple errors during batch flush");
 }
 
 /**
