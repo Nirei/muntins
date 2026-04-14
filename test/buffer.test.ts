@@ -445,6 +445,54 @@ describe("Buffer class", () => {
       assert.strictEqual(buf.getSymbol(0, 0), "日");
       assert.strictEqual(buf.getSymbol(1, 0), ""); // New continuation
     });
+
+    it("overwriting base of wide char resets orphaned continuation style", () => {
+      const buf = new Buffer(20, 10);
+      const wideBg: Color = { type: "named", index: 1 };
+      const wideFg: Color = { type: "named", index: 2 };
+      buf.writeText(0, 0, "中", wideFg, wideBg, BOLD);
+
+      buf.set(0, 0, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+
+      assert.strictEqual(buf.getSymbol(1, 0), " ");
+      assert.deepStrictEqual(buf.getFg(1, 0), DEFAULT_COLOR);
+      assert.deepStrictEqual(buf.getBg(1, 0), DEFAULT_COLOR);
+      assert.strictEqual(buf.getModifiers(1, 0), 0);
+    });
+
+    it("overwriting continuation of wide char resets orphaned base style", () => {
+      const buf = new Buffer(20, 10);
+      const wideBg: Color = { type: "named", index: 1 };
+      const wideFg: Color = { type: "named", index: 2 };
+      buf.writeText(0, 0, "中", wideFg, wideBg, BOLD);
+
+      buf.set(1, 0, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+
+      assert.strictEqual(buf.getSymbol(0, 0), " ");
+      assert.deepStrictEqual(buf.getFg(0, 0), DEFAULT_COLOR);
+      assert.deepStrictEqual(buf.getBg(0, 0), DEFAULT_COLOR);
+      assert.strictEqual(buf.getModifiers(0, 0), 0);
+    });
+
+    it("orphaned wide char cell does not emit stale style in flush output", () => {
+      const buf = new Buffer(20, 10);
+      buf.flush();
+
+      const redBg: Color = { type: "named", index: 1 };
+      buf.writeText(0, 0, "中", DEFAULT_COLOR, redBg, 0);
+      buf.flush();
+
+      buf.set(0, 0, "X", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      const output = buf.flush();
+
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences
+      const redBgMatches = output.match(/\x1b\[41m|\[41m|;41m/g) || [];
+      assert.strictEqual(
+        redBgMatches.length,
+        0,
+        "orphaned cell should not retain red background",
+      );
+    });
   });
 
   describe("read operations", () => {

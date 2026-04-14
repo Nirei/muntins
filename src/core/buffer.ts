@@ -522,6 +522,9 @@ export class Buffer {
     if (cell.symbol === "" && x > 0) {
       const baseCell = this.back[this.index(x - 1, y)];
       baseCell.symbol = " ";
+      baseCell.fg = COLOR_DEFAULT;
+      baseCell.bg = COLOR_DEFAULT;
+      baseCell.modifiers = 0;
     }
 
     // Case 2: Overwriting a base character that has a continuation - clear the continuation
@@ -529,6 +532,9 @@ export class Buffer {
       const nextCell = this.back[this.index(x + 1, y)];
       if (nextCell.symbol === "") {
         nextCell.symbol = " ";
+        nextCell.fg = COLOR_DEFAULT;
+        nextCell.bg = COLOR_DEFAULT;
+        nextCell.modifiers = 0;
       }
     }
 
