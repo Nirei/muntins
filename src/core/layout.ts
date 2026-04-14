@@ -640,10 +640,7 @@ function resolveIntrinsicSizeRecursive(
   }
 
   // 4. Container: recurse into children with propagated available width
-  const childAvailableWidth =
-    style.flexDirection === "column"
-      ? effectiveContentWidth
-      : effectiveContentWidth;
+  const childAvailableWidth = effectiveContentWidth;
 
   for (const child of box.children) {
     if (child.style.display === "none") continue;
