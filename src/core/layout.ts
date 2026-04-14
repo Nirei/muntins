@@ -950,7 +950,16 @@ function positionAbsoluteChildren(
     // If size changed due to stretch constraints, re-compute intrinsic sizes
     // and re-layout the child's descendants
     if (sizeChanged) {
-      const absoluteContentWidth = contentWidth;
+      const childBorderStart = borderSize(childStyle.borderStart);
+      const childBorderEnd = borderSize(childStyle.borderEnd);
+      const absoluteContentWidth = Math.max(
+        0,
+        child.width -
+          childBorderStart -
+          childBorderEnd -
+          childStyle.paddingStart -
+          childStyle.paddingEnd,
+      );
       for (const c of child.children) {
         resolveIntrinsicSizeRecursive(c, absoluteContentWidth);
       }

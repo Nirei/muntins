@@ -2374,6 +2374,73 @@ describe("absolute positioning", () => {
     assert.strictEqual(result.children[0].screenX, 17);
     assert.strictEqual(result.children[0].screenY, 8);
   });
+
+  it("absolute child with start+end stretch and padding constrains descendants to child content width", () => {
+    const node: LayoutNode = {
+      style: { width: 100, height: 30 },
+      children: [
+        {
+          style: {
+            position: "absolute",
+            flexDirection: "column",
+            start: 0,
+            end: 0,
+            paddingStart: 10,
+            paddingEnd: 10,
+            paddingTop: 2,
+            paddingBottom: 2,
+          },
+          children: [
+            {
+              style: { height: 5 },
+            },
+          ],
+        },
+      ],
+    };
+    const result = computeLayout(node, 100, 30);
+
+    const absChild = result.children[0];
+    assert.strictEqual(absChild.width, 100);
+    assert.strictEqual(absChild.x, 0);
+    assert.strictEqual(absChild.y, 0);
+
+    const inner = absChild.children[0];
+    assert.strictEqual(inner.width, 80);
+    assert.strictEqual(inner.height, 5);
+  });
+
+  it("absolute child with start+end stretch and borders constrains descendants to child content width", () => {
+    const node: LayoutNode = {
+      style: { width: 100, height: 30 },
+      children: [
+        {
+          style: {
+            position: "absolute",
+            flexDirection: "column",
+            start: 0,
+            end: 0,
+            borderStart: true,
+            borderEnd: true,
+            paddingStart: 5,
+            paddingEnd: 5,
+          },
+          children: [
+            {
+              style: { height: 3 },
+            },
+          ],
+        },
+      ],
+    };
+    const result = computeLayout(node, 100, 30);
+
+    const absChild = result.children[0];
+    assert.strictEqual(absChild.width, 100);
+
+    const inner = absChild.children[0];
+    assert.strictEqual(inner.width, 88);
+  });
 });
 
 describe("display contents", () => {
