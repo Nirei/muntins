@@ -1125,17 +1125,15 @@ export function createInputParser(
 }
 
 /**
- * Register cleanup handlers for all process exit paths.
+ * Register a cleanup handler for the process `exit` event.
  *
- * A terminal left in raw mode is unusable. This ensures cleanup runs on:
- * - Normal exit
- * - SIGINT (Ctrl+C)
- * - SIGTERM
- * - SIGHUP
- * - Uncaught exceptions
- * - Unhandled promise rejections
+ * A terminal left in raw mode is unusable. This ensures cleanup runs
+ * when the process exits, regardless of cause (normal exit, signal,
+ * uncaught exception). The handler is the sole safety net — the library
+ * does NOT install signal, exception, or rejection handlers that call
+ * `process.exit`.
  *
- * @returns Unregister function to remove all handlers (for tests/cleanup)
+ * @returns Unregister function to remove the handler (for tests/cleanup)
  */
 export function registerCleanup(cleanup: () => void): () => void {
   let registered = true;
@@ -1143,44 +1141,12 @@ export function registerCleanup(cleanup: () => void): () => void {
   const onExit = () => {
     if (registered) cleanup();
   };
-  const onSigInt = () => {
-    cleanup();
-    process.exit(130);
-  };
-  const onSigTerm = () => {
-    cleanup();
-    process.exit(143);
-  };
-  const onSigHup = () => {
-    cleanup();
-    process.exit(129);
-  };
-  const onException = (err: Error) => {
-    cleanup();
-    console.error(err);
-    process.exit(1);
-  };
-  const onRejection = (reason: unknown) => {
-    cleanup();
-    console.error("Unhandled rejection:", reason);
-    process.exit(1);
-  };
 
   process.on("exit", onExit);
-  process.on("SIGINT", onSigInt);
-  process.on("SIGTERM", onSigTerm);
-  process.on("SIGHUP", onSigHup);
-  process.on("uncaughtException", onException);
-  process.on("unhandledRejection", onRejection);
 
   return () => {
     if (!registered) return;
     registered = false;
     process.off("exit", onExit);
-    process.off("SIGINT", onSigInt);
-    process.off("SIGTERM", onSigTerm);
-    process.off("SIGHUP", onSigHup);
-    process.off("uncaughtException", onException);
-    process.off("unhandledRejection", onRejection);
   };
 }

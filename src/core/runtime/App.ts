@@ -292,30 +292,25 @@ export class App {
   private setupSignalHandlers(): void {
     const handleExit = () => this.unmount();
 
-    const handleSignal = (signal: NodeJS.Signals) => {
+    const rethrowSignal = (signal: NodeJS.Signals) => {
+      if (this.removeSignalHandlers) {
+        this.removeSignalHandlers();
+      }
       this.unmount();
-      process.exit(signal === "SIGINT" ? 130 : 143);
+      process.kill(process.pid, signal);
     };
 
-    const handleUncaughtException = (err: Error) => {
-      this.unmount();
-      console.error(err);
-      process.exit(1);
-    };
-
-    const sigintHandler = () => handleSignal("SIGINT");
-    const sigtermHandler = () => handleSignal("SIGTERM");
+    const sigintHandler = () => rethrowSignal("SIGINT");
+    const sigtermHandler = () => rethrowSignal("SIGTERM");
 
     process.on("exit", handleExit);
     process.on("SIGINT", sigintHandler);
     process.on("SIGTERM", sigtermHandler);
-    process.on("uncaughtException", handleUncaughtException);
 
     this.removeSignalHandlers = () => {
       process.off("exit", handleExit);
       process.off("SIGINT", sigintHandler);
       process.off("SIGTERM", sigtermHandler);
-      process.off("uncaughtException", handleUncaughtException);
     };
   }
 }

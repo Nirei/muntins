@@ -232,6 +232,53 @@ describe("terminal setup", () => {
     unregister();
     assert.strictEqual(cleanupCalled, false);
   });
+
+  it("registerCleanup does not install signal or error handlers", () => {
+    const handlers = [
+      "SIGINT",
+      "SIGTERM",
+      "SIGHUP",
+      "uncaughtException",
+      "unhandledRejection",
+    ] as const;
+
+    const before = handlers.map((h) => process.listenerCount(h));
+    const unregister = registerCleanup(() => {});
+
+    try {
+      const after = handlers.map((h) => process.listenerCount(h));
+      for (let i = 0; i < handlers.length; i++) {
+        assert.strictEqual(
+          after[i],
+          before[i],
+          `registerCleanup should not add a ${handlers[i]} handler`,
+        );
+      }
+    } finally {
+      unregister();
+    }
+  });
+
+  it("registerCleanup installs only an exit handler", () => {
+    const before = process.listenerCount("exit");
+    const unregister = registerCleanup(() => {});
+
+    try {
+      assert.strictEqual(
+        process.listenerCount("exit"),
+        before + 1,
+        "registerCleanup should add exactly one exit handler",
+      );
+    } finally {
+      unregister();
+    }
+
+    assert.strictEqual(
+      process.listenerCount("exit"),
+      before,
+      "unregister should remove the exit handler",
+    );
+  });
 });
 
 describe("keyboard input", () => {
