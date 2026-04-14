@@ -468,6 +468,48 @@ describe("createRoot", () => {
     assert.strictEqual(result, 42);
   });
 
+  it("disposes all children when root has 3+ effects", () => {
+    const cleanups: string[] = [];
+
+    createRoot((dispose) => {
+      createEffect(() => {
+        onCleanup(() => cleanups.push("A"));
+      });
+      createEffect(() => {
+        onCleanup(() => cleanups.push("B"));
+      });
+      createEffect(() => {
+        onCleanup(() => cleanups.push("C"));
+      });
+      createEffect(() => {
+        onCleanup(() => cleanups.push("D"));
+      });
+      dispose();
+    });
+
+    assert.deepStrictEqual(cleanups.sort(), ["A", "B", "C", "D"]);
+  });
+
+  it("disposal of many children prevents zombie effects", () => {
+    const [count, setCount] = createSignal(0);
+    const observed: number[] = [];
+
+    createRoot((dispose) => {
+      for (let i = 0; i < 5; i++) {
+        createEffect(() => {
+          observed.push(count());
+        });
+      }
+      dispose();
+    });
+
+    assert.deepStrictEqual(observed, [0, 0, 0, 0, 0]);
+
+    observed.length = 0;
+    setCount(1);
+    assert.deepStrictEqual(observed, []);
+  });
+
   it("double dispose is safe (no-op)", () => {
     let cleanupCount = 0;
     const dispose = createRoot((dispose) => {

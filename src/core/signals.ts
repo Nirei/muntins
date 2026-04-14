@@ -90,10 +90,11 @@ function runCleanups(node: Computation): unknown[] {
  * Recursively disposes all children of a node.
  */
 function disposeChildren(node: Computation): void {
-  for (const child of node.children) {
+  const children = node.children;
+  node.children = [];
+  for (const child of children) {
     dispose(child);
   }
-  node.children = [];
 }
 
 /**
