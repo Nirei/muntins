@@ -363,6 +363,59 @@ describe("Buffer class", () => {
     });
   });
 
+  describe("set() with wide characters", () => {
+    it("set() creates continuation cell for wide character", () => {
+      const buf = new Buffer(20, 10);
+      buf.set(0, 0, "中", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+
+      assert.strictEqual(buf.getSymbol(0, 0), "中");
+      assert.strictEqual(buf.getSymbol(1, 0), "");
+    });
+
+    it("set() propagates style to continuation cell", () => {
+      const buf = new Buffer(20, 10);
+      const fg: Color = { type: "named", index: 1 };
+      buf.set(0, 0, "中", fg, DEFAULT_COLOR, BOLD);
+
+      assert.deepStrictEqual(buf.getFg(1, 0), fg);
+      assert.strictEqual(buf.getModifiers(1, 0), BOLD);
+    });
+
+    it("set() wide char at buffer edge does not overflow", () => {
+      const buf = new Buffer(5, 5);
+      buf.set(4, 0, "中", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+
+      assert.strictEqual(buf.getSymbol(4, 0), "中");
+      assert.strictEqual(buf.getSymbol(5, 0), " ");
+    });
+
+    it("mixed writeText then set with wide chars produces correct output", () => {
+      const buf = new Buffer(20, 10);
+      buf.flush();
+
+      buf.writeText(0, 0, "中", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      buf.flush();
+
+      buf.set(0, 0, "日", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+      const output = buf.flush();
+
+      assert.ok(output.includes("日"));
+      assert.strictEqual(buf.getSymbol(0, 0), "日");
+      assert.strictEqual(buf.getSymbol(1, 0), "");
+    });
+
+    it("set() wide char overwriting another wide char cleans up old continuation", () => {
+      const buf = new Buffer(20, 10);
+      buf.writeText(0, 0, "中", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+
+      buf.set(0, 0, "日", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+
+      assert.strictEqual(buf.getSymbol(0, 0), "日");
+      assert.strictEqual(buf.getSymbol(1, 0), "");
+      assert.strictEqual(buf.getSymbol(2, 0), " ");
+    });
+  });
+
   describe("double-width overwrite handling", () => {
     it("overwriting first column of wide char clears continuation cell", () => {
       const buf = new Buffer(20, 10);

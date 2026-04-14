@@ -489,6 +489,16 @@ export class Buffer {
     modifiers: number,
   ): void {
     this.setInternal(x, y, symbol, packColor(fg), packColor(bg), modifiers);
+
+    if (graphemeDisplayWidth(symbol) === 2 && x + 1 < this._width) {
+      const packedFg = packColor(fg);
+      const packedBg = packColor(bg);
+      const contIdx = this.index(x + 1, y);
+      this.back[contIdx].symbol = "";
+      this.back[contIdx].fg = packedFg;
+      this.back[contIdx].bg = packedBg;
+      this.back[contIdx].modifiers = modifiers;
+    }
   }
 
   // Internal set that takes pre-packed colors
