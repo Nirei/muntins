@@ -154,88 +154,87 @@ export class App {
 
     enterTuiMode(stdout, { alternateScreen: opts.alternateScreen });
 
-    this.inputParser = createInputParser(
-      stdin,
-      stdout,
-      (event) => this.handleEvent(event),
-      { mouse: opts.mouse },
-    );
+    try {
+      this.inputParser = createInputParser(
+        stdin,
+        stdout,
+        (event) => this.handleEvent(event),
+        { mouse: opts.mouse },
+      );
 
-    const ctx: RuntimeContext = {
-      app: this,
-      currentScope: this.focus.rootScope,
-    };
+      const ctx: RuntimeContext = {
+        app: this,
+        currentScope: this.focus.rootScope,
+      };
 
-    this.rootDispose = createRoot((dispose) => {
-      let contentNode = App.withContext(ctx, () => component());
+      this.rootDispose = createRoot((dispose) => {
+        let contentNode = App.withContext(ctx, () => component());
 
-      if (opts.scroll) {
-        // Inject minHeight so the user's root fills the viewport height.
-        // Without this, intermediate wrappers (e.g. TabFocus) that lack
-        // flexGrow won't stretch vertically, breaking centering.
-        // Only when the user hasn't set an explicit height.
-        const origStyle = contentNode.style;
+        if (opts.scroll) {
+          const origStyle = contentNode.style;
+          contentNode.style = () => {
+            const base =
+              typeof origStyle === "function" ? origStyle() : origStyle;
+            if (base.height === "auto") {
+              return {
+                ...base,
+                minHeight: Math.max(
+                  typeof base.minHeight === "number" ? base.minHeight : 0,
+                  stdout.rows,
+                ),
+              };
+            }
+            return base;
+          };
+
+          contentNode = App.withContext(ctx, () =>
+            ScrollArea({
+              height: () => stdout.rows,
+              minHeight: () => stdout.rows,
+              focusable: false,
+              children: [contentNode],
+            }),
+          );
+        }
+
+        const contentStyle = contentNode.style;
         contentNode.style = () => {
           const base =
-            typeof origStyle === "function" ? origStyle() : origStyle;
-          if (base.height === "auto") {
-            return {
-              ...base,
-              minHeight: Math.max(
-                typeof base.minHeight === "number" ? base.minHeight : 0,
-                stdout.rows,
-              ),
-            };
-          }
-          return base;
+            typeof contentStyle === "function" ? contentStyle() : contentStyle;
+          return { ...base, flexGrow: 1 };
         };
 
-        contentNode = App.withContext(ctx, () =>
-          ScrollArea({
-            height: () => stdout.rows,
-            minHeight: () => stdout.rows,
-            focusable: false,
+        this.root = App.withContext(ctx, () =>
+          Box({
+            ...styleFallback(undefined, "root"),
+            flexDirection: "column",
             children: [contentNode],
           }),
         );
-      }
 
-      // Ensure content fills the root Box (previously the content WAS the
-      // layout root and received full terminal dimensions automatically).
-      const contentStyle = contentNode.style;
-      contentNode.style = () => {
-        const base =
-          typeof contentStyle === "function" ? contentStyle() : contentStyle;
-        return { ...base, flexGrow: 1 };
-      };
-
-      this.root = App.withContext(ctx, () =>
-        Box({
-          ...styleFallback(undefined, "root"),
-          flexDirection: "column",
-          children: [contentNode],
-        }),
-      );
-
-      // Attach pending portal children to root
-      const rootChildren = (this.root.children as Node[]) ?? [];
-      if (!this.root.children) this.root.children = rootChildren;
-      for (const children of this.pendingPortalAttachments) {
-        rootChildren.push(...children);
-        for (const child of children) {
-          child._parent = this.root;
+        const rootChildren = (this.root.children as Node[]) ?? [];
+        if (!this.root.children) this.root.children = rootChildren;
+        for (const children of this.pendingPortalAttachments) {
+          rootChildren.push(...children);
+          for (const child of children) {
+            child._parent = this.root;
+          }
         }
-      }
-      this.pendingPortalAttachments.length = 0;
+        this.pendingPortalAttachments.length = 0;
 
-      this.focus.initialize(this.root);
-      this.renderer.bind(this.root);
+        this.focus.initialize(this.root);
+        this.renderer.bind(this.root);
 
-      return dispose;
-    });
+        return dispose;
+      });
 
-    this.renderer.flush();
-    this.setupSignalHandlers();
+      this.renderer.flush();
+      this.setupSignalHandlers();
+    } catch (error) {
+      this.inputParser?.destroy();
+      exitTuiMode(stdout, { alternateScreen: opts.alternateScreen });
+      throw error;
+    }
   }
 
   unmount(): void {

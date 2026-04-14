@@ -2289,6 +2289,63 @@ describe("mount", () => {
     assert.ok(mockStdout.written.includes("\x1b[?1049l")); // exit alternate screen
   });
 
+  it("restores terminal when component throws during mount", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    assert.throws(
+      () =>
+        App.mount(
+          () => {
+            throw new Error("component boom");
+          },
+          {
+            stdin: mockStdin as unknown as NodeJS.ReadStream,
+            stdout: mockStdout as unknown as NodeJS.WriteStream,
+          },
+        ),
+      { message: "component boom" },
+    );
+
+    assert.ok(
+      mockStdout.written.includes("\x1b[?25h"),
+      "cursor should be restored",
+    );
+    assert.ok(
+      mockStdout.written.includes("\x1b[?1049l"),
+      "alternate screen should be exited",
+    );
+  });
+
+  it("restores terminal when component throws without alternate screen", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    assert.throws(
+      () =>
+        App.mount(
+          () => {
+            throw new Error("component boom");
+          },
+          {
+            stdin: mockStdin as unknown as NodeJS.ReadStream,
+            stdout: mockStdout as unknown as NodeJS.WriteStream,
+            alternateScreen: false,
+          },
+        ),
+      { message: "component boom" },
+    );
+
+    assert.ok(
+      mockStdout.written.includes("\x1b[?25h"),
+      "cursor should be restored",
+    );
+    assert.ok(
+      !mockStdout.written.includes("\x1b[?1049l"),
+      "should not write alternate screen exit when not used",
+    );
+  });
+
   it("renders initial content", () => {
     const mockStdin = createMockStdin();
     const mockStdout = createMockStdout();
