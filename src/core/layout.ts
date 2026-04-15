@@ -480,8 +480,7 @@ function collectLines(
     getMainPadding(style, isRow) -
     getMainBorder(style, isRow);
 
-  // For space-* justification, gap is computed dynamically, not from style.gap.
-  const effectiveGap = isSpaceJustify(style.justifyContent) ? 0 : style.gap;
+  const effectiveGap = style.gap;
 
   // nowrap: single line with all children
   if (style.flexWrap === "nowrap") {
@@ -815,11 +814,11 @@ function applyJustifyContentForLine(
   let gap: number;
 
   if (style.justifyContent === "space-between") {
-    gap = count > 1 ? remaining / (count - 1) : 0;
+    gap = style.gap + (count > 1 ? remaining / (count - 1) : 0);
   } else if (style.justifyContent === "space-around") {
-    gap = remaining / count;
+    gap = style.gap + remaining / count;
   } else if (style.justifyContent === "space-evenly") {
-    gap = remaining / (count + 1);
+    gap = style.gap + remaining / (count + 1);
   } else {
     gap = style.gap;
   }
@@ -1062,8 +1061,7 @@ function resolveFlexAndPosition(box: LayoutBox): void {
   const containerCrossSize =
     (isRow ? box.height : box.width) - crossPadding - crossBorder;
 
-  // For space-* justification, gap is computed dynamically, not from style.gap
-  const justifyGap = isSpaceJustify(style.justifyContent) ? 0 : style.gap;
+  const justifyGap = style.gap;
 
   // Recalculate all line sizes after flex distribution
   const updatedLines: FlexLine[] = [];

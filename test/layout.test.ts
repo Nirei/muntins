@@ -907,17 +907,35 @@ describe("justifyContent", () => {
     assert.strictEqual(result.children[0].x, 0);
   });
 
-  it("space-between does not add style.gap on top", () => {
+  it("space-between with gap that fits produces same positions as without gap", () => {
+    const withGap: LayoutNode = {
+      style: { width: 30, justifyContent: "space-between", gap: 3 },
+      children: [{ style: { width: 5 } }, { style: { width: 5 } }],
+    };
+    const withoutGap: LayoutNode = {
+      style: { width: 30, justifyContent: "space-between" },
+      children: [{ style: { width: 5 } }, { style: { width: 5 } }],
+    };
+    const withResult = computeLayout(withGap, 80, 24);
+    const withoutResult = computeLayout(withoutGap, 80, 24);
+
+    // space-between positions are the same regardless of gap (algebraic identity):
+    // effective gap = style.gap + (available - items - (n-1)*gap)/(n-1)
+    //               = (available - items)/(n-1)
+    assert.strictEqual(withResult.children[0].x, withoutResult.children[0].x);
+    assert.strictEqual(withResult.children[1].x, withoutResult.children[1].x);
+  });
+
+  it("space-between with gap larger than container reduces gap to fit", () => {
     const node: LayoutNode = {
       style: { width: 30, justifyContent: "space-between", gap: 100 },
       children: [{ style: { width: 5 } }, { style: { width: 5 } }],
     };
     const result = computeLayout(node, 80, 24);
 
-    // space-between: first at 0, last at 25 (30 - 5)
-    // gap:100 should be IGNORED for space-between
+    // gap=100 in width 30: items shrink to 0, then effective gap = 100 + (30-100)/1 = 30
     assert.strictEqual(result.children[0].x, 0);
-    assert.strictEqual(result.children[1].x, 25);
+    assert.strictEqual(result.children[1].x, 30);
   });
 
   it("space-around distributes equal space around items", () => {
@@ -1000,6 +1018,35 @@ describe("justifyContent", () => {
     // Total content: 5 + 2 + 5 = 12, remaining = 18, offset = 9
     assert.strictEqual(result.children[0].x, 9);
     assert.strictEqual(result.children[1].x, 16); // 9 + 5 + 2
+  });
+
+  it("space-around respects gap as minimum spacing", () => {
+    const node: LayoutNode = {
+      style: { width: 50, justifyContent: "space-around", gap: 5 },
+      children: [{ style: { width: 10 } }, { style: { width: 10 } }],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Free space = 50 - 10 - 10 - 5 = 25, spacePerItem = 25/2 = 12.5
+    // Offset = 12.5/2 = 6.25, gap_between = 5 + 12.5 = 17.5
+    assert.strictEqual(result.children[0].x, 6);
+    assert.strictEqual(result.children[1].x, Math.round(6.25 + 10 + 17.5));
+  });
+
+  it("space-evenly respects gap as minimum spacing", () => {
+    const node: LayoutNode = {
+      style: { width: 50, justifyContent: "space-evenly", gap: 5 },
+      children: [{ style: { width: 10 } }, { style: { width: 10 } }],
+    };
+    const result = computeLayout(node, 80, 24);
+
+    // Free space = 50 - 10 - 10 - 5 = 25, edge gap = 25/3 = 8.33
+    // gap_between = 5 + 25/3 = 5 + 8.33 = 13.33
+    assert.strictEqual(result.children[0].x, Math.round(25 / 3));
+    assert.strictEqual(
+      result.children[1].x,
+      Math.round(25 / 3 + 10 + 5 + 25 / 3),
+    );
   });
 
   it("space-evenly positions last child correctly despite fractional gaps", () => {
@@ -2056,6 +2103,90 @@ describe("alignContent", () => {
     // flex-end: lines packed at right (x=30, x=40)
     assert.strictEqual(result.children[0].x, 30);
     assert.strictEqual(result.children[1].x, 40);
+  });
+
+  it("space-between with gap adds gap on top of distributed space", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 30,
+        height: 50,
+        flexWrap: "wrap",
+        alignContent: "space-between",
+        alignItems: "flex-start",
+        gap: 5,
+      },
+      children: [
+        { style: { width: 20, height: 10 } },
+        { style: { width: 20, height: 10 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 50);
+
+    // totalLinesCrossSize = 10 + 5 + 10 = 25
+    // remaining = 50 - 25 = 25
+    // lineCrossGap = 5 + 25/(2-1) = 30
+    // Line 0: y=0
+    // crossPos = 0 + 10 + 30 = 40
+    // Line 1: y=40
+    assert.strictEqual(result.children[0].y, 0);
+    assert.strictEqual(result.children[1].y, 40);
+  });
+
+  it("space-around with gap adds gap on top of distributed space", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 30,
+        height: 50,
+        flexWrap: "wrap",
+        alignContent: "space-around",
+        alignItems: "flex-start",
+        gap: 5,
+      },
+      children: [
+        { style: { width: 20, height: 10 } },
+        { style: { width: 20, height: 10 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 50);
+
+    // totalLinesCrossSize = 10 + 5 + 10 = 25
+    // remaining = 50 - 25 = 25
+    // spacePerLine = 25/2 = 12.5
+    // crossPos starts at 12.5/2 = 6.25
+    // lineCrossGap = 5 + 12.5 = 17.5
+    assert.strictEqual(result.children[0].y, 6);
+    assert.strictEqual(result.children[1].y, Math.round(6.25 + 10 + 17.5));
+  });
+
+  it("space-between with gap and three lines", () => {
+    const node: LayoutNode = {
+      style: {
+        width: 30,
+        height: 60,
+        flexWrap: "wrap",
+        alignContent: "space-between",
+        alignItems: "flex-start",
+        gap: 3,
+      },
+      children: [
+        { style: { width: 20, height: 10 } },
+        { style: { width: 20, height: 10 } },
+        { style: { width: 20, height: 10 } },
+      ],
+    };
+    const result = computeLayout(node, 80, 60);
+
+    // totalLinesCrossSize = 10 + 3 + 10 + 3 + 10 = 36
+    // remaining = 60 - 36 = 24
+    // lineCrossGap = 3 + 24/(3-1) = 3 + 12 = 15
+    // Line 0: y=0
+    // crossPos = 0 + 10 + 15 = 25
+    // Line 1: y=25
+    // crossPos = 25 + 10 + 15 = 50
+    // Line 2: y=50
+    assert.strictEqual(result.children[0].y, 0);
+    assert.strictEqual(result.children[1].y, 25);
+    assert.strictEqual(result.children[2].y, 50);
   });
 });
 
