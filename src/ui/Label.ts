@@ -4,7 +4,6 @@ import { Text } from "../core/components/Text.ts";
 import { useFocus } from "../core/components/useFocus.ts";
 import type { MouseEvent } from "../core/input.ts";
 import type { ReactiveTextStyle } from "../core/render.ts";
-import { App } from "../core/runtime/App.ts";
 import type { Node, Ref } from "../core/runtime/Node.ts";
 import { createEffect, createSignal } from "../core/signals.ts";
 import { styleFallback } from "../core/theme.ts";

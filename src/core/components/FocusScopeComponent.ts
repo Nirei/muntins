@@ -1,10 +1,11 @@
-import { App, type RuntimeContext } from "../runtime/App.ts";
 import {
   FocusManager,
   type FocusScope,
   type NodeWithFocusScope,
 } from "../runtime/FocusManager.ts";
 import type { Node } from "../runtime/Node.ts";
+import type { RuntimeContext } from "../runtime/context.ts";
+import { getContext, withContext } from "../runtime/context.ts";
 import { Box } from "./Box.ts";
 
 /** Props for FocusScopeComponent */
@@ -21,7 +22,7 @@ export function createFocusScopeNode(
   props: { children: Node[]; trap?: boolean },
   boxFactory: (children: Node[], scope: FocusScope) => Node,
 ): Node {
-  const ctx = App.getContext();
+  const ctx = getContext();
 
   const scope: FocusScope = {
     parent: ctx.currentScope,
@@ -35,9 +36,7 @@ export function createFocusScopeNode(
     currentScope: scope,
   };
 
-  const node = App.withContext(childCtx, () =>
-    boxFactory(props.children, scope),
-  );
+  const node = withContext(childCtx, () => boxFactory(props.children, scope));
 
   (node as NodeWithFocusScope)._focusScope = scope;
   FocusManager.collectFocusableInScope(node, scope);

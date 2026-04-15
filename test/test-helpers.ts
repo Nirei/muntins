@@ -6,11 +6,7 @@ import {
   DEFAULT_INHERITED_STYLE,
   type InheritedStyle,
 } from "../src/core/render.ts";
-import {
-  App,
-  DEFAULT_MOUNT_OPTIONS,
-  type RuntimeContext,
-} from "../src/core/runtime/App.ts";
+import { App, DEFAULT_MOUNT_OPTIONS } from "../src/core/runtime/App.ts";
 import { EventDispatcher } from "../src/core/runtime/EventDispatcher.ts";
 import {
   FocusManager,
@@ -18,6 +14,10 @@ import {
 } from "../src/core/runtime/FocusManager.ts";
 import type { Node } from "../src/core/runtime/Node.ts";
 import { Renderer } from "../src/core/runtime/Renderer.ts";
+import {
+  type RuntimeContext,
+  _setActiveContext,
+} from "../src/core/runtime/context.ts";
 import type { Accessor, Setter } from "../src/core/signals.ts";
 
 interface HoverState {
@@ -93,7 +93,7 @@ export function createTestApp(
  * uses App.withContext() which saves/restores automatically.
  */
 export function setActiveContext(ctx: RuntimeContext | null): void {
-  (App as unknown as Record<string, unknown>).activeContext = ctx;
+  _setActiveContext(ctx);
 }
 
 // ---------------------------------------------------------------------------

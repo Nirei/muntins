@@ -5,10 +5,10 @@ import { Portal } from "../core/components/Portal.ts";
 import { Show } from "../core/components/Show.ts";
 import type { KeyEvent } from "../core/input.ts";
 import type { ReactiveFlexStyle } from "../core/layout.ts";
-import type { RuntimeContext } from "../core/runtime/App.ts";
-import { App } from "../core/runtime/App.ts";
 import type { Node, Ref } from "../core/runtime/Node.ts";
 import { createRef } from "../core/runtime/Node.ts";
+import type { RuntimeContext } from "../core/runtime/context.ts";
+import { getActiveContext } from "../core/runtime/context.ts";
 import { type MaybeAccessor, resolve } from "../core/signals.ts";
 import { styleFallback } from "../core/theme.ts";
 
@@ -304,7 +304,7 @@ export function Popover(props: PopoverProps): Node {
   const isOpen = () => resolve(props.open) ?? false;
   const getPlacement = () => resolve(props.placement) ?? "bottom-start";
 
-  const ctx = App.getActiveContext();
+  const ctx = getActiveContext();
 
   const handleKeyPress = (key: KeyEvent): boolean | undefined => {
     if (key.name === "escape") {

@@ -1,9 +1,7 @@
-// ScrollArea component - scrollable container with scrollbar
-
 import type { KeyEvent, ScrollEvent } from "../input.ts";
 import type { ReactiveFlexStyle } from "../layout.ts";
-import { App } from "../runtime/App.ts";
 import { type Node, type Ref, createRef } from "../runtime/Node.ts";
+import { getActiveContext } from "../runtime/context.ts";
 import { createEffect, createSignal, resolve } from "../signals.ts";
 import { Box } from "./Box.ts";
 import { Text } from "./Text.ts";
@@ -136,7 +134,7 @@ function Scrollbar(props: {
 export function ScrollArea(props: ScrollAreaProps): Node {
   const [internalOffset, setInternalOffset] = createSignal(0);
 
-  const ctx = App.getActiveContext();
+  const ctx = getActiveContext();
 
   const getScrollTop = () => resolve(props.scrollTop) ?? internalOffset();
   const getHeight = () => resolve(props.height) ?? DEFAULT_HEIGHT;

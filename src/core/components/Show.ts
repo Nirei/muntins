@@ -1,6 +1,6 @@
 import { DEFAULT_FLEX_STYLE } from "../layout.ts";
-import { App } from "../runtime/App.ts";
 import { Node } from "../runtime/Node.ts";
+import { getActiveContext, withContext } from "../runtime/context.ts";
 import { createEffect, createRoot, onCleanup } from "../signals.ts";
 
 /** Props for Show component. */
@@ -24,7 +24,7 @@ export interface ShowProps<T> {
 export function Show<T>(props: ShowProps<T>): Node {
   const { when: condition, children: childrenBranch, fallback } = props;
 
-  const ctx = App.getActiveContext();
+  const ctx = getActiveContext();
   const children: Node[] = [];
   let currentDispose: (() => void) | null = null;
   let currentChild: Node | null = null;
@@ -52,7 +52,7 @@ export function Show<T>(props: ShowProps<T>): Node {
     factory: () => Node,
     dispose: () => void,
   ): (() => void) => {
-    const node = ctx ? App.withContext(ctx, factory) : factory();
+    const node = ctx ? withContext(ctx, factory) : factory();
     node._parent = container;
     children.push(node);
     currentChild = node;

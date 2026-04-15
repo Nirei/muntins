@@ -34,11 +34,7 @@ import {
   exitTuiMode,
   flushFrame,
 } from "../src/core/render.ts";
-import {
-  App,
-  DEFAULT_MOUNT_OPTIONS,
-  type RuntimeContext,
-} from "../src/core/runtime/App.ts";
+import { App, DEFAULT_MOUNT_OPTIONS } from "../src/core/runtime/App.ts";
 import {
   type FocusController,
   FocusManager,
@@ -51,6 +47,7 @@ import {
   createRef,
 } from "../src/core/runtime/Node.ts";
 import { Renderer } from "../src/core/runtime/Renderer.ts";
+import type { RuntimeContext } from "../src/core/runtime/context.ts";
 import {
   createEffect,
   createRoot,

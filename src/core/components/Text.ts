@@ -1,9 +1,9 @@
 import type { ActivateEvent } from "../input.ts";
 import { DEFAULT_FLEX_STYLE } from "../layout.ts";
 import { type ReactiveTextStyle, renderText } from "../render.ts";
-import { App } from "../runtime/App.ts";
 import { type EventHandlerProps, Node, type Ref } from "../runtime/Node.ts";
-import { createEffect, type MaybeAccessor, resolve } from "../signals.ts";
+import { getActiveContext } from "../runtime/context.ts";
+import { type MaybeAccessor, createEffect, resolve } from "../signals.ts";
 import {
   type VisualLine,
   type WrapMode,
@@ -157,7 +157,7 @@ export function Text(props: TextProps): Node {
 
   // If content is reactive, track it and schedule flush when it changes
   if (typeof content === "function") {
-    const ctx = App.getActiveContext();
+    const ctx = getActiveContext();
     if (ctx) {
       createEffect(() => {
         getContent(); // Track the content signal

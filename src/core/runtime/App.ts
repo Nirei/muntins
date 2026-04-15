@@ -10,6 +10,12 @@ import { EventDispatcher, type HoverStateView } from "./EventDispatcher.ts";
 import { FocusManager, type FocusScope } from "./FocusManager.ts";
 import type { Node } from "./Node.ts";
 import { Renderer } from "./Renderer.ts";
+import {
+  type RuntimeContext,
+  getActiveContext,
+  getContext,
+  withContext,
+} from "./context.ts";
 
 /**
  * Configuration for mounting an application.
@@ -37,14 +43,7 @@ export const DEFAULT_MOUNT_OPTIONS: Required<MountOptions> = {
   scroll: true,
 };
 
-/**
- * Runtime context threaded through component construction via closures.
- * Supports multiple concurrent mount() calls.
- */
-export interface RuntimeContext {
-  app: App;
-  currentScope: FocusScope;
-}
+export type { RuntimeContext } from "./context.ts";
 
 /**
  * A mounted terminal UI application.
@@ -57,28 +56,9 @@ export interface RuntimeContext {
  * Created via `App.mount()`.
  */
 export class App {
-  private static activeContext: RuntimeContext | null = null;
-
-  static getActiveContext(): RuntimeContext | null {
-    return App.activeContext;
-  }
-
-  static withContext<T>(ctx: RuntimeContext, fn: () => T): T {
-    const prev = App.activeContext;
-    App.activeContext = ctx;
-    try {
-      return fn();
-    } finally {
-      App.activeContext = prev;
-    }
-  }
-
-  static getContext(): RuntimeContext {
-    if (!App.activeContext) {
-      throw new Error("must be called within a mounted component");
-    }
-    return App.activeContext;
-  }
+  static getActiveContext = getActiveContext;
+  static getContext = getContext;
+  static withContext = withContext;
 
   static mount(component: () => Node, options?: MountOptions): App {
     return new App(component, options);

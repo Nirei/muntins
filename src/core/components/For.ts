@@ -1,6 +1,6 @@
 import { DEFAULT_FLEX_STYLE } from "../layout.ts";
-import { App } from "../runtime/App.ts";
 import { Node } from "../runtime/Node.ts";
+import { getActiveContext } from "../runtime/context.ts";
 import {
   type MaybeAccessor,
   createEffect,
@@ -42,7 +42,7 @@ interface ForItemEntry<T> {
 export function For<T>(props: ForProps<T>): Node {
   const { each: items, render, key: keyFn } = props;
 
-  const ctx = App.getActiveContext();
+  const ctx = getActiveContext();
   const children: Node[] = [];
   const itemRoots: Map<unknown, ForItemEntry<T>[]> = new Map();
   const getKey = keyFn ?? ((item: T) => item);

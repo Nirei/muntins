@@ -17,8 +17,8 @@ import {
 } from "../core/layout.ts";
 import { rectContains } from "../core/rects.ts";
 import type { Rect } from "../core/rects.ts";
-import { App } from "../core/runtime/App.ts";
 import { Node, type Ref } from "../core/runtime/Node.ts";
+import { getActiveContext } from "../core/runtime/context.ts";
 import {
   type Accessor,
   type MaybeAccessor,
@@ -314,7 +314,7 @@ export function Textarea(props: TextareaProps): Node {
   const getPlaceholder = () => resolve(props.placeholder) ?? "";
   const isMultiline = props.multiline ?? true;
 
-  const ctx = App.getActiveContext();
+  const ctx = getActiveContext();
   const focusedNodeAccessor: Accessor<Node | null> | null =
     ctx?.app.focusedNode ?? null;
 

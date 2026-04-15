@@ -1,6 +1,6 @@
-import { App } from "../runtime/App.ts";
 import type { FocusScope } from "../runtime/FocusManager.ts";
 import type { Node } from "../runtime/Node.ts";
+import { getContext } from "../runtime/context.ts";
 import { Box } from "./Box.ts";
 import { createFocusScopeNode } from "./FocusScopeComponent.ts";
 
@@ -17,7 +17,7 @@ export interface TabFocusProps {
  * between focusable children.
  */
 export function TabFocus(props: TabFocusProps): Node {
-  const ctx = App.getContext();
+  const ctx = getContext();
 
   const propsWithTrap = { ...props, trap: props.trap ?? true };
 
