@@ -50,7 +50,9 @@ const batchQueue: Set<Computation> = new Set();
 const updatingNodes: Set<Computation> = new Set();
 
 // Effect execution state: defers nested triggers to prevent stack overflow
-const effectState = { isRunning: false };
+// Uses depth counter (like batchDepth) so nested runTopLevelEffect calls
+// don't clobber the outer execution's state.
+let effectDepth = 0;
 const pendingEffects: Set<Computation> = new Set();
 
 // Iteration limit to prevent infinite loops
@@ -387,7 +389,7 @@ function update(node: Computation): void {
 function scheduleEffect(node: Computation): void {
   if (batchDepth > 0) {
     batchQueue.add(node);
-  } else if (effectState.isRunning) {
+  } else if (effectDepth > 0) {
     pendingEffects.add(node);
   } else {
     runTopLevelEffect(node);
@@ -400,7 +402,7 @@ function scheduleEffect(node: Computation): void {
  * trigger themselves through signal writes.
  */
 function runTopLevelEffect(node: Computation): void {
-  effectState.isRunning = true;
+  effectDepth++;
   let iterations = 0;
 
   try {
@@ -419,8 +421,10 @@ function runTopLevelEffect(node: Computation): void {
       );
     }
   } finally {
-    effectState.isRunning = false;
-    pendingEffects.clear();
+    effectDepth--;
+    if (effectDepth === 0) {
+      pendingEffects.clear();
+    }
   }
 }
 

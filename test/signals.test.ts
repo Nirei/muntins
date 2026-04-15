@@ -1049,3 +1049,72 @@ describe("onMount", () => {
     }
   });
 });
+
+describe("nested effect execution order", () => {
+  it("defers effects triggered by signal write after nested effect creation", () => {
+    const [x, setX] = createSignal(0);
+    const [y, setY] = createSignal(0);
+    const log: string[] = [];
+
+    createEffect(() => {
+      log.push(`A:${x()}`);
+    });
+
+    createEffect(() => {
+      log.push(`B-start:${y()}`);
+      createEffect(() => {
+        log.push("B-inner");
+      });
+      setX(y() + 10);
+      log.push(`B-end:${y()}`);
+    });
+
+    assert.deepStrictEqual(log, [
+      "A:0",
+      "B-start:0",
+      "B-inner",
+      "B-end:0",
+      "A:10",
+    ]);
+
+    log.length = 0;
+    setY(1);
+
+    assert.deepStrictEqual(log, ["B-start:1", "B-inner", "B-end:1", "A:11"]);
+  });
+
+  it("coalesces multiple signal writes after nested effect creation", () => {
+    const [x, setX] = createSignal(0);
+    const [y, setY] = createSignal(0);
+    const [trigger, setTrigger] = createSignal(0);
+    const log: string[] = [];
+
+    createEffect(() => {
+      log.push(`X:${x()}`);
+    });
+
+    createEffect(() => {
+      log.push(`Y:${y()}`);
+    });
+
+    createEffect(() => {
+      log.push(`trigger:${trigger()}`);
+      createEffect(() => {
+        log.push("inner");
+      });
+      setX(1);
+      setY(1);
+      log.push("after-writes");
+    });
+
+    assert.deepStrictEqual(log, [
+      "X:0",
+      "Y:0",
+      "trigger:0",
+      "inner",
+      "after-writes",
+      "X:1",
+      "Y:1",
+    ]);
+  });
+});
