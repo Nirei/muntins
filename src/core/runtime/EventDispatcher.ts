@@ -19,6 +19,14 @@ interface HoverState {
 }
 
 /**
+ * Public view of hover state exposed to consumers.
+ * The `currentNode` field is read-only through this interface.
+ */
+export interface HoverStateView {
+  readonly currentNode: Node | null;
+}
+
+/**
  * Routes input events to the correct node handlers and tracks hover state.
  *
  * Dependencies are injected via constructor (Dependency Inversion).
@@ -31,6 +39,22 @@ export class EventDispatcher {
   private readonly focusManager: FocusManager;
   private readonly getRoot: () => Node;
   private readonly getLayoutResult: () => LayoutResult | null;
+
+  /**
+   * Get the current hover state. Returns a readonly view.
+   * Used by App's backward-compat accessor.
+   */
+  getHoverState(): HoverStateView {
+    return this.hoverState;
+  }
+
+  /**
+   * Set the hover state. Accepts a partial update for the currentNode.
+   * Used by App's backward-compat accessor.
+   */
+  setHoverState(state: { currentNode: Node | null }): void {
+    this.hoverState = state;
+  }
 
   constructor(
     focusManager: FocusManager,

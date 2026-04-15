@@ -4459,3 +4459,63 @@ describe("reactive content relayout", () => {
     app.unmount();
   });
 });
+
+describe("backward-compat accessors", () => {
+  it("setFocusedNode sets focus and focusedNode reads it back", () => {
+    const a = Text({ content: "a", focusable: true });
+    const b = Text({ content: "b", focusable: true });
+    const app = createTestState(Box({ children: [a, b] }));
+
+    assert.strictEqual(app.focusedNode(), null);
+
+    app.setFocusedNode(a);
+    assert.strictEqual(app.focusedNode(), a);
+
+    app.setFocusedNode(b);
+    assert.strictEqual(app.focusedNode(), b);
+
+    app.setFocusedNode(null);
+    assert.strictEqual(app.focusedNode(), null);
+  });
+
+  it("setFocusedNode accepts setter function", () => {
+    const a = Text({ content: "a", focusable: true });
+    const b = Text({ content: "b", focusable: true });
+    const app = createTestState(Box({ children: [a, b] }));
+
+    app.setFocusedNode(a);
+    app.setFocusedNode((prev) => (prev === a ? b : a));
+    assert.strictEqual(app.focusedNode(), b);
+  });
+
+  it("hoverState reads and writes hover node", () => {
+    const node = Text({ content: "x" });
+    const app = createTestState(Box({ children: [node] }));
+
+    assert.strictEqual(app.hoverState.currentNode, null);
+
+    app.hoverState = { currentNode: node };
+    assert.strictEqual(app.hoverState.currentNode, node);
+
+    app.hoverState = { currentNode: null };
+    assert.strictEqual(app.hoverState.currentNode, null);
+  });
+
+  it("terminalFocused reads and writes terminal focus state", () => {
+    const app = createTestState(Box({}));
+
+    assert.strictEqual(app.terminalFocused, true);
+
+    app.terminalFocused = false;
+    assert.strictEqual(app.terminalFocused, false);
+
+    app.terminalFocused = true;
+    assert.strictEqual(app.terminalFocused, true);
+  });
+
+  it("rootScope exposes focus.rootScope", () => {
+    const app = createTestState(Box({}));
+    assert.ok(app.rootScope);
+    assert.strictEqual(app.rootScope.parent, null);
+  });
+});

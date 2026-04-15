@@ -68,8 +68,7 @@ export function createTestApp(
     () => renderer.layoutResult,
   );
   if (overrides?.hoverState) {
-    (events as unknown as Record<string, unknown>).hoverState =
-      overrides.hoverState;
+    events.setHoverState(overrides.hoverState);
   }
   if (overrides?.terminalFocused !== undefined) {
     events.terminalFocused = overrides.terminalFocused;

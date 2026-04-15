@@ -6,7 +6,7 @@ import { enterTuiMode, exitTuiMode } from "../render.ts";
 import type { Accessor, Setter } from "../signals.ts";
 import { batch, createRoot } from "../signals.ts";
 import { styleFallback } from "../theme.ts";
-import { EventDispatcher } from "./EventDispatcher.ts";
+import { EventDispatcher, type HoverStateView } from "./EventDispatcher.ts";
 import { FocusManager, type FocusScope } from "./FocusManager.ts";
 import type { Node } from "./Node.ts";
 import { Renderer } from "./Renderer.ts";
@@ -99,8 +99,7 @@ export class App {
     return this.focus.focusedNode;
   }
   get setFocusedNode(): Setter<Node | null> {
-    return (this.focus as unknown as { setFocusedNode: Setter<Node | null> })
-      .setFocusedNode;
+    return (node) => this.focus.setFocus(node);
   }
   get rootScope(): FocusScope {
     return this.focus.rootScope;
@@ -111,15 +110,11 @@ export class App {
   set layoutResult(value: LayoutResult | null) {
     this.renderer.layoutResult = value;
   }
-  get hoverState() {
-    return (
-      this.events as unknown as Record<string, { currentNode: Node | null }>
-    ).hoverState;
+  get hoverState(): HoverStateView {
+    return this.events.getHoverState();
   }
   set hoverState(value: { currentNode: Node | null }) {
-    (
-      this.events as unknown as Record<string, { currentNode: Node | null }>
-    ).hoverState = value;
+    this.events.setHoverState(value);
   }
   get terminalFocused(): boolean {
     return this.events.terminalFocused;

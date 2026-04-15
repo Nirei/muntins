@@ -1,5 +1,4 @@
-import type { Accessor, Setter } from "../signals.ts";
-import { createSignal } from "../signals.ts";
+import { type Accessor, type Setter, createSignal } from "../signals.ts";
 import type { Node, Ref } from "./Node.ts";
 
 /**
@@ -40,18 +39,19 @@ type FocusDirection = 1 | -1;
 export class FocusManager {
   readonly rootScope: FocusScope;
   readonly focusedNode: Accessor<Node | null>;
-  private readonly setFocusedNode: Setter<Node | null>;
+  private readonly _setFocusedNode: Setter<Node | null>;
 
   constructor() {
     const [focusedNode, setFocusedNode] = createSignal<Node | null>(null);
     this.focusedNode = focusedNode;
-    this.setFocusedNode = setFocusedNode;
+    this._setFocusedNode = setFocusedNode;
     this.rootScope = {
       parent: null,
       focusableNodes: [],
       focusedIndex: -1,
       trap: false,
     };
+    this.setFocus = (value) => this._setFocusedNode(value);
   }
 
   /**
@@ -75,8 +75,15 @@ export class FocusManager {
     if (index !== -1) {
       scope.focusedIndex = index;
     }
-    this.setFocusedNode(targetNode);
+    this._setFocusedNode(targetNode);
   }
+
+  /**
+   * Programmatically set focus to a specific node (or clear it with null).
+   * Accepts either a direct value or a setter function, matching the Setter type.
+   * Used by App's backward-compat accessor and for direct focus control.
+   */
+  setFocus: Setter<Node | null>;
 
   /** Navigate focus to the next focusable node within a scope. */
   focusNext(scope: FocusScope): void {
@@ -101,7 +108,7 @@ export class FocusManager {
     const index = targetScope.focusableNodes.indexOf(node);
     if (index !== -1) {
       targetScope.focusedIndex = index;
-      this.setFocusedNode(node);
+      this._setFocusedNode(node);
     }
   }
 
@@ -126,7 +133,7 @@ export class FocusManager {
     if (index !== -1) {
       scope.focusedIndex = -1;
       targetScope.focusedIndex = index;
-      this.setFocusedNode(ref.current);
+      this._setFocusedNode(ref.current);
     }
   }
 
@@ -173,7 +180,7 @@ export class FocusManager {
   cleanupFocus(subtreeRoot: Node): void {
     const focused = this.focusedNode();
     if (focused?.isInSubtree(subtreeRoot)) {
-      this.setFocusedNode(null);
+      this._setFocusedNode(null);
     }
 
     this.unregisterSubtreeFocusables(subtreeRoot);
@@ -225,7 +232,7 @@ export class FocusManager {
     if (focusedIndex === -1) {
       const index = direction === 1 ? 0 : focusableNodes.length - 1;
       scope.focusedIndex = index;
-      this.setFocusedNode(focusableNodes[index]);
+      this._setFocusedNode(focusableNodes[index]);
       return;
     }
 
@@ -238,7 +245,7 @@ export class FocusManager {
 
       if (scope.trap) {
         scope.focusedIndex = wrapIndex;
-        this.setFocusedNode(focusableNodes[wrapIndex]);
+        this._setFocusedNode(focusableNodes[wrapIndex]);
       } else if (
         scope.parent &&
         FocusManager.countFocusablesInAncestors(scope.parent) > 0
@@ -247,11 +254,11 @@ export class FocusManager {
         this.focusNavigate(scope.parent, direction);
       } else {
         scope.focusedIndex = wrapIndex;
-        this.setFocusedNode(focusableNodes[wrapIndex]);
+        this._setFocusedNode(focusableNodes[wrapIndex]);
       }
     } else {
       scope.focusedIndex = targetIndex;
-      this.setFocusedNode(focusableNodes[targetIndex]);
+      this._setFocusedNode(focusableNodes[targetIndex]);
     }
   }
 
