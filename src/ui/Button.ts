@@ -1,9 +1,12 @@
 // Button component - focusable, activatable element
 
+import type { BoxChild } from "../core/components/Box.ts";
+import { Box } from "../core/components/Box.ts";
+import { useFocus } from "../core/components/useFocus.ts";
 import type { ActivateEvent, KeyEvent, MouseEvent } from "../core/input.ts";
 import type { ReactiveFlexStyle } from "../core/layout.ts";
-import type { BoxChild, Node, Ref } from "../core/runtime.ts";
-import { Box, createRef, useFocus } from "../core/runtime.ts";
+import { createRef } from "../core/runtime/Node.ts";
+import type { Node, Ref } from "../core/runtime/Node.ts";
 import { type MaybeAccessor, createSignal, resolve } from "../core/signals.ts";
 import { styleFallback } from "../core/theme.ts";
 

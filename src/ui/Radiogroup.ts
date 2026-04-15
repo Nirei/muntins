@@ -1,9 +1,13 @@
 // RadioGroup component - exclusive selection from a list of options
 
+import { Box } from "../core/components/Box.ts";
+import { For } from "../core/components/For.ts";
+import { Text } from "../core/components/Text.ts";
+import { useFocus } from "../core/components/useFocus.ts";
 import type { KeyEvent, MouseEvent } from "../core/input.ts";
 import type { ReactiveFlexStyle } from "../core/layout.ts";
-import type { Node, Ref } from "../core/runtime.ts";
-import { Box, For, Text, createRef, useFocus } from "../core/runtime.ts";
+import type { Node, Ref } from "../core/runtime/Node.ts";
+import { createRef } from "../core/runtime/Node.ts";
 import {
   type Accessor,
   type MaybeAccessor,

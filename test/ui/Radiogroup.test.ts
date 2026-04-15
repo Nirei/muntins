@@ -4,15 +4,12 @@ import {
   DEFAULT_COLOR,
   Buffer as RenderBuffer,
 } from "../../src/core/buffer.ts";
+import { Box } from "../../src/core/components/Box.ts";
+import { Text } from "../../src/core/components/Text.ts";
 import { DEFAULT_FLEX_STYLE } from "../../src/core/layout.ts";
-import {
-  Box,
-  DEFAULT_CLIP,
-  DEFAULT_INHERITED_STYLE,
-  type Node,
-  Text,
-  createRef,
-} from "../../src/core/runtime.ts";
+import { DEFAULT_CLIP } from "../../src/core/rects.ts";
+import { DEFAULT_INHERITED_STYLE } from "../../src/core/render.ts";
+import { type Node, createRef } from "../../src/core/runtime/Node.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { RadioGroup } from "../../src/ui/Radiogroup.ts";
 

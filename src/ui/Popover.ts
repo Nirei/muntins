@@ -1,9 +1,14 @@
 // Popover component - floating panel anchored to a trigger element
 
+import { Box } from "../core/components/Box.ts";
+import { Portal } from "../core/components/Portal.ts";
+import { Show } from "../core/components/Show.ts";
 import type { KeyEvent } from "../core/input.ts";
 import type { ReactiveFlexStyle } from "../core/layout.ts";
-import type { Node, Ref, RuntimeContext } from "../core/runtime.ts";
-import { App, Box, Portal, Show, createRef } from "../core/runtime.ts";
+import type { RuntimeContext } from "../core/runtime/App.ts";
+import { App } from "../core/runtime/App.ts";
+import type { Node, Ref } from "../core/runtime/Node.ts";
+import { createRef } from "../core/runtime/Node.ts";
 import { type MaybeAccessor, resolve } from "../core/signals.ts";
 import { styleFallback } from "../core/theme.ts";
 

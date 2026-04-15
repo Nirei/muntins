@@ -1,6 +1,8 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { App, Box, Text } from "../../src/core/runtime.ts";
+import { Box } from "../../src/core/components/Box.ts";
+import { Text } from "../../src/core/components/Text.ts";
+import { App } from "../../src/core/runtime/App.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import {
   type Menu,

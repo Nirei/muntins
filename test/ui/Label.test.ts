@@ -1,16 +1,14 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { Buffer as RenderBuffer } from "../../src/core/buffer.ts";
-import {
-  App,
-  Box,
-  DEFAULT_CLIP,
-  DEFAULT_INHERITED_STYLE,
-  type FocusController,
-  Text,
-  createRef,
-  useFocus,
-} from "../../src/core/runtime.ts";
+import { Box } from "../../src/core/components/Box.ts";
+import { Text } from "../../src/core/components/Text.ts";
+import { useFocus } from "../../src/core/components/useFocus.ts";
+import { DEFAULT_CLIP } from "../../src/core/rects.ts";
+import { DEFAULT_INHERITED_STYLE } from "../../src/core/render.ts";
+import { App } from "../../src/core/runtime/App.ts";
+import type { FocusController } from "../../src/core/runtime/FocusManager.ts";
+import { createRef } from "../../src/core/runtime/Node.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { Label } from "../../src/ui/Label.ts";
 import { Switch } from "../../src/ui/Switch.ts";

@@ -1,14 +1,12 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { DIM, Buffer as RenderBuffer } from "../../src/core/buffer.ts";
-import {
-  App,
-  Box,
-  DEFAULT_CLIP,
-  DEFAULT_INHERITED_STYLE,
-  Text,
-  createRef,
-} from "../../src/core/runtime.ts";
+import { Box } from "../../src/core/components/Box.ts";
+import { Text } from "../../src/core/components/Text.ts";
+import { DEFAULT_CLIP } from "../../src/core/rects.ts";
+import { DEFAULT_INHERITED_STYLE } from "../../src/core/render.ts";
+import { App } from "../../src/core/runtime/App.ts";
+import { createRef } from "../../src/core/runtime/Node.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { Button } from "../../src/ui/Button.ts";
 import { createMockStdin, createMockStdout } from "../test-helpers.ts";

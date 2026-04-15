@@ -1,9 +1,11 @@
 // Menubar component - horizontal menu bar with dropdown menus
 
+import { Box } from "../core/components/Box.ts";
+import { Show } from "../core/components/Show.ts";
+import { Text } from "../core/components/Text.ts";
 import type { KeyEvent } from "../core/input.ts";
 import type { ReactiveFlexStyle } from "../core/layout.ts";
-import type { Node, Ref } from "../core/runtime.ts";
-import { Box, Show, Text } from "../core/runtime.ts";
+import type { Node, Ref } from "../core/runtime/Node.ts";
 import { createSignal } from "../core/signals.ts";
 import { theme } from "../core/theme.ts";
 import { Popover } from "./Popover.ts";

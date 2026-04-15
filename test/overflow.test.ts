@@ -1,13 +1,11 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { Buffer as RenderBuffer } from "../src/core/buffer.ts";
+import { Box } from "../src/core/components/Box.ts";
+import { Text } from "../src/core/components/Text.ts";
 import { DEFAULT_FLEX_STYLE, computeLayout } from "../src/core/layout.ts";
-import {
-  Box,
-  DEFAULT_INHERITED_STYLE,
-  type Rect,
-  Text,
-} from "../src/core/runtime.ts";
+import type { Rect } from "../src/core/rects.ts";
+import { DEFAULT_INHERITED_STYLE } from "../src/core/render.ts";
 
 // Default clip rect for testing (large enough for all tests)
 const FULL_CLIP: Rect = { x: 0, y: 0, width: 100, height: 100 };

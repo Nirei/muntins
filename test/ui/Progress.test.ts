@@ -2,11 +2,9 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { type Color, Buffer as RenderBuffer } from "../../src/core/buffer.ts";
 import { computeLayout } from "../../src/core/layout.ts";
-import {
-  DEFAULT_CLIP,
-  DEFAULT_INHERITED_STYLE,
-  type Node,
-} from "../../src/core/runtime.ts";
+import { DEFAULT_CLIP } from "../../src/core/rects.ts";
+import { DEFAULT_INHERITED_STYLE } from "../../src/core/render.ts";
+import type { Node } from "../../src/core/runtime/Node.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { Progress } from "../../src/ui/Progress.ts";
 import { paintTree, toLayoutNode } from "../test-helpers.ts";

@@ -1,22 +1,23 @@
 import type { Buffer as RenderBuffer } from "../src/core/buffer.ts";
 import type { LayoutResult } from "../src/core/layout.ts";
 import type { LayoutNode } from "../src/core/layout.ts";
+import { DEFAULT_CLIP, type Rect } from "../src/core/rects.ts";
+import {
+  DEFAULT_INHERITED_STYLE,
+  type InheritedStyle,
+} from "../src/core/render.ts";
 import {
   App,
   DEFAULT_MOUNT_OPTIONS,
-  EventDispatcher,
+  type RuntimeContext,
+} from "../src/core/runtime/App.ts";
+import { EventDispatcher } from "../src/core/runtime/EventDispatcher.ts";
+import {
   FocusManager,
   type FocusScope,
-  Renderer,
-  type RuntimeContext,
-} from "../src/core/runtime.ts";
-import type { Node } from "../src/core/runtime.ts";
-import {
-  DEFAULT_CLIP,
-  DEFAULT_INHERITED_STYLE,
-  type InheritedStyle,
-  type Rect,
-} from "../src/core/runtime.ts";
+} from "../src/core/runtime/FocusManager.ts";
+import type { Node } from "../src/core/runtime/Node.ts";
+import { Renderer } from "../src/core/runtime/Renderer.ts";
 import type { Accessor, Setter } from "../src/core/signals.ts";
 
 interface HoverState {

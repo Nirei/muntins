@@ -1,6 +1,9 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { App, Box, Text, createRef } from "../../src/core/runtime.ts";
+import { Box } from "../../src/core/components/Box.ts";
+import { Text } from "../../src/core/components/Text.ts";
+import { App } from "../../src/core/runtime/App.ts";
+import { createRef } from "../../src/core/runtime/Node.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { Button } from "../../src/ui/Button.ts";
 import { Dialog } from "../../src/ui/Dialog.ts";

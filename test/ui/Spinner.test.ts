@@ -1,11 +1,9 @@
 import assert from "node:assert";
 import { describe, it, mock } from "node:test";
 import { Buffer as RenderBuffer } from "../../src/core/buffer.ts";
-import {
-  App,
-  DEFAULT_CLIP,
-  DEFAULT_INHERITED_STYLE,
-} from "../../src/core/runtime.ts";
+import { DEFAULT_CLIP } from "../../src/core/rects.ts";
+import { DEFAULT_INHERITED_STYLE } from "../../src/core/render.ts";
+import { App } from "../../src/core/runtime/App.ts";
 import { createRoot, createSignal } from "../../src/core/signals.ts";
 import { Spinner } from "../../src/ui/Spinner.ts";
 import { createMockStdin, createMockStdout } from "../test-helpers.ts";

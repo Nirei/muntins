@@ -5,6 +5,12 @@ import {
   DEFAULT_COLOR,
   Buffer as RenderBuffer,
 } from "../src/core/buffer.ts";
+import { Box, type BoxChild } from "../src/core/components/Box.ts";
+import { For } from "../src/core/components/For.ts";
+import { Show } from "../src/core/components/Show.ts";
+import { TabFocus } from "../src/core/components/TabFocus.ts";
+import { Text, type TextProps } from "../src/core/components/Text.ts";
+import { useFocus } from "../src/core/components/useFocus.ts";
 import type {
   MouseEvent as InputMouseEvent,
   KeyEvent,
@@ -16,45 +22,49 @@ import {
   computeLayout,
 } from "../src/core/layout.ts";
 import type { LayoutResult } from "../src/core/layout.ts";
+import { DEFAULT_CLIP, type Rect, type ScreenRect } from "../src/core/rects.ts";
 import {
-  App,
   BORDER_CHARS,
   type BorderStyleName,
-  Box,
-  DEFAULT_CLIP,
   DEFAULT_INHERITED_STYLE,
-  DEFAULT_MOUNT_OPTIONS,
-  type FocusController,
-  FocusManager,
-  type FocusScope,
-  For,
   type InheritedStyle,
-  type LayoutInfo,
-  Node,
-  type Rect,
-  Renderer,
-  type RuntimeContext,
-  Show,
-  TabFocus,
-  Text,
-  type VisualLine,
-  type WrapMode,
-  createRef,
+  type ReactiveTextStyle,
+  type TextStyle,
   enterTuiMode,
   exitTuiMode,
   flushFrame,
-  layoutLine,
-  measureText,
-  segmentLine,
-  truncateLine,
-  useFocus,
-} from "../src/core/runtime.ts";
+} from "../src/core/render.ts";
+import {
+  App,
+  DEFAULT_MOUNT_OPTIONS,
+  type RuntimeContext,
+} from "../src/core/runtime/App.ts";
+import {
+  type FocusController,
+  FocusManager,
+  type FocusScope,
+} from "../src/core/runtime/FocusManager.ts";
+import {
+  type LayoutInfo,
+  Node,
+  type Ref,
+  createRef,
+} from "../src/core/runtime/Node.ts";
+import { Renderer } from "../src/core/runtime/Renderer.ts";
 import {
   createEffect,
   createRoot,
   createSignal,
   onCleanup,
 } from "../src/core/signals.ts";
+import {
+  type VisualLine,
+  type WrapMode,
+  layoutLine,
+  measureText,
+  segmentLine,
+  truncateLine,
+} from "../src/core/text.ts";
 import { createTestApp, setActiveContext } from "./test-helpers.ts";
 
 describe("runtime core types", () => {

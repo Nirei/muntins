@@ -1,7 +1,9 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { INVERSE } from "../../src/core/buffer.ts";
-import { App, Box, createRef } from "../../src/core/runtime.ts";
+import { Box } from "../../src/core/components/Box.ts";
+import { App } from "../../src/core/runtime/App.ts";
+import { createRef } from "../../src/core/runtime/Node.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { setTheme } from "../../src/core/theme.ts";
 import defaultThemeJson from "../../src/default-theme.json" with {

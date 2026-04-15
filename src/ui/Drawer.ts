@@ -1,9 +1,12 @@
 // Drawer component - panel that slides in from the edge of the screen
 
+import { Box } from "../core/components/Box.ts";
+import { Portal } from "../core/components/Portal.ts";
+import { Show } from "../core/components/Show.ts";
+import { TabFocus } from "../core/components/TabFocus.ts";
 import type { KeyEvent } from "../core/input.ts";
 import type { FlexStyle, ReactiveFlexStyle } from "../core/layout.ts";
-import type { Node } from "../core/runtime.ts";
-import { Box, Portal, Show, TabFocus } from "../core/runtime.ts";
+import type { Node } from "../core/runtime/Node.ts";
 import { type MaybeAccessor, resolve } from "../core/signals.ts";
 import { theme } from "../core/theme.ts";
 

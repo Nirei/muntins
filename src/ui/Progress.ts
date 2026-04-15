@@ -1,9 +1,10 @@
 // Progress component - progress bar showing completion percentage
 
 import type { InheritableColor } from "../core/buffer.ts";
+import { Box } from "../core/components/Box.ts";
+import { Text } from "../core/components/Text.ts";
 import type { ReactiveFlexStyle } from "../core/layout.ts";
-import type { Node } from "../core/runtime.ts";
-import { Box, Text } from "../core/runtime.ts";
+import type { Node } from "../core/runtime/Node.ts";
 import { type MaybeAccessor, resolve } from "../core/signals.ts";
 import { theme } from "../core/theme.ts";
 

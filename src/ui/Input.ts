@@ -1,7 +1,7 @@
 // Input component - single-line text input (thin wrapper around Textarea)
 
 import type { ReactiveFlexStyle } from "../core/layout.ts";
-import type { Node, Ref } from "../core/runtime.ts";
+import type { Node, Ref } from "../core/runtime/Node.ts";
 import type { MaybeAccessor } from "../core/signals.ts";
 import { theme } from "../core/theme.ts";
 import { Textarea } from "./Textarea.ts";

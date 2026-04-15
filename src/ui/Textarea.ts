@@ -7,6 +7,7 @@ import {
   graphemeDisplayWidth,
   graphemes,
 } from "../core/buffer.ts";
+import { Box } from "../core/components/Box.ts";
 import { ScrollArea } from "../core/components/ScrollArea.ts";
 import { type KeyEvent, type MouseEvent, isPrintable } from "../core/input.ts";
 import {
@@ -15,8 +16,9 @@ import {
   type ReactiveFlexStyle,
 } from "../core/layout.ts";
 import { rectContains } from "../core/rects.ts";
-import type { Rect, Ref } from "../core/runtime.ts";
-import { App, Box, Node } from "../core/runtime.ts";
+import type { Rect } from "../core/rects.ts";
+import { App } from "../core/runtime/App.ts";
+import { Node, type Ref } from "../core/runtime/Node.ts";
 import {
   type Accessor,
   type MaybeAccessor,
