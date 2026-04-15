@@ -1,6 +1,5 @@
 import assert from "node:assert";
 import { EventEmitter } from "node:events";
-import * as readline from "node:readline";
 import { describe, it } from "node:test";
 import {
   App,
@@ -172,8 +171,6 @@ function createMockStreams() {
     pause: () => {},
   }) as unknown as NodeJS.ReadStream;
 
-  readline.emitKeypressEvents(stdin);
-
   const screen = new VirtualScreen(80, 24);
 
   const stdout = Object.assign(new EventEmitter(), {
@@ -194,10 +191,19 @@ function createMockStreams() {
  */
 function emitKeypress(
   stdin: NodeJS.ReadStream,
-  char: string,
+  _char: string,
   key: { name: string; ctrl?: boolean; shift?: boolean; meta?: boolean },
 ) {
-  stdin.emit("keypress", char, { ...key, sequence: char });
+  let sequence: string;
+  if (key.name === "tab") {
+    sequence = key.shift ? "\x1b[Z" : "\t";
+  } else if (key.ctrl) {
+    const code = key.name.charCodeAt(0) - 96;
+    sequence = String.fromCharCode(code);
+  } else {
+    sequence = key.name.length === 1 ? key.name : "";
+  }
+  stdin.emit("data", Buffer.from(sequence));
 }
 
 /**
@@ -687,12 +693,12 @@ describe("integration", () => {
         { stdin, stdout },
       );
 
-      emitKeypress(stdin, "a", { name: "a", ctrl: true, shift: true });
+      emitKeypress(stdin, "a", { name: "a", ctrl: true });
 
       assert.deepStrictEqual(receivedKey, {
         name: "a",
         ctrl: true,
-        shift: true,
+        shift: false,
       });
 
       app.unmount();
@@ -1437,8 +1443,6 @@ describe("integration", () => {
         resume: () => {},
         pause: () => {},
       }) as unknown as NodeJS.ReadStream;
-
-      readline.emitKeypressEvents(stdin);
 
       const screen = new VirtualScreenWithModifiers(80, 24);
 

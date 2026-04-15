@@ -859,17 +859,16 @@ describe("createInputParser", () => {
     assert.strictEqual(afterFirstDestroy, afterSecondDestroy);
   });
 
-  it("calls onEvent for keyboard input", () => {
+  it("calls onEvent for keyboard input via UnifiedParser", () => {
     const events: InputEvent[] = [];
-    // Use a mutable object to capture the handler
-    const handlers: { keypress?: (char: string, key: object) => void } = {};
+    const handlers: { data?: (data: Buffer) => void } = {};
 
     const mockStdin = {
       isTTY: true,
       setRawMode: () => {},
-      on: (event: string, handler: (char: string, key: object) => void) => {
-        if (event === "keypress") {
-          handlers.keypress = handler;
+      on: (event: string, handler: (data: Buffer) => void) => {
+        if (event === "data") {
+          handlers.data = handler;
         }
       },
       off: () => {},
@@ -887,18 +886,96 @@ describe("createInputParser", () => {
       events.push(event);
     });
 
-    // Simulate keypress
-    assert.ok(handlers.keypress);
-    handlers.keypress("a", {
-      name: "a",
-      ctrl: false,
-      shift: false,
-      meta: false,
-      sequence: "a",
-    });
+    assert.ok(handlers.data);
+    handlers.data(Buffer.from("a"));
 
     assert.strictEqual(events.length, 1);
     assert.strictEqual(events[0].type, "key");
+    assert.strictEqual((events[0] as KeyInput).name, "a");
+
+    parser.destroy();
+  });
+
+  it("emits Esc key in non-mouse path after escape timeout", async () => {
+    const events: InputEvent[] = [];
+    const handlers: { data?: (data: Buffer) => void } = {};
+
+    const mockStdin = {
+      isTTY: true,
+      setRawMode: () => {},
+      on: (event: string, handler: (data: Buffer) => void) => {
+        if (event === "data") {
+          handlers.data = handler;
+        }
+      },
+      off: () => {},
+      listenerCount: () => 0,
+    } as unknown as NodeJS.ReadStream;
+    const mockStdout = {
+      write: () => true,
+      columns: 80,
+      rows: 24,
+      on: () => {},
+      off: () => {},
+    } as unknown as NodeJS.WriteStream;
+
+    const parser = createInputParser(mockStdin, mockStdout, (event) => {
+      events.push(event);
+    });
+
+    assert.ok(handlers.data);
+    handlers.data(Buffer.from("\x1b"));
+
+    assert.strictEqual(events.length, 0, "Esc should not fire immediately");
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    assert.strictEqual(events.length, 1, "Esc should fire after timeout");
+    assert.strictEqual(events[0].type, "key");
+    assert.strictEqual((events[0] as KeyInput).name, "escape");
+    assert.strictEqual((events[0] as KeyInput).sequence, "\x1b");
+
+    parser.destroy();
+  });
+
+  it("cancels Esc timeout when more data arrives", async () => {
+    const events: InputEvent[] = [];
+    const handlers: { data?: (data: Buffer) => void } = {};
+
+    const mockStdin = {
+      isTTY: true,
+      setRawMode: () => {},
+      on: (event: string, handler: (data: Buffer) => void) => {
+        if (event === "data") {
+          handlers.data = handler;
+        }
+      },
+      off: () => {},
+      listenerCount: () => 0,
+    } as unknown as NodeJS.ReadStream;
+    const mockStdout = {
+      write: () => true,
+      columns: 80,
+      rows: 24,
+      on: () => {},
+      off: () => {},
+    } as unknown as NodeJS.WriteStream;
+
+    const parser = createInputParser(mockStdin, mockStdout, (event) => {
+      events.push(event);
+    });
+
+    assert.ok(handlers.data);
+    handlers.data(Buffer.from("\x1b"));
+    handlers.data(Buffer.from("[A"));
+
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual(events[0].type, "key");
+    assert.strictEqual((events[0] as KeyInput).name, "up");
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    assert.strictEqual(events.length, 1, "No Esc should fire after timeout");
 
     parser.destroy();
   });

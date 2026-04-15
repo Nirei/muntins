@@ -2033,21 +2033,21 @@ describe("stale focusableNodes cleanup", () => {
     assert.strictEqual(focusController.current(), firstRef.current);
 
     // Tab to second
-    mockStdin.emit("keypress", "\t", { name: "tab", sequence: "\t" });
+    mockStdin.emit("data", Buffer.from("\t"));
     keyPresses.length = 0;
-    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    mockStdin.emit("data", Buffer.from("x"));
     assert.deepStrictEqual(keyPresses, ["second"]);
 
     // Tab to third
-    mockStdin.emit("keypress", "\t", { name: "tab", sequence: "\t" });
+    mockStdin.emit("data", Buffer.from("\t"));
     keyPresses.length = 0;
-    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    mockStdin.emit("data", Buffer.from("x"));
     assert.deepStrictEqual(keyPresses, ["third"]);
 
     // Tab back to first (wrap)
-    mockStdin.emit("keypress", "\t", { name: "tab", sequence: "\t" });
+    mockStdin.emit("data", Buffer.from("\t"));
     keyPresses.length = 0;
-    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    mockStdin.emit("data", Buffer.from("x"));
     assert.deepStrictEqual(keyPresses, ["first"]);
 
     // Now hide the Show content (second, third are removed but not focused)
@@ -2055,9 +2055,9 @@ describe("stale focusableNodes cleanup", () => {
 
     // Tab should stay on first (only focusable node left)
     // If stale nodes remain in focusableNodes, Tab could try to focus disposed nodes
-    mockStdin.emit("keypress", "\t", { name: "tab", sequence: "\t" });
+    mockStdin.emit("data", Buffer.from("\t"));
     keyPresses.length = 0;
-    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    mockStdin.emit("data", Buffer.from("x"));
     // Should still be on first since it's the only focusable node
     assert.deepStrictEqual(
       keyPresses,
@@ -2504,12 +2504,12 @@ describe("mount", () => {
     );
 
     // Verify focus works in third cycle
-    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    mockStdin.emit("data", Buffer.from("x"));
     assert.deepStrictEqual(focusedNodes, ["a"]);
 
-    mockStdin.emit("keypress", "\t", { name: "tab", sequence: "\t" });
+    mockStdin.emit("data", Buffer.from("\t"));
     focusedNodes.length = 0;
-    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    mockStdin.emit("data", Buffer.from("x"));
     assert.deepStrictEqual(focusedNodes, ["b"]);
 
     app3.unmount();
@@ -2753,7 +2753,7 @@ describe("keyboard routing", () => {
     );
 
     // Simulate keypress
-    mockStdin.emit("keypress", "a", { name: "a", sequence: "a" });
+    mockStdin.emit("data", Buffer.from("a"));
 
     assert.strictEqual(receivedName, "a");
     app.unmount();
@@ -2790,7 +2790,7 @@ describe("keyboard routing", () => {
     );
 
     // Simulate keypress
-    mockStdin.emit("keypress", "a", { name: "a", sequence: "a" });
+    mockStdin.emit("data", Buffer.from("a"));
 
     assert.deepStrictEqual(calls, ["child", "parent"]);
     app.unmount();
@@ -2827,7 +2827,7 @@ describe("keyboard routing", () => {
     );
 
     // Simulate keypress
-    mockStdin.emit("keypress", "a", { name: "a", sequence: "a" });
+    mockStdin.emit("data", Buffer.from("a"));
 
     assert.deepStrictEqual(calls, ["child"]);
     app.unmount();
@@ -3518,13 +3518,8 @@ describe("useFocus", () => {
     const firstNode = observedFocus[countAfterMount - 1];
     assert.ok(firstNode !== null, "Should have focused a node via autoFocus");
 
-    // Simulate Tab key - must emit "keypress" event (readline format)
-    // The key object follows Node.js readline.Key interface
-    mockStdin.emit("keypress", "\t", {
-      name: "tab",
-      ctrl: false,
-      shift: false,
-    });
+    // Simulate Tab key
+    mockStdin.emit("data", Buffer.from("\t"));
 
     assert.strictEqual(
       observedFocus.length,
@@ -3541,11 +3536,7 @@ describe("useFocus", () => {
 
     // Tab again - wraps to first node (same node object), so signal doesn't fire
     // because the value is referentially equal. This is correct reactive behavior.
-    mockStdin.emit("keypress", "\t", {
-      name: "tab",
-      ctrl: false,
-      shift: false,
-    });
+    mockStdin.emit("data", Buffer.from("\t"));
 
     // After two tabs with 2 focusable nodes:
     // Initial: first (via autoFocus), Tab->second, Tab->first (wrap)
@@ -3732,13 +3723,13 @@ describe("TabFocus component", () => {
     );
 
     // First item should be focused initially
-    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    mockStdin.emit("data", Buffer.from("x"));
     assert.deepStrictEqual(focusedNodes, ["first"]);
 
     // Press Tab to move to second
-    mockStdin.emit("keypress", "\t", { name: "tab", sequence: "\t" });
+    mockStdin.emit("data", Buffer.from("\t"));
     focusedNodes.length = 0;
-    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    mockStdin.emit("data", Buffer.from("x"));
     assert.deepStrictEqual(focusedNodes, ["second"]);
 
     app.unmount();
@@ -3779,17 +3770,13 @@ describe("TabFocus component", () => {
     );
 
     // Second item should be focused initially (autoFocus)
-    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    mockStdin.emit("data", Buffer.from("x"));
     assert.deepStrictEqual(focusedNodes, ["second"]);
 
     // Press Shift+Tab to move to first
-    mockStdin.emit("keypress", "\t", {
-      name: "tab",
-      sequence: "\t",
-      shift: true,
-    });
+    mockStdin.emit("data", Buffer.from("\x1b[Z"));
     focusedNodes.length = 0;
-    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    mockStdin.emit("data", Buffer.from("x"));
     assert.deepStrictEqual(focusedNodes, ["first"]);
 
     app.unmount();
@@ -3843,25 +3830,25 @@ describe("TabFocus component", () => {
     );
 
     // First item should be focused initially
-    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    mockStdin.emit("data", Buffer.from("x"));
     assert.deepStrictEqual(focusedNodes, ["first"]);
 
     // Tab to second
-    mockStdin.emit("keypress", "\t", { name: "tab", sequence: "\t" });
+    mockStdin.emit("data", Buffer.from("\t"));
     focusedNodes.length = 0;
-    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    mockStdin.emit("data", Buffer.from("x"));
     assert.deepStrictEqual(focusedNodes, ["second"]);
 
     // Tab to third
-    mockStdin.emit("keypress", "\t", { name: "tab", sequence: "\t" });
+    mockStdin.emit("data", Buffer.from("\t"));
     focusedNodes.length = 0;
-    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    mockStdin.emit("data", Buffer.from("x"));
     assert.deepStrictEqual(focusedNodes, ["third"]);
 
     // Tab again - should wrap back to first (not escape to parent)
-    mockStdin.emit("keypress", "\t", { name: "tab", sequence: "\t" });
+    mockStdin.emit("data", Buffer.from("\t"));
     focusedNodes.length = 0;
-    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    mockStdin.emit("data", Buffer.from("x"));
     assert.deepStrictEqual(
       focusedNodes,
       ["first"],
@@ -4078,16 +4065,16 @@ describe("dynamic focus collection", () => {
     );
 
     // Initially only "always" is focusable
-    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    mockStdin.emit("data", Buffer.from("x"));
     assert.deepStrictEqual(receivedKeys, ["always"]);
 
     // Show the conditional node
     setVisible(true);
 
     // Tab to the new node - should work because it was registered
-    mockStdin.emit("keypress", "\t", { name: "tab", sequence: "\t" });
+    mockStdin.emit("data", Buffer.from("\t"));
     receivedKeys.length = 0;
-    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    mockStdin.emit("data", Buffer.from("x"));
     assert.deepStrictEqual(receivedKeys, ["conditional"]);
 
     app.unmount();
@@ -4124,16 +4111,16 @@ describe("dynamic focus collection", () => {
     );
 
     // Initially only "a" is focusable and focused
-    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    mockStdin.emit("data", Buffer.from("x"));
     assert.deepStrictEqual(receivedKeys, ["a"]);
 
     // Add item "b"
     setItems(["a", "b"]);
 
     // Tab to new item - should work because it was registered
-    mockStdin.emit("keypress", "\t", { name: "tab", sequence: "\t" });
+    mockStdin.emit("data", Buffer.from("\t"));
     receivedKeys.length = 0;
-    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    mockStdin.emit("data", Buffer.from("x"));
     assert.deepStrictEqual(receivedKeys, ["b"]);
 
     app.unmount();
@@ -4190,7 +4177,7 @@ describe("nested scope autoFocus", () => {
 
     // The nested scope's autoFocus node should receive initial focus,
     // not the root scope's first focusable
-    mockStdin.emit("keypress", "x", { name: "x", sequence: "x" });
+    mockStdin.emit("data", Buffer.from("x"));
     assert.deepStrictEqual(receivedKeys, ["inner-second"]);
 
     app.unmount();

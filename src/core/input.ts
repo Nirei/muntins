@@ -990,116 +990,74 @@ export function createInputParser(
   cleanups.push(() => teardownTerminal(stdin, stdout));
 
   const pasteParser = new PasteParser();
+  const unifiedParser = new UnifiedParser();
+  let escapeTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // When mouse is enabled, use UnifiedParser to avoid escape code leak.
-  // When mouse is disabled, use readline for keyboard (more compatible).
-  if (options.mouse) {
-    const unifiedParser = new UnifiedParser();
-    let escapeTimer: ReturnType<typeof setTimeout> | null = null;
+  const dataHandler = (data: Buffer) => {
+    // New input arrived — cancel any pending escape timeout since
+    // the parser will resolve the ambiguity with the new bytes.
+    if (escapeTimer) {
+      clearTimeout(escapeTimer);
+      escapeTimer = null;
+    }
 
-    const dataHandler = (data: Buffer) => {
-      // New input arrived — cancel any pending escape timeout since
-      // the parser will resolve the ambiguity with the new bytes.
-      if (escapeTimer) {
-        clearTimeout(escapeTimer);
+    let str = data.toString("utf8");
+
+    // Check for paste first (consumes entire paste content)
+    const pasteResult = pasteParser.feed(str);
+
+    if (pasteResult.beforePaste) {
+      const events = unifiedParser.feed(pasteResult.beforePaste);
+      for (const event of events) {
+        onEvent(event);
+      }
+    }
+
+    if (pasteResult.text !== null) {
+      onEvent({ type: "paste", text: pasteResult.text });
+    }
+
+    str = pasteResult.remaining;
+    if (str) {
+      const events = unifiedParser.feed(str);
+      for (const event of events) {
+        onEvent(event);
+      }
+    }
+
+    // If either parser is holding buffered bytes after processing, set a
+    // timeout to flush them. Real escape sequences and paste markers arrive
+    // as a single chunk from the terminal; a lone \x1b that isn't followed
+    // by more bytes within the timeout means the user pressed Esc.
+    if (pasteParser.pending || unifiedParser.pending) {
+      escapeTimer = setTimeout(() => {
         escapeTimer = null;
-      }
-
-      let str = data.toString("utf8");
-
-      // Check for paste first (consumes entire paste content)
-      const pasteResult = pasteParser.feed(str);
-
-      if (pasteResult.beforePaste) {
-        const events = unifiedParser.feed(pasteResult.beforePaste);
-        for (const event of events) {
-          onEvent(event);
-        }
-      }
-
-      if (pasteResult.text !== null) {
-        onEvent({ type: "paste", text: pasteResult.text });
-      }
-
-      str = pasteResult.remaining;
-      if (str) {
-        const events = unifiedParser.feed(str);
-        for (const event of events) {
-          onEvent(event);
-        }
-      }
-
-      // If either parser is holding buffered bytes after processing, set a
-      // timeout to flush them. Real escape sequences and paste markers arrive
-      // as a single chunk from the terminal; a lone \x1b that isn't followed
-      // by more bytes within the timeout means the user pressed Esc.
-      if (pasteParser.pending || unifiedParser.pending) {
-        escapeTimer = setTimeout(() => {
-          escapeTimer = null;
-          // Flush paste parser prefix first — it may contain an \x1b that
-          // the unified parser needs to see.
-          const prefix = pasteParser.flushPending();
-          if (prefix) {
-            const events = unifiedParser.feed(prefix);
-            for (const event of events) {
-              onEvent(event);
-            }
-          }
-          // Then flush any pending escape sequence state.
-          const event = unifiedParser.flushPending();
-          if (event) {
+        // Flush paste parser prefix first — it may contain an \x1b that
+        // the unified parser needs to see.
+        const prefix = pasteParser.flushPending();
+        if (prefix) {
+          const events = unifiedParser.feed(prefix);
+          for (const event of events) {
             onEvent(event);
           }
-        }, 100);
-      }
-    };
-
-    stdin.on("data", dataHandler);
-    cleanups.push(() => {
-      stdin.off("data", dataHandler);
-      if (escapeTimer) {
-        clearTimeout(escapeTimer);
-        escapeTimer = null;
-      }
-    });
-  } else {
-    // No mouse - use readline for keyboard, SequenceParser for focus only
-    const keyboardCleanup = setupKeyboardInput(stdin, (event) => {
-      onEvent(event);
-    });
-    cleanups.push(keyboardCleanup);
-
-    const sequenceParser = new SequenceParser();
-
-    const dataHandler = (data: Buffer) => {
-      let str = data.toString("utf8");
-
-      // Check for paste first (consumes entire paste content)
-      const pasteResult = pasteParser.feed(str);
-
-      if (pasteResult.beforePaste) {
-        const events = sequenceParser.feed(pasteResult.beforePaste);
-        for (const event of events) {
+        }
+        // Then flush any pending escape sequence state.
+        const event = unifiedParser.flushPending();
+        if (event) {
           onEvent(event);
         }
-      }
+      }, 100);
+    }
+  };
 
-      if (pasteResult.text !== null) {
-        onEvent({ type: "paste", text: pasteResult.text });
-      }
-
-      str = pasteResult.remaining;
-      if (str) {
-        const events = sequenceParser.feed(str);
-        for (const event of events) {
-          onEvent(event);
-        }
-      }
-    };
-
-    stdin.on("data", dataHandler);
-    cleanups.push(() => stdin.off("data", dataHandler));
-  }
+  stdin.on("data", dataHandler);
+  cleanups.push(() => {
+    stdin.off("data", dataHandler);
+    if (escapeTimer) {
+      clearTimeout(escapeTimer);
+      escapeTimer = null;
+    }
+  });
 
   const resizeCleanup = setupResizeHandler(stdout, (event) => {
     onEvent(event);
