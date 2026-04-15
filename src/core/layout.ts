@@ -394,6 +394,8 @@ function computeAutoMin(box: LayoutBox): void {
   let crossMax = 0;
   let mainMax = 0;
 
+  const effectiveGap = isSpaceJustify(style.justifyContent) ? 0 : style.gap;
+
   for (let i = 0; i < visible.length; i++) {
     const child = visible[i];
     const cs = child.style;
@@ -401,7 +403,7 @@ function computeAutoMin(box: LayoutBox): void {
     const childCrossMin = isRow ? child.autoMinHeight : child.autoMinWidth;
     const mainMargin = getMainMargin(cs, isRow);
     const crossMargin = getCrossMargin(cs, isRow);
-    mainSum += childMainMin + mainMargin + (i > 0 ? style.gap : 0);
+    mainSum += childMainMin + mainMargin + (i > 0 ? effectiveGap : 0);
     crossMax = Math.max(crossMax, childCrossMin + crossMargin);
     mainMax = Math.max(mainMax, childMainMin + mainMargin);
   }

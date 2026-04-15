@@ -872,3 +872,175 @@ describe("edge cases", () => {
     assert.strictEqual(buf.getSymbol(0, 0), "\x00");
   });
 });
+
+describe("Color types and serialization", () => {
+  it("named color index 0 (black) emits SGR 30", () => {
+    const buf = new Buffer(10, 10);
+    buf.flush();
+    buf.set(0, 0, "X", { type: "named", index: 0 }, DEFAULT_COLOR, 0);
+    const output = buf.flush();
+    assert.ok(output.includes("30"));
+  });
+
+  it("named color index 7 (white) emits SGR 37", () => {
+    const buf = new Buffer(10, 10);
+    buf.flush();
+    buf.set(0, 0, "X", { type: "named", index: 7 }, DEFAULT_COLOR, 0);
+    const output = buf.flush();
+    assert.ok(output.includes("37"));
+  });
+
+  it("bright color index 0 emits SGR 90", () => {
+    const buf = new Buffer(10, 10);
+    buf.flush();
+    buf.set(0, 0, "X", { type: "bright", index: 0 }, DEFAULT_COLOR, 0);
+    const output = buf.flush();
+    assert.ok(output.includes("90"));
+  });
+
+  it("bright color index 7 emits SGR 97", () => {
+    const buf = new Buffer(10, 10);
+    buf.flush();
+    buf.set(0, 0, "X", { type: "bright", index: 7 }, DEFAULT_COLOR, 0);
+    const output = buf.flush();
+    assert.ok(output.includes("97"));
+  });
+
+  it("bright background index 0 emits SGR 100", () => {
+    const buf = new Buffer(10, 10);
+    buf.flush();
+    buf.set(0, 0, "X", DEFAULT_COLOR, { type: "bright", index: 0 }, 0);
+    const output = buf.flush();
+    assert.ok(output.includes("100"));
+  });
+
+  it("bright background index 7 emits SGR 107", () => {
+    const buf = new Buffer(10, 10);
+    buf.flush();
+    buf.set(0, 0, "X", DEFAULT_COLOR, { type: "bright", index: 7 }, 0);
+    const output = buf.flush();
+    assert.ok(output.includes("107"));
+  });
+
+  it("palette color index 0 emits correct sequence", () => {
+    const buf = new Buffer(10, 10);
+    buf.flush();
+    buf.set(0, 0, "X", { type: "palette", index: 0 }, DEFAULT_COLOR, 0);
+    const output = buf.flush();
+    assert.ok(output.includes("38;5;0"));
+  });
+
+  it("palette color index 255 emits correct sequence", () => {
+    const buf = new Buffer(10, 10);
+    buf.flush();
+    buf.set(0, 0, "X", { type: "palette", index: 255 }, DEFAULT_COLOR, 0);
+    const output = buf.flush();
+    assert.ok(output.includes("38;5;255"));
+  });
+
+  it("rgb color at boundary 0,0,0 emits correct sequence", () => {
+    const buf = new Buffer(10, 10);
+    buf.flush();
+    buf.set(0, 0, "X", { type: "rgb", r: 0, g: 0, b: 0 }, DEFAULT_COLOR, 0);
+    const output = buf.flush();
+    assert.ok(output.includes("38;2;0;0;0"));
+  });
+
+  it("rgb color at boundary 255,255,255 emits correct sequence", () => {
+    const buf = new Buffer(10, 10);
+    buf.flush();
+    buf.set(
+      0,
+      0,
+      "X",
+      { type: "rgb", r: 255, g: 255, b: 255 },
+      DEFAULT_COLOR,
+      0,
+    );
+    const output = buf.flush();
+    assert.ok(output.includes("38;2;255;255;255"));
+  });
+
+  it("round-trip: named colors preserve index through set/getFg", () => {
+    const buf = new Buffer(10, 10);
+    for (let i = 0; i <= 7; i++) {
+      buf.set(
+        0,
+        0,
+        "X",
+        { type: "named", index: i as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 },
+        DEFAULT_COLOR,
+        0,
+      );
+      const fg = buf.getFg(0, 0);
+      assert.strictEqual(fg.type, "named");
+      if (fg.type === "named") {
+        assert.strictEqual(fg.index, i);
+      }
+    }
+  });
+
+  it("round-trip: bright colors preserve index through set/getFg", () => {
+    const buf = new Buffer(10, 10);
+    for (let i = 0; i <= 7; i++) {
+      buf.set(
+        0,
+        0,
+        "X",
+        { type: "bright", index: i as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 },
+        DEFAULT_COLOR,
+        0,
+      );
+      const fg = buf.getFg(0, 0);
+      assert.strictEqual(fg.type, "bright");
+      if (fg.type === "bright") {
+        assert.strictEqual(fg.index, i);
+      }
+    }
+  });
+
+  it("round-trip: palette colors preserve index through set/getFg", () => {
+    const buf = new Buffer(10, 10);
+    for (const idx of [0, 127, 255]) {
+      buf.set(0, 0, "X", { type: "palette", index: idx }, DEFAULT_COLOR, 0);
+      const fg = buf.getFg(0, 0);
+      assert.strictEqual(fg.type, "palette");
+      if (fg.type === "palette") {
+        assert.strictEqual(fg.index, idx);
+      }
+    }
+  });
+
+  it("round-trip: rgb colors preserve components through set/getFg", () => {
+    const buf = new Buffer(10, 10);
+    buf.set(0, 0, "X", { type: "rgb", r: 128, g: 64, b: 32 }, DEFAULT_COLOR, 0);
+    const fg = buf.getFg(0, 0);
+    assert.strictEqual(fg.type, "rgb");
+    if (fg.type === "rgb") {
+      assert.strictEqual(fg.r, 128);
+      assert.strictEqual(fg.g, 64);
+      assert.strictEqual(fg.b, 32);
+    }
+  });
+
+  it("simultaneous color and modifier change produces correct ANSI", () => {
+    const buf = new Buffer(10, 10);
+    buf.flush();
+    buf.set(0, 0, "A", { type: "named", index: 1 }, DEFAULT_COLOR, BOLD);
+    buf.flush();
+    buf.set(
+      1,
+      0,
+      "B",
+      { type: "rgb", r: 0, g: 255, b: 0 },
+      DEFAULT_COLOR,
+      ITALIC,
+    );
+    const output = buf.flush();
+    assert.ok(
+      output.includes("38;2;0;255;0"),
+      "should include RGB green fg code",
+    );
+    assert.ok(output.includes("3"), "should include italic SGR code");
+  });
+});

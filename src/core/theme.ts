@@ -1,6 +1,6 @@
 // Theme system: generic infrastructure for JSON-based theming
 
-import type { Color } from "./buffer.ts";
+import type { Color, StandardColorIndex } from "./buffer.ts";
 import { DEFAULT_COLOR } from "./buffer.ts";
 import { DEFAULT_FLEX_STYLE } from "./layout.ts";
 import { DEFAULT_INHERITED_STYLE } from "./render.ts";
@@ -24,7 +24,7 @@ const STYLE_KEYS = [
  */
 export type ColorString = string;
 
-const NAMED_COLORS: Record<string, number> = {
+const NAMED_COLORS: Record<string, StandardColorIndex> = {
   black: 0,
   red: 1,
   green: 2,

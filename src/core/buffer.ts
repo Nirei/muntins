@@ -318,6 +318,13 @@ export function graphemeDisplayWidth(grapheme: string): number {
 }
 
 /**
+ * Index into the standard 8-color terminal palette.
+ * Valid values: 0 (black), 1 (red), 2 (green), 3 (yellow),
+ * 4 (blue), 5 (magenta), 6 (cyan), 7 (white).
+ */
+export type StandardColorIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+/**
  * Terminal color representation.
  * Discriminated union covering all terminal color modes.
  *
@@ -325,12 +332,15 @@ export function graphemeDisplayWidth(grapheme: string): number {
  * - named: Standard 8-color palette (0-7: black, red, green, yellow, blue, magenta, cyan, white)
  * - bright: Bright/bold variants of the 8-color palette (0-7)
  * - palette: Extended 256-color palette (0-255)
- * - rgb: True color (24-bit RGB)
+ * - rgb: True color (24-bit RGB, each component 0-255)
+ *
+ * Named and bright indices are constrained at the type level (StandardColorIndex).
+ * Palette and RGB values are clamped to valid ranges during packing (packColor).
  */
 export type Color =
   | { type: "default" }
-  | { type: "named"; index: number }
-  | { type: "bright"; index: number }
+  | { type: "named"; index: StandardColorIndex }
+  | { type: "bright"; index: StandardColorIndex }
   | { type: "palette"; index: number }
   | { type: "rgb"; r: number; g: number; b: number };
 
@@ -367,13 +377,18 @@ function packColor(color: Color): number {
     case "default":
       return COLOR_DEFAULT;
     case "named":
-      return COLOR_NAMED | color.index;
+      return COLOR_NAMED | (color.index & 0x07);
     case "bright":
-      return COLOR_BRIGHT | color.index;
+      return COLOR_BRIGHT | (color.index & 0x07);
     case "palette":
-      return COLOR_PALETTE | color.index;
+      return COLOR_PALETTE | (color.index & 0xff);
     case "rgb":
-      return COLOR_RGB | (color.r << 16) | (color.g << 8) | color.b;
+      return (
+        COLOR_RGB |
+        ((color.r & 0xff) << 16) |
+        ((color.g & 0xff) << 8) |
+        (color.b & 0xff)
+      );
   }
 }
 
@@ -385,9 +400,9 @@ function unpackColor(packed: number): Color {
     case COLOR_DEFAULT:
       return { type: "default" };
     case COLOR_NAMED:
-      return { type: "named", index: value };
+      return { type: "named", index: value as StandardColorIndex };
     case COLOR_BRIGHT:
-      return { type: "bright", index: value };
+      return { type: "bright", index: value as StandardColorIndex };
     case COLOR_PALETTE:
       return { type: "palette", index: value };
     case COLOR_RGB:

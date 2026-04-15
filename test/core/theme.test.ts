@@ -42,7 +42,7 @@ describe("parseColor", () => {
   });
 
   it("resolves token references", () => {
-    const tokens = { primary: { type: "named" as const, index: 4 } };
+    const tokens = { primary: { type: "named" as const, index: 4 as const } };
     assert.deepStrictEqual(parseColor("$primary", tokens), {
       type: "named",
       index: 4,
