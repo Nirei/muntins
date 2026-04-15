@@ -262,11 +262,24 @@ function clamp(
 }
 
 function clampBoxSize(box: LayoutBox): void {
-  const minW = typeof box.style.minWidth === "number" ? box.style.minWidth : 0;
+  const minW =
+    typeof box.style.minWidth === "number"
+      ? box.style.minWidth
+      : box.autoMinWidth;
   const minH =
-    typeof box.style.minHeight === "number" ? box.style.minHeight : 0;
-  box.width = clamp(box.width, minW, box.style.maxWidth);
-  box.height = clamp(box.height, minH, box.style.maxHeight);
+    typeof box.style.minHeight === "number"
+      ? box.style.minHeight
+      : box.autoMinHeight;
+  const maxW =
+    box.style.maxWidth !== null && box.style.maxWidth < minW
+      ? null
+      : box.style.maxWidth;
+  const maxH =
+    box.style.maxHeight !== null && box.style.maxHeight < minH
+      ? null
+      : box.style.maxHeight;
+  box.width = clamp(box.width, minW, maxW);
+  box.height = clamp(box.height, minH, maxH);
 }
 
 function isSpaceJustify(justify: FlexStyle["justifyContent"]): boolean {
@@ -634,8 +647,8 @@ function resolveIntrinsicSizeRecursive(
     if (!widthKnown) box.width = measured.width;
     if (!heightKnown) box.height = measured.height;
 
-    clampBoxSize(box);
     computeAutoMin(box);
+    clampBoxSize(box);
     return;
   }
 
@@ -660,8 +673,8 @@ function resolveIntrinsicSizeRecursive(
     box.height = calculateIntrinsicSize(box, "height");
   }
 
-  clampBoxSize(box);
   computeAutoMin(box);
+  clampBoxSize(box);
 }
 
 function distributeGrowForLine(

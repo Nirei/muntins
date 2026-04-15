@@ -2974,6 +2974,75 @@ describe("wrapping container auto-min", () => {
   });
 });
 
+describe("clampBoxSize respects auto-min when minWidth is auto", () => {
+  it("maxWidth does not clamp container below autoMinWidth (padding-based)", () => {
+    const node: LayoutNode = {
+      style: { width: 40, flexDirection: "row" },
+      children: [
+        {
+          style: { maxWidth: 3, flexGrow: 1, paddingStart: 2, paddingEnd: 2 },
+          children: [{ style: { width: 5 } }],
+        },
+      ],
+    };
+
+    const result = computeLayout(node, 80, 24);
+    const child = result.children[0];
+
+    assert.ok(
+      child.width >= 5,
+      `Child should not be clamped below its autoMinWidth (5), got ${child.width}`,
+    );
+  });
+
+  it("maxHeight does not clamp container below autoMinHeight (padding-based)", () => {
+    const node: LayoutNode = {
+      style: { height: 20, flexDirection: "column" },
+      children: [
+        {
+          style: { maxHeight: 2, flexGrow: 1, paddingTop: 1, paddingBottom: 1 },
+          children: [{ style: { height: 5, paddingTop: 3, paddingBottom: 3 } }],
+        },
+      ],
+    };
+
+    const result = computeLayout(node, 80, 24);
+    const child = result.children[0];
+
+    assert.ok(
+      child.height >= 8,
+      `Child should not be clamped below its autoMinHeight (8 = pad 2 + child autoMin 6), got ${child.height}`,
+    );
+  });
+
+  it("explicit minWidth: 0 overrides autoMinWidth in clamp", () => {
+    const node: LayoutNode = {
+      style: { width: 40, flexDirection: "row" },
+      children: [
+        {
+          style: {
+            maxWidth: 3,
+            minWidth: 0,
+            flexGrow: 1,
+            paddingStart: 2,
+            paddingEnd: 2,
+          },
+          children: [{ style: { width: 5 } }],
+        },
+      ],
+    };
+
+    const result = computeLayout(node, 80, 24);
+    const child = result.children[0];
+
+    assert.strictEqual(
+      child.width,
+      3,
+      `With minWidth:0, maxWidth should win and clamp to 3, got ${child.width}`,
+    );
+  });
+});
+
 describe("fixed width in row", () => {
   it("width:36 flexShrink:0 is not crushed by sibling with long content", () => {
     const node: LayoutNode = {
