@@ -143,8 +143,8 @@ export function ScrollArea(props: ScrollAreaProps): Node {
   const [contentHeight, setContentHeight] = createSignal(0);
 
   createEffect(() => {
-    getScrollTop(); // Track scroll position
-    ctx?.app.scheduleRelayout();
+    getScrollTop();
+    ctx?.app.scheduleFlush();
   });
 
   const handleScroll = (delta: number): void => {

@@ -1,4 +1,5 @@
 import assert from "node:assert";
+import { EventEmitter } from "node:events";
 import { describe, it } from "node:test";
 import { Buffer as RenderBuffer } from "../../src/core/buffer.ts";
 import { Box } from "../../src/core/components/Box.ts";
@@ -15,6 +16,106 @@ import {
   keyEvent,
   scrollEvent,
 } from "../test-helpers.ts";
+
+class VirtualScreen {
+  private cells: string[][];
+  private cursorX = 0;
+  private cursorY = 0;
+  width: number;
+  height: number;
+
+  constructor(width: number, height: number) {
+    this.width = width;
+    this.height = height;
+    this.cells = Array.from({ length: height }, () =>
+      Array.from({ length: width }, () => " "),
+    );
+  }
+
+  write(data: string): void {
+    let i = 0;
+    while (i < data.length) {
+      if (data[i] === "\x1b" && data[i + 1] === "[") {
+        let j = i + 2;
+        const isPrivate = data[j] === "?";
+        if (isPrivate) j++;
+        let params = "";
+        while (j < data.length && /[0-9;]/.test(data[j])) {
+          params += data[j];
+          j++;
+        }
+        const command = data[j];
+        j++;
+
+        if (command === "H") {
+          const parts = params
+            .split(";")
+            .map((p) => Number.parseInt(p, 10) || 1);
+          this.cursorY = Math.max(0, Math.min(this.height - 1, parts[0] - 1));
+          this.cursorX = Math.max(
+            0,
+            Math.min(this.width - 1, (parts[1] || 1) - 1),
+          );
+        } else if (command === "J") {
+          if (params === "2") {
+            for (let y = 0; y < this.height; y++) {
+              for (let x = 0; x < this.width; x++) {
+                this.cells[y][x] = " ";
+              }
+            }
+          }
+        }
+        i = j;
+      } else if (data[i] === "\x1b") {
+        i += 2;
+      } else if (data[i] >= " " || data[i] === "\t") {
+        if (this.cursorX < this.width && this.cursorY < this.height) {
+          this.cells[this.cursorY][this.cursorX] = data[i];
+          this.cursorX++;
+        }
+        i++;
+      } else {
+        i++;
+      }
+    }
+  }
+
+  contains(text: string): boolean {
+    return this.cells.some((row) => row.join("").includes(text));
+  }
+
+  getRow(y: number): string {
+    return this.cells[y]?.join("").trimEnd() ?? "";
+  }
+}
+
+function createIntegrationStreams() {
+  const stdin = Object.assign(new EventEmitter(), {
+    isTTY: true,
+    setRawMode: () => stdin,
+    read: () => null,
+    resume: () => {},
+    pause: () => {},
+  }) as unknown as NodeJS.ReadStream;
+
+  const screen = new VirtualScreen(80, 24);
+
+  const stdout = Object.assign(new EventEmitter(), {
+    isTTY: true,
+    columns: 80,
+    rows: 24,
+    write: (data: string) => {
+      screen.write(data);
+      return true;
+    },
+  }) as unknown as NodeJS.WriteStream;
+
+  return { stdin, stdout, screen };
+}
+
+function nextTick(): Promise<void> {
+  return new Promise((resolve) => queueMicrotask(resolve));
+}
 
 function mountScrollArea(
   props: Omit<Parameters<typeof ScrollArea>[0], "children"> & {
@@ -602,6 +703,123 @@ describe("ScrollArea", () => {
 
       // Verify component structure is correct
       assert.ok(app.unmount);
+      app.unmount();
+    });
+
+    it("scroll position change triggers proper re-render", async () => {
+      const { stdin, stdout, screen } = createIntegrationStreams();
+
+      const app = App.mount(
+        () =>
+          Box({
+            children: [
+              ScrollArea({
+                height: 3,
+                children: [
+                  Text({ content: "Alpha" }),
+                  Text({ content: "Bravo" }),
+                  Text({ content: "Charlie" }),
+                  Text({ content: "Delta" }),
+                  Text({ content: "Echo" }),
+                ],
+              }),
+            ],
+          }),
+        { stdin, stdout, scroll: false, fpsLimit: 0 },
+      );
+
+      assert.ok(
+        screen.contains("Alpha"),
+        `Initial render should show Alpha. Row 0: '${screen.getRow(0)}'`,
+      );
+      assert.ok(
+        screen.contains("Bravo"),
+        `Initial render should show Bravo. Row 1: '${screen.getRow(1)}'`,
+      );
+      assert.ok(
+        screen.contains("Charlie"),
+        `Initial render should show Charlie. Row 2: '${screen.getRow(2)}'`,
+      );
+
+      const scrollNode = app.root.resolveChildren()[0].resolveChildren()[0];
+      assert.ok(
+        scrollNode?.onScroll,
+        "ScrollArea should have onScroll handler",
+      );
+      scrollNode.onScroll?.(scrollEvent("down"));
+
+      await nextTick();
+
+      assert.ok(
+        !screen.contains("Alpha"),
+        `After scroll down, Alpha should be scrolled out. Row 0: '${screen.getRow(0)}'`,
+      );
+      assert.ok(
+        screen.contains("Bravo"),
+        `After scroll down, Bravo should be visible. Row 0: '${screen.getRow(0)}'`,
+      );
+      assert.ok(
+        screen.contains("Charlie"),
+        `After scroll down, Charlie should be visible. Row 1: '${screen.getRow(1)}'`,
+      );
+      assert.ok(
+        screen.contains("Delta"),
+        `After scroll down, Delta should be visible. Row 2: '${screen.getRow(2)}'`,
+      );
+
+      app.unmount();
+    });
+
+    it("controlled scroll signal updates produce correct output", async () => {
+      const { stdin, stdout, screen } = createIntegrationStreams();
+      const [scrollPos, setScrollPos] = createSignal(0);
+
+      const app = App.mount(
+        () =>
+          Box({
+            children: [
+              ScrollArea({
+                height: 3,
+                scrollTop: scrollPos,
+                children: [
+                  Text({ content: "AAA" }),
+                  Text({ content: "BBB" }),
+                  Text({ content: "CCC" }),
+                  Text({ content: "DDD" }),
+                  Text({ content: "EEE" }),
+                ],
+              }),
+            ],
+          }),
+        { stdin, stdout, scroll: false, fpsLimit: 0 },
+      );
+
+      assert.ok(screen.contains("AAA"), "Initial: AAA visible");
+
+      setScrollPos(2);
+      await nextTick();
+
+      assert.ok(
+        !screen.contains("AAA"),
+        `After scroll to 2, AAA should be gone. Row 0: '${screen.getRow(0)}'`,
+      );
+      assert.ok(
+        !screen.contains("BBB"),
+        `After scroll to 2, BBB should be gone. Row 0: '${screen.getRow(0)}'`,
+      );
+      assert.ok(
+        screen.contains("CCC"),
+        `After scroll to 2, CCC should be visible. Row 0: '${screen.getRow(0)}'`,
+      );
+      assert.ok(
+        screen.contains("DDD"),
+        `After scroll to 2, DDD should be visible. Row 1: '${screen.getRow(1)}'`,
+      );
+      assert.ok(
+        screen.contains("EEE"),
+        `After scroll to 2, EEE should be visible. Row 2: '${screen.getRow(2)}'`,
+      );
+
       app.unmount();
     });
   });
