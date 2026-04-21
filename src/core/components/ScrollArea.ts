@@ -212,22 +212,23 @@ export function ScrollArea(props: ScrollAreaProps): Node {
 
   const contentBox = Box({
     flexDirection: "column",
-    flexShrink: 0,
     minWidth: 0,
+    height: () => Math.max(getHeight(), contentHeight()),
     marginTop: () => -getScrollTop(),
-    ...(props.minHeight !== undefined ? { minHeight: props.minHeight } : {}),
     ref: contentRef,
     children,
   });
 
-  // When layout is available (after bind), use the accurate layout height.
-  // Node._layout is reactive, so this effect re-runs when _layout transitions
-  // from undefined to LayoutSignals and whenever the layout height changes.
   createEffect(() => {
     const node = contentRef.current;
     if (node?._layout) {
-      const height = node._layout.height();
-      setContentHeight(height);
+      const resolvedChildren = node.resolveChildren();
+      const lastChild = resolvedChildren[resolvedChildren.length - 1];
+      if (lastChild?._layout) {
+        const contentBottom =
+          lastChild._layout.y() + lastChild._layout.height();
+        setContentHeight(contentBottom);
+      }
     }
   });
 

@@ -375,6 +375,12 @@ function computeAutoMin(box: LayoutBox): void {
   const hPB = getWidthPaddingBorder(style);
   const vPB = getHeightPaddingBorder(style);
 
+  if (style.overflow !== "visible") {
+    box.autoMinWidth = hPB;
+    box.autoMinHeight = vPB;
+    return;
+  }
+
   const visible: LayoutBox[] = [];
   for (const child of box.children) {
     if (child.style.display === "none" || child.style.position === "absolute")
@@ -544,6 +550,10 @@ function calculateIntrinsicSize(
   }
 
   if (visibleChildren.length === 0) {
+    return paddingBorder;
+  }
+
+  if (style.overflow !== "visible") {
     return paddingBorder;
   }
 

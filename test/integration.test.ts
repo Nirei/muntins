@@ -2445,4 +2445,278 @@ describe("integration", () => {
       app.unmount();
     });
   });
+
+  describe("overflow:hidden word log does not cause root scroll", () => {
+    it("growing text inside overflow:hidden container does not grow root", () => {
+      const { stdin, stdout, screen } = createMockStreams();
+
+      const [words, setWords] = createSignal<string[]>([]);
+
+      const app = App.mount(
+        () =>
+          Box({
+            flexDirection: "column",
+            flexGrow: 1,
+            focusable: true,
+            autoFocus: true,
+            onKeyPress() {
+              return false;
+            },
+            children: [
+              Box({
+                flexDirection: "row",
+                justifyContent: "space-between",
+                paddingStart: 2,
+                paddingEnd: 2,
+                border: true,
+                children: [
+                  Text({ content: "Header", bold: true }),
+                  Text({ content: "fps", bold: true }),
+                ],
+              }),
+              Box({
+                flexDirection: "row",
+                flexGrow: 1,
+                gap: 1,
+                paddingTop: 1,
+                paddingStart: 1,
+                paddingEnd: 1,
+                children: [
+                  Box({
+                    flexDirection: "column",
+                    flexGrow: 1,
+                    gap: 1,
+                    children: [
+                      Box({
+                        flexDirection: "column",
+                        gap: 1,
+                        border: true,
+                        paddingStart: 1,
+                        paddingEnd: 1,
+                        paddingTop: 0,
+                        paddingBottom: 1,
+                        children: [
+                          Text({ content: "Bars", bold: true }),
+                          ...Array.from({ length: 5 }, (_, i) =>
+                            Text({ content: `bar${i}` }),
+                          ),
+                        ],
+                      }),
+                      Box({
+                        flexDirection: "column",
+                        flexGrow: 1,
+                        border: true,
+                        paddingStart: 1,
+                        paddingEnd: 1,
+                        paddingTop: 0,
+                        paddingBottom: 0,
+                        overflow: "hidden" as const,
+                        children: [
+                          Text({ content: "Words", bold: true }),
+                          Box({
+                            flexGrow: 1,
+                            overflow: "hidden" as const,
+                            children: [
+                              Text({
+                                content: () => words().join(" "),
+                                wrap: "wrap" as const,
+                              }),
+                            ],
+                          }),
+                        ],
+                      }),
+                    ],
+                  }),
+                  Box({
+                    flexDirection: "column",
+                    width: 48,
+                    flexShrink: 0,
+                    border: true,
+                    paddingStart: 1,
+                    paddingEnd: 1,
+                    paddingTop: 0,
+                    paddingBottom: 1,
+                    gap: 1,
+                    children: [Text({ content: "Grid", bold: true })],
+                  }),
+                ],
+              }),
+              Box({
+                flexDirection: "row",
+                justifyContent: "center",
+                children: [Text({ content: "footer" })],
+              }),
+            ],
+          }),
+        { stdin, stdout, scroll: true },
+      );
+
+      const initialHeight = app.layoutResult?.height ?? 0;
+      assert.strictEqual(
+        initialHeight,
+        24,
+        `Initial root height should be 24, got ${initialHeight}`,
+      );
+
+      setWords(Array.from({ length: 100 }, (_, i) => `word${i}`));
+      app.renderer.flush();
+
+      const afterHeight = app.layoutResult?.height ?? 0;
+      assert.strictEqual(
+        afterHeight,
+        24,
+        `Root height should stay 24 after adding words, got ${afterHeight}`,
+      );
+
+      assert.ok(!screen.contains("\u2503"), "No scrollbar thumb initially");
+
+      app.unmount();
+    });
+
+    it("dynamic grid heights inside overflow:hidden container do not cause root scroll", () => {
+      const { stdin, stdout, screen } = createMockStreams();
+
+      const [gridHeights, setGridHeights] = createSignal<number[]>(
+        Array.from({ length: 8 }, () => 1),
+      );
+
+      const app = App.mount(
+        () =>
+          Box({
+            flexDirection: "column",
+            flexGrow: 1,
+            focusable: true,
+            autoFocus: true,
+            onKeyPress() {
+              return false;
+            },
+            children: [
+              Box({
+                flexDirection: "row",
+                justifyContent: "space-between",
+                paddingStart: 2,
+                paddingEnd: 2,
+                border: true,
+                children: [
+                  Text({ content: "Header", bold: true }),
+                  Text({ content: "fps", bold: true }),
+                ],
+              }),
+              Box({
+                flexDirection: "row",
+                flexGrow: 1,
+                gap: 1,
+                paddingTop: 1,
+                paddingStart: 1,
+                paddingEnd: 1,
+                children: [
+                  Box({
+                    flexDirection: "column",
+                    flexGrow: 1,
+                    gap: 1,
+                    children: [
+                      Box({
+                        flexDirection: "column",
+                        gap: 1,
+                        border: true,
+                        paddingStart: 1,
+                        paddingEnd: 1,
+                        paddingTop: 0,
+                        paddingBottom: 1,
+                        children: [
+                          Text({ content: "Bars", bold: true }),
+                          ...Array.from({ length: 5 }, (_, i) =>
+                            Text({ content: `bar${i}` }),
+                          ),
+                        ],
+                      }),
+                      Box({
+                        flexDirection: "column",
+                        flexGrow: 1,
+                        border: true,
+                        paddingStart: 1,
+                        paddingEnd: 1,
+                        paddingTop: 0,
+                        paddingBottom: 0,
+                        overflow: "hidden" as const,
+                        children: [
+                          Text({ content: "Words", bold: true }),
+                          Box({
+                            flexGrow: 1,
+                            overflow: "hidden" as const,
+                            children: [
+                              Text({
+                                content: "some words here",
+                                wrap: "wrap" as const,
+                              }),
+                            ],
+                          }),
+                        ],
+                      }),
+                    ],
+                  }),
+                  Box({
+                    flexDirection: "column",
+                    width: 48,
+                    flexShrink: 0,
+                    border: true,
+                    paddingStart: 1,
+                    paddingEnd: 1,
+                    paddingTop: 0,
+                    paddingBottom: 1,
+                    gap: 1,
+                    children: [
+                      Text({ content: "Grid", bold: true }),
+                      Box({
+                        flexDirection: "column",
+                        flexWrap: "wrap" as const,
+                        gap: 1,
+                        flexGrow: 1,
+                        children: [
+                          ...gridHeights().map((h, i) =>
+                            Box({
+                              flexDirection: "column",
+                              flexGrow: 1,
+                              height: h,
+                              backgroundColor: { type: "palette", index: 114 },
+                              children: [Text({ content: `g${i}` })],
+                            }),
+                          ),
+                        ],
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+              Box({
+                flexDirection: "row",
+                justifyContent: "center",
+                children: [Text({ content: "footer" })],
+              }),
+            ],
+          }),
+        { stdin, stdout, scroll: true },
+      );
+
+      const initialHeight = app.layoutResult?.height ?? 0;
+      assert.strictEqual(initialHeight, 24, "Initial root height should be 24");
+
+      setGridHeights(Array.from({ length: 8 }, () => 3));
+      app.renderer.flush();
+
+      const afterHeight = app.layoutResult?.height ?? 0;
+      assert.strictEqual(
+        afterHeight,
+        24,
+        `Root height should stay 24 after grid grows, got ${afterHeight}`,
+      );
+
+      assert.ok(
+        !screen.contains("\u2503"),
+        "No scrollbar thumb after grid heights change",
+      );
+
+      app.unmount();
+    });
+  });
 });
