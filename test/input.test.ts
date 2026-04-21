@@ -12,6 +12,7 @@ import {
   type ResizeEvent,
   type ScrollInput,
   SequenceParser,
+  UnifiedParser,
   createInputParser,
   isPrintable,
   mapKeypressToEvent,
@@ -1088,6 +1089,290 @@ describe("createInputParser", () => {
     assert.strictEqual(events[1].type, "key");
     assert.strictEqual((events[1] as KeyInput).name, "a");
     assert.strictEqual((events[1] as KeyInput).char, "a");
+
+    parser.destroy();
+  });
+});
+
+describe("UnifiedParser direct unit tests", () => {
+  it("parses arrow key sequences", () => {
+    const parser = new UnifiedParser();
+
+    let events = parser.feed("\x1b[A");
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual((events[0] as KeyInput).name, "up");
+    assert.strictEqual((events[0] as KeyInput).char, "");
+
+    events = parser.feed("\x1b[B");
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual((events[0] as KeyInput).name, "down");
+
+    events = parser.feed("\x1b[C");
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual((events[0] as KeyInput).name, "right");
+
+    events = parser.feed("\x1b[D");
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual((events[0] as KeyInput).name, "left");
+  });
+
+  it("parses function key sequences (ESC[n~)", () => {
+    const parser = new UnifiedParser();
+
+    const fkeys = [
+      { seq: "\x1b[11~", name: "f1" },
+      { seq: "\x1b[12~", name: "f2" },
+      { seq: "\x1b[13~", name: "f3" },
+      { seq: "\x1b[14~", name: "f4" },
+      { seq: "\x1b[15~", name: "f5" },
+      { seq: "\x1b[17~", name: "f6" },
+      { seq: "\x1b[18~", name: "f7" },
+      { seq: "\x1b[19~", name: "f8" },
+      { seq: "\x1b[20~", name: "f9" },
+      { seq: "\x1b[21~", name: "f10" },
+      { seq: "\x1b[23~", name: "f11" },
+      { seq: "\x1b[24~", name: "f12" },
+    ];
+
+    for (const { seq, name } of fkeys) {
+      const events = parser.feed(seq);
+      assert.strictEqual(events.length, 1, `${name}: expected 1 event`);
+      assert.strictEqual(
+        (events[0] as KeyInput).name,
+        name,
+        `${seq} should parse as ${name}`,
+      );
+    }
+  });
+
+  it("parses SS3 function keys (ESC O)", () => {
+    const parser = new UnifiedParser();
+
+    let events = parser.feed("\x1bOP");
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual((events[0] as KeyInput).name, "f1");
+
+    events = parser.feed("\x1bOQ");
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual((events[0] as KeyInput).name, "f2");
+
+    events = parser.feed("\x1bOR");
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual((events[0] as KeyInput).name, "f3");
+
+    events = parser.feed("\x1bOS");
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual((events[0] as KeyInput).name, "f4");
+  });
+
+  it("parses modified arrow keys", () => {
+    const parser = new UnifiedParser();
+
+    let events = parser.feed("\x1b[1;2A");
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual((events[0] as KeyInput).name, "up");
+    assert.strictEqual((events[0] as KeyInput).shift, true);
+
+    events = parser.feed("\x1b[1;5A");
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual((events[0] as KeyInput).name, "up");
+    assert.strictEqual((events[0] as KeyInput).ctrl, true);
+
+    events = parser.feed("\x1b[1;3A");
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual((events[0] as KeyInput).name, "up");
+    assert.strictEqual((events[0] as KeyInput).alt, true);
+  });
+
+  it("parses Alt+character combinations", () => {
+    const parser = new UnifiedParser();
+
+    const events = parser.feed("\x1ba");
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual((events[0] as KeyInput).name, "a");
+    assert.strictEqual((events[0] as KeyInput).alt, true);
+    assert.strictEqual((events[0] as KeyInput).char, "a");
+  });
+
+  it("parses Ctrl+A through Ctrl+Z", () => {
+    const parser = new UnifiedParser();
+    const ctrlMap: Record<number, { name: string; ctrl: boolean }> = {
+      1: { name: "a", ctrl: true },
+      2: { name: "b", ctrl: true },
+      3: { name: "c", ctrl: true },
+      4: { name: "d", ctrl: true },
+      5: { name: "e", ctrl: true },
+      6: { name: "f", ctrl: true },
+      7: { name: "g", ctrl: true },
+      8: { name: "backspace", ctrl: false },
+      9: { name: "tab", ctrl: false },
+      10: { name: "enter", ctrl: false },
+      11: { name: "k", ctrl: true },
+      12: { name: "l", ctrl: true },
+      13: { name: "enter", ctrl: false },
+      14: { name: "n", ctrl: true },
+      15: { name: "o", ctrl: true },
+      16: { name: "p", ctrl: true },
+      17: { name: "q", ctrl: true },
+      18: { name: "r", ctrl: true },
+      19: { name: "s", ctrl: true },
+      20: { name: "t", ctrl: true },
+      21: { name: "u", ctrl: true },
+      22: { name: "v", ctrl: true },
+      23: { name: "w", ctrl: true },
+      24: { name: "x", ctrl: true },
+      25: { name: "y", ctrl: true },
+      26: { name: "z", ctrl: true },
+    };
+
+    for (let i = 1; i <= 26; i++) {
+      const char = String.fromCharCode(i);
+      const events = parser.feed(char);
+      assert.strictEqual(events.length, 1, `code ${i} should produce 1 event`);
+      const key = events[0] as KeyInput;
+      const expected = ctrlMap[i];
+      assert.strictEqual(key.name, expected.name, `code ${i} name mismatch`);
+      assert.strictEqual(key.ctrl, expected.ctrl, `code ${i} ctrl mismatch`);
+    }
+  });
+
+  it("flushPending() resolves standalone ESC key", () => {
+    const parser = new UnifiedParser();
+
+    parser.feed("\x1b");
+    assert.strictEqual(parser.pending, true);
+
+    const event = parser.flushPending();
+    assert.ok(event, "standalone ESC should resolve to an event");
+    assert.strictEqual(event?.name, "escape");
+    assert.strictEqual(event?.sequence, "\x1b");
+    assert.strictEqual(parser.pending, false);
+  });
+
+  it("flushPending() discards incomplete CSI sequence", () => {
+    const parser = new UnifiedParser();
+
+    parser.feed("\x1b[1");
+    assert.strictEqual(parser.pending, true);
+
+    const event = parser.flushPending();
+    assert.strictEqual(event, null, "incomplete CSI should be discarded");
+    assert.strictEqual(parser.pending, false);
+  });
+
+  it("consecutive escape sequences without intervening characters", () => {
+    const parser = new UnifiedParser();
+
+    const events = parser.feed("\x1b[A\x1b[B\x1b[C");
+    assert.strictEqual(events.length, 3);
+    assert.strictEqual((events[0] as KeyInput).name, "up");
+    assert.strictEqual((events[1] as KeyInput).name, "down");
+    assert.strictEqual((events[2] as KeyInput).name, "right");
+  });
+
+  it("parses focus events via UnifiedParser", () => {
+    const parser = new UnifiedParser();
+
+    let events = parser.feed("\x1b[I");
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual(events[0].type, "focus");
+    assert.strictEqual((events[0] as FocusEvent).focused, true);
+
+    events = parser.feed("\x1b[O");
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual(events[0].type, "focus");
+    assert.strictEqual((events[0] as FocusEvent).focused, false);
+  });
+
+  it("parses printable characters", () => {
+    const parser = new UnifiedParser();
+
+    const events = parser.feed("hello");
+    assert.strictEqual(events.length, 5);
+    assert.strictEqual((events[0] as KeyInput).name, "h");
+    assert.strictEqual((events[0] as KeyInput).char, "h");
+    assert.strictEqual((events[4] as KeyInput).name, "o");
+  });
+});
+
+describe("createInputParser non-mouse path", () => {
+  it("emits focus events through SequenceParser when mouse is disabled", async () => {
+    const events: InputEvent[] = [];
+    const handlers: { data?: (data: Buffer) => void } = {};
+
+    const mockStdin = {
+      isTTY: true,
+      setRawMode: () => {},
+      on: (event: string, handler: (data: Buffer) => void) => {
+        if (event === "data") handlers.data = handler;
+      },
+      off: () => {},
+      listenerCount: () => 0,
+    } as unknown as NodeJS.ReadStream;
+    const mockStdout = {
+      write: () => true,
+      columns: 80,
+      rows: 24,
+      on: () => {},
+      off: () => {},
+    } as unknown as NodeJS.WriteStream;
+
+    const parser = createInputParser(
+      mockStdin,
+      mockStdout,
+      (event) => events.push(event),
+      { mouse: false },
+    );
+
+    assert.ok(handlers.data);
+    handlers.data(Buffer.from("\x1b[I"));
+
+    assert.strictEqual(events.length, 1);
+    assert.strictEqual(events[0].type, "focus");
+    assert.strictEqual((events[0] as FocusEvent).focused, true);
+
+    handlers.data(Buffer.from("\x1b[O"));
+    assert.strictEqual(events.length, 2);
+    assert.strictEqual(events[1].type, "focus");
+    assert.strictEqual((events[1] as FocusEvent).focused, false);
+
+    parser.destroy();
+  });
+
+  it("emits paste events when mouse is disabled", () => {
+    const events: InputEvent[] = [];
+    const handlers: { data?: (data: Buffer) => void } = {};
+
+    const mockStdin = {
+      isTTY: true,
+      setRawMode: () => {},
+      on: (event: string, handler: (data: Buffer) => void) => {
+        if (event === "data") handlers.data = handler;
+      },
+      off: () => {},
+      listenerCount: () => 0,
+    } as unknown as NodeJS.ReadStream;
+    const mockStdout = {
+      write: () => true,
+      columns: 80,
+      rows: 24,
+      on: () => {},
+      off: () => {},
+    } as unknown as NodeJS.WriteStream;
+
+    const parser = createInputParser(
+      mockStdin,
+      mockStdout,
+      (event) => events.push(event),
+      { mouse: false },
+    );
+
+    assert.ok(handlers.data);
+    handlers.data(Buffer.from("\x1b[200~pasted text\x1b[201~"));
+
+    const pasteEvents = events.filter((e) => e.type === "paste");
+    assert.strictEqual(pasteEvents.length, 1);
+    assert.strictEqual((pasteEvents[0] as PasteEvent).text, "pasted text");
 
     parser.destroy();
   });

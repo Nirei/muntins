@@ -1044,3 +1044,144 @@ describe("Color types and serialization", () => {
     assert.ok(output.includes("3"), "should include italic SGR code");
   });
 });
+
+describe("writeText with complex characters", () => {
+  it("two consecutive CJK characters via writeText produce correct cell placement", () => {
+    const buf = new Buffer(20, 10);
+    const cols = buf.writeText(0, 0, "中日", DEFAULT_COLOR, DEFAULT_COLOR, 0);
+
+    assert.strictEqual(cols, 4, "two CJK chars consume 4 columns");
+    assert.strictEqual(buf.getSymbol(0, 0), "中");
+    assert.strictEqual(buf.getSymbol(1, 0), ""); // continuation
+    assert.strictEqual(buf.getSymbol(2, 0), "日");
+    assert.strictEqual(buf.getSymbol(3, 0), ""); // continuation
+    assert.strictEqual(buf.getSymbol(4, 0), " ");
+  });
+
+  it("emoji sequences through writeText produce correct cell placement", () => {
+    const buf = new Buffer(20, 10);
+    const flagEmoji = "🇯🇵";
+    const cols = buf.writeText(
+      0,
+      0,
+      flagEmoji,
+      DEFAULT_COLOR,
+      DEFAULT_COLOR,
+      0,
+    );
+
+    assert.strictEqual(cols, 2, "flag emoji should be width 2");
+    assert.strictEqual(buf.getSymbol(0, 0), flagEmoji);
+    assert.strictEqual(buf.getSymbol(1, 0), ""); // continuation
+
+    buf.clear();
+    const zwjEmoji = "👨‍👩‍👧";
+    const cols2 = buf.writeText(
+      0,
+      0,
+      zwjEmoji,
+      DEFAULT_COLOR,
+      DEFAULT_COLOR,
+      0,
+    );
+
+    assert.strictEqual(cols2, 2, "ZWJ emoji should be width 2");
+    assert.strictEqual(buf.getSymbol(0, 0), zwjEmoji);
+    assert.strictEqual(buf.getSymbol(1, 0), "");
+
+    buf.clear();
+    const skinToneEmoji = "👋🏽";
+    const cols3 = buf.writeText(
+      0,
+      0,
+      skinToneEmoji,
+      DEFAULT_COLOR,
+      DEFAULT_COLOR,
+      0,
+    );
+
+    assert.strictEqual(cols3, 2, "skin tone emoji should be width 2");
+    assert.strictEqual(buf.getSymbol(0, 0), skinToneEmoji);
+    assert.strictEqual(buf.getSymbol(1, 0), "");
+  });
+
+  it("mixed ASCII and wide chars via writeText", () => {
+    const buf = new Buffer(20, 10);
+    const cols = buf.writeText(
+      0,
+      0,
+      "A中B日C",
+      DEFAULT_COLOR,
+      DEFAULT_COLOR,
+      0,
+    );
+
+    assert.strictEqual(cols, 7, "1+2+1+2+1 = 7");
+    assert.strictEqual(buf.getSymbol(0, 0), "A");
+    assert.strictEqual(buf.getSymbol(1, 0), "中");
+    assert.strictEqual(buf.getSymbol(2, 0), ""); // continuation
+    assert.strictEqual(buf.getSymbol(3, 0), "B");
+    assert.strictEqual(buf.getSymbol(4, 0), "日");
+    assert.strictEqual(buf.getSymbol(5, 0), ""); // continuation
+    assert.strictEqual(buf.getSymbol(6, 0), "C");
+  });
+});
+
+describe("style transitions", () => {
+  it("simultaneous color and modifier change produces correct ANSI output", () => {
+    const buf = new Buffer(10, 10);
+    buf.flush();
+
+    buf.set(0, 0, "A", { type: "named", index: 1 }, DEFAULT_COLOR, BOLD);
+    buf.flush();
+
+    buf.set(1, 0, "B", { type: "named", index: 4 }, DEFAULT_COLOR, ITALIC);
+    const output = buf.flush();
+
+    assert.ok(output.includes("34"), "should include blue fg (34)");
+    assert.ok(output.includes("3"), "should include italic SGR code");
+  });
+
+  it("transition from bold+red fg to italic+blue fg resets bold and applies italic", () => {
+    const buf = new Buffer(10, 10);
+    buf.flush();
+
+    buf.set(0, 0, "X", { type: "named", index: 1 }, DEFAULT_COLOR, BOLD);
+    buf.flush();
+
+    buf.set(1, 0, "Y", { type: "named", index: 4 }, DEFAULT_COLOR, ITALIC);
+    const output = buf.flush();
+
+    assert.ok(output.includes("34"), "should include blue fg code");
+    assert.ok(
+      output.includes("\x1b[0;") ||
+        output.includes("0;34") ||
+        output.includes("0;3"),
+      "should reset before applying new style (0;...)",
+    );
+  });
+
+  it("transition from one RGB color to another with modifier change", () => {
+    const buf = new Buffer(10, 10);
+    buf.flush();
+
+    buf.set(
+      0,
+      0,
+      "A",
+      { type: "rgb", r: 255, g: 0, b: 0 },
+      DEFAULT_COLOR,
+      UNDERLINE,
+    );
+    buf.flush();
+
+    buf.set(1, 0, "B", { type: "rgb", r: 0, g: 255, b: 0 }, DEFAULT_COLOR, DIM);
+    const output = buf.flush();
+
+    assert.ok(output.includes("38;2;0;255;0"), "should include green RGB fg");
+    assert.ok(
+      output.includes("2") && output.includes("38;2;"),
+      "should include DIM modifier (SGR 2)",
+    );
+  });
+});

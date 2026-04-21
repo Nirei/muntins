@@ -62,7 +62,12 @@ import {
   segmentLine,
   truncateLine,
 } from "../src/core/text.ts";
-import { createTestApp, setActiveContext } from "./test-helpers.ts";
+import {
+  createMockStdin,
+  createMockStdout,
+  createTestApp,
+  setActiveContext,
+} from "./test-helpers.ts";
 
 describe("runtime core types", () => {
   it("createRef returns object with null current", () => {
@@ -2153,106 +2158,6 @@ describe("hover cleanup on Show disposal", () => {
     app.unmount();
   });
 });
-
-// Test helpers for mock streams
-interface MockStdin {
-  isTTY: boolean;
-  setRawMode: (mode: boolean) => MockStdin;
-  on: (event: string, handler: (...args: unknown[]) => void) => MockStdin;
-  off: (event: string, handler: (...args: unknown[]) => void) => MockStdin;
-  emit: (event: string, ...args: unknown[]) => boolean;
-  resume: () => void;
-  pause: () => void;
-  listenerCount: (event: string) => number;
-  _handlers: Map<string, Array<(...args: unknown[]) => void>>;
-}
-
-interface MockStdout {
-  isTTY: boolean;
-  columns: number;
-  rows: number;
-  written: string;
-  write: (s: string) => boolean;
-  on: (event: string, handler: () => void) => MockStdout;
-  off: (event: string, handler: () => void) => MockStdout;
-  emit: (event: string) => boolean;
-  _handlers: Map<string, Array<() => void>>;
-}
-
-function createMockStdin(): MockStdin {
-  const handlers = new Map<string, Array<(...args: unknown[]) => void>>();
-
-  const stdin: MockStdin = {
-    isTTY: true,
-    setRawMode: () => stdin,
-    on: (event, handler) => {
-      const list = handlers.get(event) ?? [];
-      list.push(handler);
-      handlers.set(event, list);
-      return stdin;
-    },
-    off: (event, handler) => {
-      const list = handlers.get(event);
-      if (list) {
-        const idx = list.indexOf(handler);
-        if (idx >= 0) list.splice(idx, 1);
-      }
-      return stdin;
-    },
-    emit: (event, ...args) => {
-      const list = handlers.get(event);
-      if (list) {
-        for (const h of list) h(...args);
-      }
-      return true;
-    },
-    resume: () => {},
-    pause: () => {},
-    listenerCount: (event) => handlers.get(event)?.length ?? 0,
-    _handlers: handlers,
-  };
-
-  return stdin;
-}
-
-function createMockStdout(cols = 80, rows = 24): MockStdout {
-  const handlers = new Map<string, Array<() => void>>();
-
-  const stdout: MockStdout = {
-    isTTY: true,
-    columns: cols,
-    rows: rows,
-    written: "",
-    write: function (s: string) {
-      this.written += s;
-      return true;
-    },
-    on: (event, handler) => {
-      const list = handlers.get(event) ?? [];
-      list.push(handler);
-      handlers.set(event, list);
-      return stdout;
-    },
-    off: (event, handler) => {
-      const list = handlers.get(event);
-      if (list) {
-        const idx = list.indexOf(handler);
-        if (idx >= 0) list.splice(idx, 1);
-      }
-      return stdout;
-    },
-    emit: (event) => {
-      const list = handlers.get(event);
-      if (list) {
-        for (const h of list) h();
-      }
-      return true;
-    },
-    _handlers: handlers,
-  };
-
-  return stdout;
-}
 
 describe("mount", () => {
   it("returns app with unmount function", () => {
@@ -4511,5 +4416,73 @@ describe("backward-compat accessors", () => {
     const app = createTestState(Box({}));
     assert.ok(app.rootScope);
     assert.strictEqual(app.rootScope.parent, null);
+  });
+});
+
+describe("App with throwing component during mount", () => {
+  it("restores terminal state when component throws", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const preMountWritten = mockStdout.written;
+
+    assert.throws(
+      () => {
+        App.mount(
+          () => {
+            throw new Error("component explosion");
+          },
+          {
+            stdin: mockStdin as unknown as NodeJS.ReadStream,
+            stdout: mockStdout as unknown as NodeJS.WriteStream,
+            alternateScreen: false,
+            scroll: false,
+          },
+        );
+      },
+      { message: "component explosion" },
+    );
+
+    const postMountWritten = mockStdout.written;
+    const cleanupOutput = postMountWritten.slice(preMountWritten.length);
+
+    assert.ok(
+      cleanupOutput.length > 0,
+      "terminal cleanup sequences should be written after mount failure",
+    );
+  });
+});
+
+describe("concurrent App instances", () => {
+  it("unmounting one app does not affect another", () => {
+    const mockStdin1 = createMockStdin();
+    const mockStdout1 = createMockStdout();
+    const mockStdin2 = createMockStdin();
+    const mockStdout2 = createMockStdout();
+
+    const [value, setValue] = createSignal("initial");
+
+    const app1 = App.mount(() => Text({ content: "app1" }), {
+      stdin: mockStdin1 as unknown as NodeJS.ReadStream,
+      stdout: mockStdout1 as unknown as NodeJS.WriteStream,
+      alternateScreen: false,
+      scroll: false,
+    });
+
+    const app2 = App.mount(() => Text({ content: "app2" }), {
+      stdin: mockStdin2 as unknown as NodeJS.ReadStream,
+      stdout: mockStdout2 as unknown as NodeJS.WriteStream,
+      alternateScreen: false,
+      scroll: false,
+    });
+
+    assert.ok(app1.root, "app1 should have a root");
+    assert.ok(app2.root, "app2 should have a root");
+
+    app1.unmount();
+
+    assert.ok(app2.root, "app2 should still have its root after app1 unmount");
+
+    app2.unmount();
   });
 });

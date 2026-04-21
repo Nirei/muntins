@@ -1118,3 +1118,190 @@ describe("nested effect execution order", () => {
     ]);
   });
 });
+
+describe("createRoot({ detached: true })", () => {
+  it("detached root is not disposed when parent is disposed", () => {
+    const [count, setCount] = createSignal(0);
+    let detachedEffectRuns = 0;
+
+    const disposeOuter = createRoot((disposeOuter) => {
+      createEffect(() => {
+        count();
+      });
+
+      createRoot(
+        (disposeDetached) => {
+          createEffect(() => {
+            count();
+            detachedEffectRuns++;
+          });
+          return disposeDetached;
+        },
+        { detached: true },
+      );
+
+      return disposeOuter;
+    });
+
+    setCount(1);
+    assert.strictEqual(detachedEffectRuns, 2);
+
+    disposeOuter();
+    setCount(2);
+    assert.strictEqual(detachedEffectRuns, 3);
+  });
+
+  it("detached root can be manually disposed", () => {
+    const [count, setCount] = createSignal(0);
+    let runs = 0;
+
+    const disposeDetached = createRoot((disposeOuter) => {
+      const d = createRoot(
+        (disposeDetached) => {
+          createEffect(() => {
+            count();
+            runs++;
+          });
+          return disposeDetached;
+        },
+        { detached: true },
+      );
+      return d;
+    });
+
+    setCount(1);
+    assert.strictEqual(runs, 2);
+
+    disposeDetached();
+    setCount(2);
+    assert.strictEqual(runs, 2);
+  });
+});
+
+describe("batch flush with error then subsequent batch", () => {
+  it("subsequent batch works correctly after a batch that throws", () => {
+    const [a, setA] = createSignal(0);
+    const [b, setB] = createSignal("initial");
+    let observed = "";
+
+    createRoot(() => {
+      createEffect(() => {
+        const val = a();
+        if (val === 1) throw new Error("batch error");
+      });
+
+      createEffect(() => {
+        observed = b();
+      });
+    });
+
+    assert.strictEqual(observed, "initial");
+
+    assert.throws(() => {
+      batch(() => {
+        setA(1);
+        setB("during-error");
+      });
+    }, /batch error/);
+
+    assert.strictEqual(observed, "during-error");
+
+    batch(() => {
+      setB("after-recovery");
+    });
+    assert.strictEqual(observed, "after-recovery");
+
+    setB("final");
+    assert.strictEqual(observed, "final");
+  });
+});
+
+describe("glitch-free memo propagation", () => {
+  it("memo read by multiple effects sees consistent value on single dependency change", () => {
+    const [source, setSource] = createSignal(1);
+    const doubled = createMemo(() => source() * 2);
+
+    const seenByA: number[] = [];
+    const seenByB: number[] = [];
+
+    createRoot(() => {
+      createEffect(() => {
+        seenByA.push(doubled());
+      });
+
+      createEffect(() => {
+        seenByB.push(doubled());
+      });
+    });
+
+    assert.deepStrictEqual(seenByA, [2]);
+    assert.deepStrictEqual(seenByB, [2]);
+
+    seenByA.length = 0;
+    seenByB.length = 0;
+
+    setSource(5);
+
+    assert.deepStrictEqual(
+      seenByA,
+      [10],
+      "effect A should see 10, not an intermediate",
+    );
+    assert.deepStrictEqual(
+      seenByB,
+      [10],
+      "effect B should see 10, not an intermediate",
+    );
+  });
+});
+
+describe("onCleanup throwing during effect re-run", () => {
+  it("throwing cleanup does not prevent other cleanups from running", () => {
+    const [trigger, setTrigger] = createSignal(0);
+    const order: string[] = [];
+
+    createRoot(() => {
+      createEffect(() => {
+        trigger();
+        onCleanup(() => {
+          order.push("normal-before");
+        });
+        onCleanup(() => {
+          throw new Error("cleanup error");
+        });
+        onCleanup(() => {
+          order.push("normal-after");
+        });
+      });
+    });
+
+    order.length = 0;
+
+    assert.throws(() => setTrigger(1), /cleanup error/);
+    assert.deepStrictEqual(order, ["normal-after", "normal-before"]);
+  });
+
+  it("throwing cleanup does not corrupt the reactive graph", () => {
+    const [trigger, setTrigger] = createSignal(0);
+    let value = -1;
+
+    createRoot(() => {
+      createEffect(() => {
+        value = trigger();
+        onCleanup(() => {
+          if (value === 1) throw new Error("cleanup error");
+        });
+      });
+    });
+
+    assert.strictEqual(value, 0);
+
+    setTrigger(1);
+    assert.strictEqual(value, 1);
+
+    assert.throws(() => setTrigger(2), /cleanup error/);
+
+    setTrigger(3);
+    assert.strictEqual(value, 3);
+  });
+});

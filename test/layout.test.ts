@@ -3049,168 +3049,486 @@ describe("flex shrink with padding", () => {
       );
     });
   });
-});
 
-describe("overflow hidden reduces auto-min", () => {
-  it("container with overflow hidden has zero content auto-min", () => {
-    const node: LayoutNode = {
-      style: { width: 80, height: 10, flexDirection: "column" },
-      children: [
-        { style: {}, measure: () => ({ width: 10, height: 3 }) },
-        {
-          style: { flexGrow: 1, overflow: "hidden" },
-          measure: () => ({ width: 10, height: 8 }),
-        },
-      ],
-    };
-
-    const result = computeLayout(node, 80, 24);
-
-    assert.strictEqual(
-      result.children[0].height + result.children[1].height,
-      10,
-      `Children should sum to 10, got ${result.children[0].height} + ${result.children[1].height}`,
-    );
-  });
-});
-
-describe("wrapping container auto-min", () => {
-  it("flexWrap container auto-min uses single-line max not total sum", () => {
-    const node: LayoutNode = {
-      style: { width: 80, height: 10, flexDirection: "column" },
-      children: [
-        { style: {}, measure: () => ({ width: 10, height: 1 }) },
-        {
-          style: {
-            flexDirection: "column",
-            flexWrap: "wrap",
-            flexGrow: 1,
-            gap: 1,
+  describe("display: contents with measure function", () => {
+    it("measure function on contents node is ignored", () => {
+      const node: LayoutNode = {
+        style: { flexDirection: "column" },
+        children: [
+          {
+            style: { display: "contents" },
+            measure: () => ({ width: 50, height: 10 }),
+            children: [
+              {
+                style: {},
+                measure: () => ({ width: 5, height: 1 }),
+              },
+            ],
           },
-          children: Array.from({ length: 8 }, () => ({
-            style: { height: 3, minHeight: 1 },
-            children: [{ style: {}, measure: () => ({ width: 7, height: 1 }) }],
-          })),
-        },
-      ],
-    };
+        ],
+      };
 
-    const result = computeLayout(node, 80, 24);
-    const grid = result.children[1];
+      const result = computeLayout(node, 80, 24);
 
-    assert.ok(
-      grid.height <= 9,
-      `Grid should fit in remaining 9 rows, got ${grid.height}`,
-    );
-  });
-});
-
-describe("clampBoxSize respects auto-min when minWidth is auto", () => {
-  it("maxWidth does not clamp container below autoMinWidth (padding-based)", () => {
-    const node: LayoutNode = {
-      style: { width: 40, flexDirection: "row" },
-      children: [
-        {
-          style: { maxWidth: 3, flexGrow: 1, paddingStart: 2, paddingEnd: 2 },
-          children: [{ style: { width: 5 } }],
-        },
-      ],
-    };
-
-    const result = computeLayout(node, 80, 24);
-    const child = result.children[0];
-
-    assert.ok(
-      child.width >= 5,
-      `Child should not be clamped below its autoMinWidth (5), got ${child.width}`,
-    );
+      assert.strictEqual(
+        result.children.length,
+        1,
+        "contents node should not produce its own layout box",
+      );
+      assert.strictEqual(
+        result.children[0].height,
+        1,
+        "child should be measured normally",
+      );
+    });
   });
 
-  it("maxHeight does not clamp container below autoMinHeight (padding-based)", () => {
-    const node: LayoutNode = {
-      style: { height: 20, flexDirection: "column" },
-      children: [
-        {
-          style: { maxHeight: 2, flexGrow: 1, paddingTop: 1, paddingBottom: 1 },
-          children: [{ style: { height: 5, paddingTop: 3, paddingBottom: 3 } }],
-        },
-      ],
-    };
-
-    const result = computeLayout(node, 80, 24);
-    const child = result.children[0];
-
-    assert.ok(
-      child.height >= 8,
-      `Child should not be clamped below its autoMinHeight (8 = pad 2 + child autoMin 6), got ${child.height}`,
-    );
-  });
-
-  it("explicit minWidth: 0 overrides autoMinWidth in clamp", () => {
-    const node: LayoutNode = {
-      style: { width: 40, flexDirection: "row" },
-      children: [
-        {
-          style: {
-            maxWidth: 3,
-            minWidth: 0,
-            flexGrow: 1,
-            paddingStart: 2,
-            paddingEnd: 2,
+  describe("overflow hidden reduces auto-min", () => {
+    it("container with overflow hidden has zero content auto-min", () => {
+      const node: LayoutNode = {
+        style: { width: 80, height: 10, flexDirection: "column" },
+        children: [
+          { style: {}, measure: () => ({ width: 10, height: 3 }) },
+          {
+            style: { flexGrow: 1, overflow: "hidden" },
+            measure: () => ({ width: 10, height: 8 }),
           },
-          children: [{ style: { width: 5 } }],
+        ],
+      };
+
+      const result = computeLayout(node, 80, 24);
+
+      assert.strictEqual(
+        result.children[0].height + result.children[1].height,
+        10,
+        `Children should sum to 10, got ${result.children[0].height} + ${result.children[1].height}`,
+      );
+    });
+  });
+
+  describe("wrapping container auto-min", () => {
+    it("flexWrap container auto-min uses single-line max not total sum", () => {
+      const node: LayoutNode = {
+        style: { width: 80, height: 10, flexDirection: "column" },
+        children: [
+          { style: {}, measure: () => ({ width: 10, height: 1 }) },
+          {
+            style: {
+              flexDirection: "column",
+              flexWrap: "wrap",
+              flexGrow: 1,
+              gap: 1,
+            },
+            children: Array.from({ length: 8 }, () => ({
+              style: { height: 3, minHeight: 1 },
+              children: [
+                { style: {}, measure: () => ({ width: 7, height: 1 }) },
+              ],
+            })),
+          },
+        ],
+      };
+
+      const result = computeLayout(node, 80, 24);
+      const grid = result.children[1];
+
+      assert.ok(
+        grid.height <= 9,
+        `Grid should fit in remaining 9 rows, got ${grid.height}`,
+      );
+    });
+  });
+
+  describe("clampBoxSize respects auto-min when minWidth is auto", () => {
+    it("maxWidth does not clamp container below autoMinWidth (padding-based)", () => {
+      const node: LayoutNode = {
+        style: { width: 40, flexDirection: "row" },
+        children: [
+          {
+            style: { maxWidth: 3, flexGrow: 1, paddingStart: 2, paddingEnd: 2 },
+            children: [{ style: { width: 5 } }],
+          },
+        ],
+      };
+
+      const result = computeLayout(node, 80, 24);
+      const child = result.children[0];
+
+      assert.ok(
+        child.width >= 5,
+        `Child should not be clamped below its autoMinWidth (5), got ${child.width}`,
+      );
+    });
+
+    it("maxHeight does not clamp container below autoMinHeight (padding-based)", () => {
+      const node: LayoutNode = {
+        style: { height: 20, flexDirection: "column" },
+        children: [
+          {
+            style: {
+              maxHeight: 2,
+              flexGrow: 1,
+              paddingTop: 1,
+              paddingBottom: 1,
+            },
+            children: [
+              { style: { height: 5, paddingTop: 3, paddingBottom: 3 } },
+            ],
+          },
+        ],
+      };
+
+      const result = computeLayout(node, 80, 24);
+      const child = result.children[0];
+
+      assert.ok(
+        child.height >= 8,
+        `Child should not be clamped below its autoMinHeight (8 = pad 2 + child autoMin 6), got ${child.height}`,
+      );
+    });
+
+    it("explicit minWidth: 0 overrides autoMinWidth in clamp", () => {
+      const node: LayoutNode = {
+        style: { width: 40, flexDirection: "row" },
+        children: [
+          {
+            style: {
+              maxWidth: 3,
+              minWidth: 0,
+              flexGrow: 1,
+              paddingStart: 2,
+              paddingEnd: 2,
+            },
+            children: [{ style: { width: 5 } }],
+          },
+        ],
+      };
+
+      const result = computeLayout(node, 80, 24);
+      const child = result.children[0];
+
+      assert.strictEqual(
+        child.width,
+        3,
+        `With minWidth:0, maxWidth should win and clamp to 3, got ${child.width}`,
+      );
+    });
+  });
+
+  describe("fixed width in row", () => {
+    it("width:36 flexShrink:0 is not crushed by sibling with long content", () => {
+      const node: LayoutNode = {
+        style: { width: 80, flexDirection: "row", gap: 1 },
+        children: [
+          {
+            style: { flexDirection: "column", flexGrow: 1, minWidth: 0 },
+            children: [
+              {
+                style: { overflow: "hidden" },
+                measure: () => ({ width: 200, height: 1 }),
+              },
+            ],
+          },
+          {
+            style: { flexDirection: "column", width: 36, flexShrink: 0 },
+            children: [
+              {
+                style: {},
+                measure: () => ({ width: 10, height: 1 }),
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = computeLayout(node, 80, 24);
+
+      assert.strictEqual(
+        result.children[1].width,
+        36,
+        `Right column with width:36 flexShrink:0 should stay at 36, got ${result.children[1].width}`,
+      );
+      assert.strictEqual(
+        result.children[0].width + 1 + result.children[1].width,
+        80,
+        `Left + gap + right should equal 80, got ${result.children[0].width} + 1 + ${result.children[1].width}`,
+      );
+    });
+  });
+
+  describe("borders affecting available space", () => {
+    it("borderStart and borderEnd offset children and reduce available width", () => {
+      const node: LayoutNode = {
+        style: { borderStart: true, borderEnd: true, width: 10, height: 5 },
+        children: [
+          {
+            style: { width: "auto", height: "auto" },
+            measure: () => ({ width: 6, height: 1 }),
+          },
+        ],
+      };
+
+      const result = computeLayout(node, 80, 24);
+      const child = result.children[0];
+
+      assert.strictEqual(
+        child.x,
+        1,
+        "child should be offset by 1 for borderStart",
+      );
+      assert.strictEqual(
+        child.width,
+        6,
+        "child width should be its measured width (6)",
+      );
+      assert.strictEqual(result.width, 10, "parent width includes borders");
+    });
+
+    it("borderTop and borderBottom offset children vertically", () => {
+      const node: LayoutNode = {
+        style: {
+          flexDirection: "column",
+          borderTop: true,
+          borderBottom: true,
+          width: 10,
+          height: 5,
         },
-      ],
-    };
+        children: [
+          {
+            style: { width: "auto", height: "auto" },
+            measure: () => ({ width: 5, height: 1 }),
+          },
+        ],
+      };
 
-    const result = computeLayout(node, 80, 24);
-    const child = result.children[0];
+      const result = computeLayout(node, 80, 24);
+      const child = result.children[0];
 
-    assert.strictEqual(
-      child.width,
-      3,
-      `With minWidth:0, maxWidth should win and clamp to 3, got ${child.width}`,
-    );
+      assert.strictEqual(
+        child.y,
+        1,
+        "child should be offset by 1 for borderTop",
+      );
+      assert.strictEqual(
+        child.height,
+        1,
+        "child height is its measured height",
+      );
+    });
+
+    it("all four borders offset children in both dimensions", () => {
+      const node: LayoutNode = {
+        style: {
+          borderTop: true,
+          borderBottom: true,
+          borderStart: true,
+          borderEnd: true,
+          width: 10,
+          height: 8,
+        },
+        children: [
+          {
+            style: { width: "auto", height: "auto" },
+            measure: () => ({ width: 6, height: 4 }),
+          },
+        ],
+      };
+
+      const result = computeLayout(node, 80, 24);
+      const child = result.children[0];
+
+      assert.strictEqual(child.x, 1, "offset by borderStart");
+      assert.strictEqual(child.y, 1, "offset by borderTop");
+      assert.strictEqual(child.width, 6, "measured width preserved");
+      assert.strictEqual(
+        child.height,
+        6,
+        "stretches to parent height minus borders",
+      );
+    });
+
+    it("borders affect intrinsic size of containers", () => {
+      const node: LayoutNode = {
+        style: { flexDirection: "column" },
+        children: [
+          {
+            style: {
+              borderTop: true,
+              borderBottom: true,
+              borderStart: true,
+              borderEnd: true,
+            },
+            children: [
+              {
+                style: {},
+                measure: () => ({ width: 4, height: 1 }),
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = computeLayout(node, 80, 24);
+      const bordered = result.children[0];
+
+      assert.strictEqual(bordered.height, 3, "1 content + 2 vertical borders");
+    });
+  });
+
+  describe("zero-size containers", () => {
+    it("container with width: 0 and height: 0", () => {
+      const node: LayoutNode = {
+        style: { width: 0, height: 0 },
+        children: [{ style: { width: 5, height: 3 } }],
+      };
+
+      const result = computeLayout(node, 80, 24);
+
+      assert.ok(Number.isFinite(result.width), "width should be finite");
+      assert.ok(Number.isFinite(result.height), "height should be finite");
+      assert.ok(Number.isFinite(result.x), "x should be finite");
+      assert.ok(Number.isFinite(result.y), "y should be finite");
+      assert.ok(!Number.isNaN(result.width), "width should not be NaN");
+      assert.ok(!Number.isNaN(result.height), "height should not be NaN");
+    });
+
+    it("computeLayout with availableWidth: 0", () => {
+      const node: LayoutNode = {
+        style: {},
+        children: [{ style: { width: 5, height: 3 } }],
+      };
+
+      const result = computeLayout(node, 0, 24);
+
+      assert.ok(Number.isFinite(result.width));
+      assert.ok(Number.isFinite(result.height));
+      assert.ok(!Number.isNaN(result.width));
+      assert.ok(!Number.isNaN(result.height));
+    });
+
+    it("computeLayout with availableHeight: 0", () => {
+      const node: LayoutNode = {
+        style: { flexDirection: "column" },
+        children: [{ style: { width: 5, height: 3 } }],
+      };
+
+      const result = computeLayout(node, 80, 0);
+
+      assert.ok(Number.isFinite(result.width));
+      assert.ok(Number.isFinite(result.height));
+      assert.ok(!Number.isNaN(result.width));
+      assert.ok(!Number.isNaN(result.height));
+    });
+
+    it("zero available dimensions with growing child", () => {
+      const node: LayoutNode = {
+        style: {},
+        children: [{ style: { flexGrow: 1 } }],
+      };
+
+      const result = computeLayout(node, 0, 0);
+
+      assert.ok(Number.isFinite(result.width));
+      assert.ok(Number.isFinite(result.height));
+      assert.ok(!Number.isNaN(result.width));
+      assert.ok(!Number.isNaN(result.height));
+    });
+  });
+
+  describe("grow + maxWidth interaction", () => {
+    it("growing item with maxWidth is clamped", () => {
+      const node: LayoutNode = {
+        style: {},
+        children: [
+          { style: { flexGrow: 1, maxWidth: 3 } },
+          { style: { flexGrow: 1 } },
+        ],
+      };
+
+      const result = computeLayout(node, 20, 24);
+      const childA = result.children[0];
+
+      assert.strictEqual(
+        childA.width,
+        3,
+        "child A should be clamped to maxWidth 3",
+      );
+    });
+
+    it("multiple growing items with restrictive maxWidth are individually clamped", () => {
+      const node: LayoutNode = {
+        style: {},
+        children: [
+          { style: { flexGrow: 1, maxWidth: 2 } },
+          { style: { flexGrow: 1, maxWidth: 3 } },
+          { style: { flexGrow: 1 } },
+        ],
+      };
+
+      const result = computeLayout(node, 20, 24);
+
+      assert.strictEqual(
+        result.children[0].width,
+        2,
+        "first child clamped to maxWidth 2",
+      );
+      assert.strictEqual(
+        result.children[1].width,
+        3,
+        "second child clamped to maxWidth 3",
+      );
+    });
   });
 });
 
-describe("fixed width in row", () => {
-  it("width:36 flexShrink:0 is not crushed by sibling with long content", () => {
+describe("alignContent with non-zero gap", () => {
+  it("alignContent: space-between with gap distributes space between wrapped lines", () => {
     const node: LayoutNode = {
-      style: { width: 80, flexDirection: "row", gap: 1 },
+      style: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        alignContent: "space-between",
+        gap: 2,
+        height: 20,
+      },
       children: [
-        {
-          style: { flexDirection: "column", flexGrow: 1, minWidth: 0 },
-          children: [
-            {
-              style: { overflow: "hidden" },
-              measure: () => ({ width: 200, height: 1 }),
-            },
-          ],
-        },
-        {
-          style: { flexDirection: "column", width: 36, flexShrink: 0 },
-          children: [
-            {
-              style: {},
-              measure: () => ({ width: 10, height: 1 }),
-            },
-          ],
-        },
+        { style: { width: 4, height: 3 } },
+        { style: { width: 4, height: 3 } },
       ],
     };
 
-    const result = computeLayout(node, 80, 24);
+    const result = computeLayout(node, 10, 24);
 
-    assert.strictEqual(
-      result.children[1].width,
-      36,
-      `Right column with width:36 flexShrink:0 should stay at 36, got ${result.children[1].width}`,
+    assert.strictEqual(result.children.length, 2);
+    assert.ok(
+      Number.isFinite(result.children[0].y),
+      "child y should be finite",
     );
-    assert.strictEqual(
-      result.children[0].width + 1 + result.children[1].width,
-      80,
-      `Left + gap + right should equal 80, got ${result.children[0].width} + 1 + ${result.children[1].width}`,
+    assert.ok(
+      Number.isFinite(result.children[1].y),
+      "child y should be finite",
     );
+  });
+
+  it("alignContent: space-around with gap places wrapped lines", () => {
+    const node: LayoutNode = {
+      style: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        alignContent: "space-around",
+        gap: 2,
+        height: 20,
+      },
+      children: [
+        { style: { width: 4, height: 3 } },
+        { style: { width: 4, height: 3 } },
+      ],
+    };
+
+    const result = computeLayout(node, 10, 24);
+
+    assert.strictEqual(result.children.length, 2);
+    assert.ok(Number.isFinite(result.children[0].y));
+    assert.ok(Number.isFinite(result.children[1].y));
   });
 });
