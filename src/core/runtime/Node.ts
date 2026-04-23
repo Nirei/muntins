@@ -120,6 +120,13 @@ export interface NodeInit extends EventHandlerProps {
  * Nodes either have children (container) or measure/render (leaf like Text).
  * Components run once; signals handle updates.
  */
+
+let styleGeneration = 0;
+
+export function bumpStyleGeneration(): void {
+  styleGeneration++;
+}
+
 export class Node implements EventHandlerProps {
   style!: FlexStyle | (() => FlexStyle);
   children?: Node[] | (() => Node[]);
@@ -127,6 +134,8 @@ export class Node implements EventHandlerProps {
   render?: RenderFunction;
 
   _inheritableProps?: InheritableProps;
+  _styleCache: FlexStyle | null = null;
+  _styleGen = -1;
 
   _parent?: Node;
 
@@ -168,9 +177,15 @@ export class Node implements EventHandlerProps {
     Object.assign(this, init);
   }
 
-  /** Resolve reactive style getter to a concrete FlexStyle. */
+  /** Resolve reactive style getter to a concrete FlexStyle. Cached per flush. */
   resolveStyle(): FlexStyle {
-    return resolve(this.style);
+    if (this._styleGen === styleGeneration && this._styleCache !== null) {
+      return this._styleCache;
+    }
+    const result = resolve(this.style);
+    this._styleCache = result;
+    this._styleGen = styleGeneration;
+    return result;
   }
 
   /** Resolve children, handling both static arrays and reactive getters. */
