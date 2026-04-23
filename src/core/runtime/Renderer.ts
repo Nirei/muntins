@@ -5,7 +5,7 @@ import type { InheritedStyle } from "../render.ts";
 import { DEFAULT_INHERITED_STYLE, flushFrame } from "../render.ts";
 import type { Accessor } from "../signals.ts";
 import { batch, createSignal } from "../signals.ts";
-import { type LayoutSignals, type Node, bumpStyleGeneration } from "./Node.ts";
+import type { LayoutSignals, Node } from "./Node.ts";
 
 type InheritedStyleAccessor = Accessor<InheritedStyle>;
 
@@ -96,7 +96,6 @@ export class Renderer {
   /** Initial layout computation and signal binding after tree construction. */
   bind(root: Node): void {
     this.buffer.clear();
-    bumpStyleGeneration();
     const layoutResult = this.computeFreshLayout(root);
     this.layoutResult = layoutResult;
     this.storeLayoutCache(layoutResult);
@@ -169,7 +168,6 @@ export class Renderer {
     }
 
     const root = this.getRoot();
-    bumpStyleGeneration();
     let layoutResult: LayoutResult;
 
     if (this.layoutCacheHit()) {
