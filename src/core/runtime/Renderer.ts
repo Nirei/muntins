@@ -19,6 +19,10 @@ interface BindableNode {
  * Owns the full render cycle: scheduling, layout computation, signal binding,
  * tree painting, and terminal flushing.
  *
+ * Layout results are cached and reused when nothing has changed between
+ * flushes. The cache is invalidated by any signal-driven scheduleFlush(),
+ * structural changes (scheduleRelayout), and terminal resize.
+ *
  * Created and owned by App. Dependencies injected via constructor.
  */
 export class Renderer {
@@ -34,6 +38,11 @@ export class Renderer {
   private timeout: ReturnType<typeof setTimeout> | null = null;
   private needsRebind = false;
 
+  private layoutDirty = true;
+  private cachedLayout: LayoutResult | null = null;
+  private cachedLayoutWidth = 0;
+  private cachedLayoutHeight = 0;
+
   constructor(
     stdout: NodeJS.WriteStream,
     fpsLimit: number,
@@ -47,6 +56,7 @@ export class Renderer {
 
   /** Schedule a throttled flush to repaint the screen. */
   scheduleFlush(): void {
+    this.layoutDirty = true;
     if (this.scheduled) return;
     this.scheduled = true;
 
@@ -65,24 +75,30 @@ export class Renderer {
   /** Schedule a relayout for when Show/For create new children. */
   scheduleRelayout(): void {
     this.needsRebind = true;
+    this.layoutDirty = true;
     this.scheduleFlush();
   }
 
-  /** Perform an immediate flush (used for initial render). */
+  /** Perform an immediate flush (used for initial render). Forces layout recomputation. */
   flush(): void {
+    this.layoutDirty = true;
+    this.doFlush();
+  }
+
+  /**
+   * Flush using cached layout if available (no forced recomputation).
+   * Useful for scenarios where the caller knows layout hasn't changed.
+   */
+  renderFrame(): void {
     this.doFlush();
   }
 
   /** Initial layout computation and signal binding after tree construction. */
   bind(root: Node): void {
     this.buffer.clear();
-    const layoutNode = root.toLayoutNode();
-    const layoutResult = computeLayout(
-      layoutNode,
-      this.stdout.columns,
-      this.stdout.rows,
-    );
+    const layoutResult = this.computeFreshLayout(root);
     this.layoutResult = layoutResult;
+    this.storeLayoutCache(layoutResult);
 
     const { clip, inherited } = this.createRootAccessors();
     this.bindNodes(root, layoutResult, inherited, clip);
@@ -91,6 +107,7 @@ export class Renderer {
   /** Handle terminal resize: resize buffer and schedule a flush. */
   handleResize(width: number, height: number): void {
     this.buffer.resize(width, height);
+    this.layoutDirty = true;
     this.scheduleFlush();
   }
 
@@ -102,6 +119,27 @@ export class Renderer {
       clearTimeout(this.timeout);
       this.timeout = null;
     }
+  }
+
+  private computeFreshLayout(root: Node): LayoutResult {
+    const layoutNode = root.toLayoutNode();
+    return computeLayout(layoutNode, this.stdout.columns, this.stdout.rows);
+  }
+
+  private storeLayoutCache(result: LayoutResult): void {
+    this.cachedLayout = result;
+    this.cachedLayoutWidth = this.stdout.columns;
+    this.cachedLayoutHeight = this.stdout.rows;
+    this.layoutDirty = false;
+  }
+
+  private layoutCacheHit(): boolean {
+    return (
+      !this.layoutDirty &&
+      this.cachedLayout !== null &&
+      this.cachedLayoutWidth === this.stdout.columns &&
+      this.cachedLayoutHeight === this.stdout.rows
+    );
   }
 
   private createRootAccessors(): {
@@ -130,21 +168,24 @@ export class Renderer {
     }
 
     const root = this.getRoot();
-    const layoutNode = root.toLayoutNode();
-    const layoutResult = computeLayout(
-      layoutNode,
-      this.stdout.columns,
-      this.stdout.rows,
-    );
-    this.layoutResult = layoutResult;
+    let layoutResult: LayoutResult;
 
-    this.updateAllLayoutSignals(root, layoutResult);
+    if (this.layoutCacheHit()) {
+      layoutResult = this.cachedLayout as LayoutResult;
+    } else {
+      layoutResult = this.computeFreshLayout(root);
+      this.storeLayoutCache(layoutResult);
 
-    if (this.needsRebind) {
-      this.needsRebind = false;
-      const { clip, inherited } = this.createRootAccessors();
-      this.bindNodes(root, layoutResult, inherited, clip, true);
+      this.updateAllLayoutSignals(root, layoutResult);
+
+      if (this.needsRebind) {
+        this.needsRebind = false;
+        const { clip, inherited } = this.createRootAccessors();
+        this.bindNodes(root, layoutResult, inherited, clip, true);
+      }
     }
+
+    this.layoutResult = layoutResult;
 
     this.buffer.clear();
 

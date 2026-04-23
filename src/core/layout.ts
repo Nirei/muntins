@@ -1211,22 +1211,6 @@ function finalizePositions(
 }
 
 /**
- * Cache for layout results keyed on LayoutNode and available dimensions.
- * Uses WeakMap so entries are garbage collected when nodes are no longer referenced.
- */
-const layoutCache = new WeakMap<LayoutNode, Map<string, LayoutResult>>();
-
-/**
- * Clears the layout cache for a specific node.
- * Useful for testing or when forcing a recomputation.
- */
-export function clearLayoutCache(node?: LayoutNode): void {
-  if (node) {
-    layoutCache.delete(node);
-  }
-}
-
-/**
  * Computes flexbox layout for a tree of nodes.
  *
  * Uses a 3-pass algorithm:
@@ -1235,9 +1219,9 @@ export function clearLayoutCache(node?: LayoutNode): void {
  * 3. Pass 3 (top-down): Resolve flex values, alignment, relative positions
  * 4. Finalize absolute screen coordinates
  *
- * Results are cached keyed on the LayoutNode and available dimensions.
- * Cache invalidation is automatic: when a node is recreated (different object
- * identity), the old cache entry is garbage collected via WeakMap.
+ * This is a pure function with no side effects. Caching is handled at the
+ * Renderer level, which has access to stable Node references and can track
+ * when layout needs recomputation.
  *
  * @param node - Root of the layout tree
  * @param availableWidth - Available width in terminal cells
@@ -1249,14 +1233,6 @@ export function computeLayout(
   availableWidth: number,
   availableHeight: number,
 ): LayoutResult {
-  // Check cache first
-  const cacheKey = `${availableWidth},${availableHeight}`;
-  let nodeCache = layoutCache.get(node);
-  const cached = nodeCache?.get(cacheKey);
-  if (cached) {
-    return cached;
-  }
-
   // 1. Build internal tree with resolved styles
   const root = buildLayoutTree(node, null);
 
@@ -1285,13 +1261,5 @@ export function computeLayout(
   finalizePositions(root, 0, 0);
 
   // 7. Convert to LayoutResult
-  const result = toLayoutResult(root);
-
-  if (!nodeCache) {
-    nodeCache = new Map();
-    layoutCache.set(node, nodeCache);
-  }
-  nodeCache.set(cacheKey, result);
-
-  return result;
+  return toLayoutResult(root);
 }

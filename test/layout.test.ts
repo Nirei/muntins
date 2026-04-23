@@ -5,7 +5,6 @@ import {
   type FlexStyle,
   type LayoutNode,
   type LayoutResult,
-  clearLayoutCache,
   computeLayout,
   distribute,
   resolveStyle,
@@ -1648,70 +1647,6 @@ describe("complete layout scenarios", () => {
     assert.strictEqual(result.children[1].height, 19); // 24 - 3 - 2
     assert.strictEqual(result.children[2].height, 2);
     assert.strictEqual(result.children[2].y, 22); // 3 + 19
-  });
-});
-
-describe("layout caching", () => {
-  it("returns cached result for same dimensions", () => {
-    const node: LayoutNode = {
-      style: {},
-      children: [{ style: { width: 10 } }],
-    };
-
-    const result1 = computeLayout(node, 80, 24);
-    const result2 = computeLayout(node, 80, 24);
-
-    // Same object reference (cached)
-    assert.strictEqual(result1, result2);
-  });
-
-  it("recomputes for different dimensions", () => {
-    const node: LayoutNode = {
-      style: {},
-      children: [{ style: { flexGrow: 1 } }],
-    };
-
-    const result1 = computeLayout(node, 80, 24);
-    const result2 = computeLayout(node, 100, 24);
-
-    assert.notStrictEqual(result1.children[0].width, result2.children[0].width);
-    assert.strictEqual(result1.children[0].width, 80);
-    assert.strictEqual(result2.children[0].width, 100);
-  });
-
-  it("new node object bypasses cache", () => {
-    const node1: LayoutNode = {
-      style: {},
-      children: [{ style: { width: 10 } }],
-    };
-    const node2: LayoutNode = {
-      style: {},
-      children: [{ style: { width: 10 } }],
-    };
-
-    const result1 = computeLayout(node1, 80, 24);
-    const result2 = computeLayout(node2, 80, 24);
-
-    // Different node objects = different cache entries
-    assert.notStrictEqual(result1, result2);
-    // But same computed values
-    assert.strictEqual(result1.children[0].width, result2.children[0].width);
-  });
-
-  it("clearLayoutCache removes cached results", () => {
-    const node: LayoutNode = {
-      style: {},
-      children: [{ style: { width: 10 } }],
-    };
-
-    const result1 = computeLayout(node, 80, 24);
-    clearLayoutCache(node);
-    const result2 = computeLayout(node, 80, 24);
-
-    // After clearing, we get a new result object
-    assert.notStrictEqual(result1, result2);
-    // But same computed values
-    assert.strictEqual(result1.children[0].width, result2.children[0].width);
   });
 });
 
