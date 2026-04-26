@@ -15,8 +15,7 @@ export type Setter<T> = (value: T | ((prev: T) => T)) => void;
  * MaybeAccessor<boolean> would become Accessor<true> | Accessor<false>
  * instead of the intended boolean | Accessor<boolean>.
  */
-// biome-ignore lint/suspicious/noExplicitAny: required for function type detection
-export type MaybeAccessor<T> = [T] extends [(...args: any[]) => any]
+export type MaybeAccessor<T> = [T] extends [(...args: unknown[]) => unknown]
   ? Accessor<T>
   : T | Accessor<T>;
 
@@ -719,6 +718,15 @@ export function onMount(fn: () => void): void {
  * Use with MaybeAccessor<T> in prop types to get compile-time safety
  * when T could be a function type.
  */
+/**
+ * Checks whether a value is a reactive accessor (getter function).
+ * Use to distinguish `Accessor<T>` from a plain `T` in `MaybeAccessor<T>` values
+ * without calling the function.
+ */
+export function isAccessor<T>(value: MaybeAccessor<T>): value is Accessor<T> {
+  return typeof value === "function";
+}
+
 export function resolve<T>(value: MaybeAccessor<T>): T;
 export function resolve<T>(value: MaybeAccessor<T> | undefined): T | undefined;
 export function resolve<T>(value: T | Accessor<T> | undefined): T | undefined {
