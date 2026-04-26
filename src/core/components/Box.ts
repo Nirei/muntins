@@ -27,7 +27,7 @@ import {
   Node,
   type Ref,
 } from "../runtime/Node.ts";
-import { resolve } from "../signals.ts";
+import { isAccessor, resolve } from "../signals.ts";
 import { Text } from "./Text.ts";
 
 /** Child element that Box can accept - Node, string, or reactive string. */
@@ -96,18 +96,27 @@ export function Box({
     return parseBorderProp(resolve(border));
   };
 
+  function computeStyle(): FlexStyle {
+    const resolved: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(styleProps)) {
+      resolved[key] = resolve(value);
+    }
+    return {
+      ...DEFAULT_FLEX_STYLE,
+      ...compact(resolved),
+      ...getBorderFlags(),
+    } as FlexStyle;
+  }
+
+  const hasReactiveStyle =
+    Object.values(styleProps).some(isAccessor) || isAccessor(border);
+
+  const style: FlexStyle | (() => FlexStyle) = hasReactiveStyle
+    ? computeStyle
+    : computeStyle();
+
   const node = new Node({
-    style: () => {
-      const resolved: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(styleProps)) {
-        resolved[key] = resolve(value);
-      }
-      return {
-        ...DEFAULT_FLEX_STYLE,
-        ...compact(resolved),
-        ...getBorderFlags(),
-      } as FlexStyle;
-    },
+    style,
     children,
     focusable,
     autoFocus,
