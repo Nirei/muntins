@@ -2,16 +2,12 @@
 
 // Signals (reactivity)
 export {
-  createSignal,
-  createEffect,
+  batch, createEffect,
   createMemo,
-  createRoot,
-  onCleanup,
-  onMount,
-  batch,
-  untrack,
+  createRoot, createSignal, onCleanup,
+  onMount, untrack,
   type Accessor,
-  type Setter,
+  type Setter
 } from "./signals.ts";
 
 // Layout
@@ -19,70 +15,49 @@ export {
   computeLayout,
   DEFAULT_FLEX_STYLE,
   type FlexStyle,
-  type ReactiveFlexStyle,
+  type ReactiveFlexStyle
 } from "./layout.ts";
 
 // Buffer (rendering)
 export {
-  Buffer,
-  type Color,
-  type InheritableColor,
-  DEFAULT_COLOR,
-  BOLD,
-  DIM,
-  ITALIC,
-  UNDERLINE,
-  STRIKETHROUGH,
-  INVERSE,
-  BLINK,
-  HIDDEN,
-  graphemes,
-  graphemeDisplayWidth,
-  displayWidth,
+  BLINK, BOLD, Buffer, DEFAULT_COLOR, DIM, displayWidth, graphemeDisplayWidth, graphemes, HIDDEN, INVERSE, ITALIC, STRIKETHROUGH, UNDERLINE, type Color,
+  type InheritableColor
 } from "./buffer.ts";
 
 // Text editing utilities
-export { textLength, textSlice, textInsert, textDelete } from "./text.ts";
+export { textDelete, textInsert, textLength, textSlice } from "./text.ts";
 
 // Input
 export {
-  type KeyEvent,
-  type MouseEvent,
-  type ScrollEvent,
-  type InputEvent,
-  type ResizeEvent,
-  type PasteEvent,
-  type FocusEvent,
   createInputParser,
   setupTerminal,
-  teardownTerminal,
+  teardownTerminal, type FocusEvent, type InputEvent, type KeyEvent,
+  type MouseEvent, type PasteEvent, type ResizeEvent, type ScrollEvent
 } from "./input.ts";
 
 // Components
-export { Box, type BoxProps, type BoxChild } from "./components/Box.ts";
-export { Text, type TextProps } from "./components/Text.ts";
+export { Box, type BoxChild, type BoxProps } from "./components/Box.ts";
+export { For, type ForProps } from "./components/For.ts";
 export { Portal, type PortalProps } from "./components/Portal.ts";
 export { Show, type ShowProps } from "./components/Show.ts";
-export { For, type ForProps } from "./components/For.ts";
+export { Text, type TextProps } from "./components/Text.ts";
 
 // Runtime - Node
-export { Node, type Ref, createRef } from "./runtime/Node.ts";
+export { createRef, Node, type Ref } from "./runtime/Node.ts";
 
 // Runtime - App / Context
 export {
-  App,
-  type MountOptions,
-  DEFAULT_MOUNT_OPTIONS,
+  App, DEFAULT_MOUNT_OPTIONS, type MountOptions
 } from "./runtime/App.ts";
 
 // Runtime - Focus
-export type { FocusController } from "./runtime/FocusManager.ts";
 export {
   FocusScopeComponent,
-  type FocusScopeProps,
+  type FocusScopeProps
 } from "./components/FocusScopeComponent.ts";
 export { TabFocus, type TabFocusProps } from "./components/TabFocus.ts";
 export { useFocus } from "./components/useFocus.ts";
+export type { FocusController } from "./runtime/FocusManager.ts";
 
 // Render (pass-through)
 export {
@@ -90,37 +65,21 @@ export {
   DEFAULT_INHERITED_STYLE,
   enterTuiMode,
   exitTuiMode,
-  flushFrame,
+  flushFrame
 } from "./render.ts";
 export type {
-  BorderStyleName,
-  BorderProp,
-  InheritedStyle,
-  InheritableBool,
-  TextStyle,
-  ReactiveTextStyle,
+  BorderProp, BorderStyleName, InheritableBool, InheritedStyle, ReactiveTextStyle, TextStyle
 } from "./render.ts";
 
 // Text utilities (pass-through)
 export {
-  measureText,
-  truncateLine,
-  segmentLine,
-  segmentText,
   layoutLine,
-  layoutLineFromSegments,
-  truncateLineFromSegments,
-  measureTextFromSegments,
-  type VisualSegment,
-  type VisualLine,
+  layoutLineFromSegments, measureText, measureTextFromSegments, segmentLine,
+  segmentText, truncateLine, truncateLineFromSegments, type VisualLine, type VisualSegment
 } from "./text.ts";
 
 // Theme (generic infrastructure — UI layer provides defaults and re-exports)
 export {
-  theme,
-  setTheme,
-  resolveTheme,
-  parseColor,
-  styleFallback,
+  parseColor, resolveTheme, setTheme, styleFallback, theme
 } from "./theme.ts";
-export type { Theme, ColorString } from "./theme.ts";
+export type { ColorString, Theme } from "./theme.ts";

@@ -1,4 +1,3 @@
-import type { FocusScope } from "../runtime/FocusManager.ts";
 import type { Node } from "../runtime/Node.ts";
 import { getContext } from "../runtime/context.ts";
 import { Box } from "./Box.ts";

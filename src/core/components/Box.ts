@@ -1,9 +1,6 @@
 import { DEFAULT_COLOR } from "../buffer.ts";
 import type {
-  ActivateEvent,
-  KeyEvent,
-  MouseEvent,
-  ScrollEvent,
+  ActivateEvent
 } from "../input.ts";
 import {
   DEFAULT_FLEX_STYLE,

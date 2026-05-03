@@ -1,7 +1,7 @@
 // Separator component - visual divider for content
 
 import { Box } from "../core/components/Box.ts";
-import type { FlexStyle, ReactiveFlexStyle } from "../core/layout.ts";
+import type { ReactiveFlexStyle } from "../core/layout.ts";
 import type { Node } from "../core/runtime/Node.ts";
 import { type MaybeAccessor, resolve } from "../core/signals.ts";
 import { styleFallback } from "../core/theme.ts";

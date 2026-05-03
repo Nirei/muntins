@@ -9,7 +9,7 @@ import { type MaybeAccessor, resolve } from "../core/signals.ts";
 import { theme } from "../core/theme.ts";
 
 /** Number of sub-cell divisions per cell for smooth progress visualization. */
-const EIGHTHS_PER_CELL = 8;
+const SUBDIVISIONS_PER_CELL = 8;
 
 /**
  * Props for the Progress component.
@@ -76,10 +76,10 @@ export function Progress(props: ProgressProps): Node {
 
     // Calculate total eighths filled
     const totalEighths = Math.round(
-      (currentValue / 100) * barWidth * EIGHTHS_PER_CELL,
+      (currentValue / 100) * barWidth * SUBDIVISIONS_PER_CELL,
     );
-    const fullCells = Math.floor(totalEighths / EIGHTHS_PER_CELL);
-    const remainder = totalEighths % EIGHTHS_PER_CELL;
+    const fullCells = Math.floor(totalEighths / SUBDIVISIONS_PER_CELL);
+    const remainder = totalEighths % SUBDIVISIONS_PER_CELL;
 
     // Build the bar string
     const full = blocks[8].repeat(fullCells);

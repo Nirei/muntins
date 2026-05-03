@@ -3,7 +3,7 @@
 import { Box } from "../core/components/Box.ts";
 import { Text } from "../core/components/Text.ts";
 import type { ActivateEvent, KeyEvent, MouseEvent } from "../core/input.ts";
-import type { FlexStyle, ReactiveFlexStyle } from "../core/layout.ts";
+import type { ReactiveFlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime/Node.ts";
 import { type MaybeAccessor, resolve } from "../core/signals.ts";
 import { styleFallback, theme } from "../core/theme.ts";
