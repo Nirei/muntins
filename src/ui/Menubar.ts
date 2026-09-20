@@ -7,7 +7,7 @@ import type { KeyEvent } from "../core/input.ts";
 import type { ReactiveFlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime/Node.ts";
 import { createSignal } from "../core/signals.ts";
-import { theme } from "../core/theme.ts";
+import { styleFallback, theme } from "../core/theme.ts";
 import { Popover } from "./Popover.ts";
 
 /**
@@ -80,17 +80,34 @@ export interface MenubarProps {
  * Default renderer for menu labels.
  */
 function defaultRenderMenuLabel(props: MenuLabelRenderProps): Node {
-  return Text({ content: props.label });
+  const [isHovered, setIsHovered] = createSignal(false);
+
+  return Text({
+    ...styleFallback(
+      undefined,
+      () => (isHovered() ? "menubar--item--hover" : ""),
+      "menubar--item",
+    ),
+    onHover: setIsHovered,
+    content: props.label,
+  });
 }
 
 /**
  * Default renderer for menu items.
  */
 function defaultRenderMenuItem(props: MenuItemRenderProps): Node {
+  const [isHovered, setIsHovered] = createSignal(false);
+
   return Box({
+    ...styleFallback(
+      undefined,
+      () => (isHovered() ? "menubar--item--hover" : ""),
+      "menubar--item",
+    ),
+    onHover: setIsHovered,
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: () => theme("menubar--item").gap as number,
     children: [
       Text({ content: props.item.label }),
       Show({
@@ -259,12 +276,11 @@ export function Menubar(props: MenubarProps): Node {
   };
 
   return Box({
-    flexDirection: "row",
+    ...styleFallback(props.style, "menubar"),
     focusable: props.focusable ?? true,
     autoFocus: props.autoFocus,
     ref: props.ref,
     onKeyPress: handleKeyPress,
-    ...props.style,
     children: props.menus.map((menu, menuIndex) =>
       Popover({
         open: () => activeMenuIndex() === menuIndex,

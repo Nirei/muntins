@@ -2,14 +2,14 @@
  * Settings Panel Example
  *
  * A real-world settings/preferences panel demonstrating form controls:
- * - Input: single-line text input (Username)
- * - Textarea: multi-line text input (Bio)
- * - RadioGroup: exclusive selection (Theme)
- * - Switch: on/off toggle (Notifications, Sound)
- * - Select: dropdown selection (Country)
  * - Button: actions (Cancel, Save)
- * - Separator: visual dividers
+ * - Input: single-line text input (Username)
  * - Label: field labels
+ * - RadioGroup: exclusive selection (Theme)
+ * - Select: dropdown selection (Country)
+ * - Separator: visual dividers
+ * - Switch: on/off toggle (Notifications, Sound)
+ * - Textarea: multi-line text input (Bio)
  *
  * Also showcases:
  * - TabFocus for keyboard navigation

@@ -54,8 +54,14 @@
   "spinner--arc": { "frames": ["◜", "◠", "◝", "◞", "◡", "◟"] },
   "toast": { "duration": 3000 },
   "drawer": { "side": "right", "size": 30 },
+  "menubar": {
+    "gap": 2,
+    "backgroundColor": "$primary",
+    "paddingStart": 1,
+    "paddingEnd": 1
+  },
+  "menubar--item--hover": { "inverse": true },
   "menubar--separator": { "content": "──────────" },
-  "menubar--item": { "gap": 2 },
   "button": {
     "backgroundColor": "$surface",
     "paddingStart": 1,
