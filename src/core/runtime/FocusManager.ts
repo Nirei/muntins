@@ -188,11 +188,36 @@ export class FocusManager {
    */
   cleanupFocus(subtreeRoot: Node): void {
     const focused = untrack(() => this.focusedNode());
-    if (focused?.isInSubtree(subtreeRoot)) {
-      this._setFocusedNode(null);
-    }
+    const heldFocus = focused?.isInSubtree(subtreeRoot) === true;
 
     this.unregisterSubtreeFocusables(subtreeRoot);
+
+    if (heldFocus) {
+      this.restoreFocusAfterDisposal(subtreeRoot);
+    }
+  }
+
+  /**
+   * Restore focus after the focused subtree was disposed: focus the nearest
+   * surviving focusable ancestor, or clear focus when none exists.
+   *
+   * Runs after unregistration so focusNode computes the ancestor's scope
+   * index against the surviving focusable list.
+   */
+  private restoreFocusAfterDisposal(subtreeRoot: Node): void {
+    let current: Node | undefined = subtreeRoot._parent;
+    while (current) {
+      if (
+        current.focusable &&
+        this.findScopeContaining(this.rootScope, current)
+      ) {
+        this.focusNode(current);
+        return;
+      }
+      current = current._parent;
+    }
+
+    this._setFocusedNode(null);
   }
 
   /**

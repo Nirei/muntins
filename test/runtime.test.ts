@@ -2103,6 +2103,119 @@ describe("focus disposal re-entrancy", () => {
   });
 });
 
+describe("focus restore on subtree disposal", () => {
+  it("restores focus to the nearest surviving focusable ancestor", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+    const [visible, setVisible] = createSignal(true);
+    const outerRef = createRef();
+    const innerRef = createRef();
+    let focusController!: FocusController;
+
+    const app = App.mount(
+      () => {
+        focusController = useFocus();
+        return Box({
+          focusable: true,
+          ref: outerRef,
+          children: [
+            Show({
+              when: visible,
+              children: () =>
+                Box({
+                  focusable: true,
+                  autoFocus: true,
+                  children: [Box({ focusable: true, ref: innerRef })],
+                }),
+            }),
+          ],
+        });
+      },
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+      },
+    );
+
+    // The autoFocus Box is focused initially; move focus to the inner node
+    assert.ok(focusController.current() !== null);
+    const inner = innerRef.current;
+    assert.ok(inner !== null);
+    app.focus.focusNode(inner);
+    assert.strictEqual(focusController.current(), inner);
+
+    // Disposing the subtree that holds focus must hand focus to the
+    // surviving outer focusable Box, not drop it to null
+    setVisible(false);
+    assert.strictEqual(focusController.current(), outerRef.current);
+
+    app.unmount();
+  });
+
+  it("keeps scope navigation working after restoring focus", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+    const [visible, setVisible] = createSignal(true);
+    const outerRef = createRef();
+    const siblingRef = createRef();
+    const keyPresses: string[] = [];
+
+    const app = App.mount(
+      () =>
+        TabFocus({
+          children: [
+            Box({
+              focusable: true,
+              ref: outerRef,
+              onKeyPress: () => {
+                keyPresses.push("outer");
+                return false;
+              },
+              children: [
+                Show({
+                  when: visible,
+                  children: () =>
+                    Box({
+                      focusable: true,
+                      autoFocus: true,
+                      onKeyPress: () => {
+                        keyPresses.push("shown");
+                        return false;
+                      },
+                    }),
+                }),
+              ],
+            }),
+            Box({
+              focusable: true,
+              ref: siblingRef,
+              onKeyPress: () => {
+                keyPresses.push("sibling");
+                return false;
+              },
+            }),
+          ],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+      },
+    );
+
+    setVisible(false);
+    assert.strictEqual(app.focus.focusedNode(), outerRef.current);
+
+    // Tab from the restored node must move to the sibling, proving the
+    // scope's focusedIndex bookkeeping matches the restored focus
+    mockStdin.emit("data", Buffer.from("\t"));
+    keyPresses.length = 0;
+    mockStdin.emit("data", Buffer.from("x"));
+    assert.deepStrictEqual(keyPresses, ["sibling"]);
+
+    app.unmount();
+  });
+});
+
 describe("stale focusableNodes cleanup", () => {
   it("removes all focusable nodes when Show hides unfocused nodes", () => {
     const mockStdin = createMockStdin();

@@ -542,6 +542,54 @@ describe("Portal dynamic focus registration", () => {
 
     app.unmount();
   });
+  it("restores focus to the portaled ancestor when nested content is disposed", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout(40, 10);
+    const [visible, setVisible] = createSignal(true);
+    const [innerVisible, setInnerVisible] = createSignal(true);
+    const portalBoxRef = createRef();
+    const innerRef = createRef();
+
+    const app = App.mount(
+      () =>
+        Box({
+          children: [
+            Show({
+              when: visible,
+              children: () =>
+                Portal({
+                  children: Box({
+                    focusable: true,
+                    ref: portalBoxRef,
+                    children: [
+                      Show({
+                        when: innerVisible,
+                        children: () => Box({ focusable: true, ref: innerRef }),
+                      }),
+                    ],
+                  }),
+                }),
+            }),
+          ],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+      },
+    );
+
+    const inner = innerRef.current;
+    assert.ok(inner !== null);
+    app.focus.focusNode(inner);
+    assert.strictEqual(app.focus.focusedNode(), inner);
+
+    // Disposing the inner Show inside portaled content must restore focus
+    // to the surviving focusable portaled Box
+    setInnerVisible(false);
+    assert.strictEqual(app.focus.focusedNode(), portalBoxRef.current);
+
+    app.unmount();
+  });
 });
 
 describe("Portal cleanup", () => {
