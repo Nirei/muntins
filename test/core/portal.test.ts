@@ -12,7 +12,12 @@ import { DEFAULT_INHERITED_STYLE } from "../../src/core/render.ts";
 import { App } from "../../src/core/runtime/App.ts";
 import type { FocusController } from "../../src/core/runtime/FocusManager.ts";
 import { type Node, createRef } from "../../src/core/runtime/Node.ts";
-import { createRoot, createSignal, onCleanup } from "../../src/core/signals.ts";
+import {
+  batch,
+  createRoot,
+  createSignal,
+  onCleanup,
+} from "../../src/core/signals.ts";
 import { createMockStdin, createMockStdout } from "../test-helpers.ts";
 
 describe("Portal", () => {
@@ -453,6 +458,86 @@ describe("Portal focus management", () => {
       portalContentRef.current?.focusable,
       true,
       "Portal content should be focusable",
+    );
+
+    app.unmount();
+  });
+});
+
+describe("Portal dynamic focus registration", () => {
+  function mountPortalInShow() {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout(40, 10);
+    const [visible, setVisible] = createSignal(false);
+    const portalContentRef = createRef();
+
+    const app = App.mount(
+      () =>
+        Box({
+          children: [
+            Show({
+              when: visible,
+              children: () =>
+                Portal({
+                  children: Box({
+                    focusable: true,
+                    ref: portalContentRef,
+                    children: [Text({ content: "portal" })],
+                  }),
+                }),
+            }),
+          ],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+      },
+    );
+
+    return { app, visible, setVisible, portalContentRef };
+  }
+
+  it("registers focusables of portal children attached after mount", () => {
+    const { app, setVisible, portalContentRef } = mountPortalInShow();
+
+    // Attach the portal after mount (root already exists)
+    setVisible(true);
+
+    const node = portalContentRef.current;
+    assert.ok(node !== null, "portal content ref should be set");
+    assert.ok(
+      app.focus.rootScope.focusableNodes.includes(node),
+      "portal child should be registered in the root scope",
+    );
+
+    // Focus must reach the portaled node (click-to-focus path)
+    app.focus.focusNode(node);
+    assert.strictEqual(app.focus.focusedNode(), node);
+
+    app.unmount();
+  });
+
+  it("unregisters portal children and clears focus when the owning Show disposes", () => {
+    const { app, setVisible, portalContentRef } = mountPortalInShow();
+
+    setVisible(true);
+    const node = portalContentRef.current;
+    assert.ok(node !== null);
+    app.focus.focusNode(node);
+    assert.strictEqual(app.focus.focusedNode(), node);
+
+    // Disposal must clean up focus state without throwing, even in a batch
+    assert.doesNotThrow(() => {
+      batch(() => setVisible(false));
+    });
+    assert.strictEqual(
+      app.focus.focusedNode(),
+      null,
+      "focus should be cleared when portaled content is disposed",
+    );
+    assert.ok(
+      !app.focus.rootScope.focusableNodes.includes(node),
+      "portal child should be unregistered",
     );
 
     app.unmount();

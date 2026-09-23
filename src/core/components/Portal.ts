@@ -37,16 +37,26 @@ export function Portal(props: PortalProps): Node {
     rootChildren.push(...children);
     for (const child of children) {
       child._parent = root;
+      // Register focusables here: Show/For walk the returned placeholder
+      // node, which has no children, so they cannot see the portaled nodes
+      app?.focus.registerSubtreeFocusables(child);
     }
     app?.scheduleRelayout();
   } else if (app) {
-    // Initial mount - queue for later attachment
+    // Initial mount - queue for later attachment. Focus registration is
+    // not needed here: App attaches these before focus.initialize(root),
+    // which collects them as part of the root subtree.
     app.pendingPortalAttachments.push(children);
   }
 
   onCleanup(() => {
     const currentRoot = app?.root;
     if (currentRoot?.children) {
+      // Clean up focus and hover state for the portaled subtree: the
+      // owning Show/For only walks the placeholder, not these children
+      for (const child of children) {
+        app?.cleanupSubtreeState(child);
+      }
       currentRoot.children = (currentRoot.children as Node[]).filter(
         (c: Node) => !children.includes(c),
       );
