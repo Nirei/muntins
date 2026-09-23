@@ -1,4 +1,9 @@
-import { type Accessor, type Setter, createSignal } from "../signals.ts";
+import {
+  type Accessor,
+  type Setter,
+  createSignal,
+  untrack,
+} from "../signals.ts";
 import type { Node, Ref } from "./Node.ts";
 
 /**
@@ -176,9 +181,13 @@ export class FocusManager {
   /**
    * Clean up focus state when a subtree is being disposed.
    * Clears focus if the focused node is in the subtree, then unregisters.
+   *
+   * The focus read is untracked on purpose: Show/For dispose subtrees inside
+   * their tracked effects, and subscribing those effects to the focus signal
+   * would make the clear below re-enter the disposing effect mid-update.
    */
   cleanupFocus(subtreeRoot: Node): void {
-    const focused = this.focusedNode();
+    const focused = untrack(() => this.focusedNode());
     if (focused?.isInSubtree(subtreeRoot)) {
       this._setFocusedNode(null);
     }

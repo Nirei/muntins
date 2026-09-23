@@ -49,6 +49,7 @@ import {
 import { Renderer } from "../src/core/runtime/Renderer.ts";
 import type { RuntimeContext } from "../src/core/runtime/context.ts";
 import {
+  batch,
   createEffect,
   createRoot,
   createSignal,
@@ -1968,6 +1969,135 @@ describe("focus cleanup on Show disposal", () => {
 
     // First should still be focused
     assert.strictEqual(focusController.current(), firstRef.current);
+
+    app.unmount();
+  });
+});
+
+describe("focus disposal re-entrancy", () => {
+  it("does not throw when Show disposes the focused node inside a batch", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+    const [visible, setVisible] = createSignal(true);
+    let focusController!: FocusController;
+
+    const app = App.mount(
+      () => {
+        focusController = useFocus();
+        return Box({
+          children: [
+            Show({
+              when: visible,
+              children: () => Box({ focusable: true, autoFocus: true }),
+            }),
+          ],
+        });
+      },
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+      },
+    );
+
+    // The autoFocus child is focused after mount
+    assert.ok(focusController.current() !== null);
+
+    // Disposing the focused child inside a batch must not throw
+    // (reading focus tracked inside the disposing effect plus writing
+    // back re-enters the effect mid-update)
+    assert.doesNotThrow(() => {
+      batch(() => setVisible(false));
+    });
+    assert.strictEqual(focusController.current(), null);
+
+    app.unmount();
+  });
+
+  it("does not throw when For removes the focused item inside a batch", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+    const [items, setItems] = createSignal(["a"]);
+    const itemRef = createRef();
+    let focusController!: FocusController;
+
+    const app = App.mount(
+      () => {
+        focusController = useFocus();
+        return For({
+          each: items,
+          render: () =>
+            Text({
+              content: "a",
+              focusable: true,
+              autoFocus: true,
+              ref: itemRef,
+            }),
+        });
+      },
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+      },
+    );
+
+    assert.strictEqual(focusController.current(), itemRef.current);
+
+    assert.doesNotThrow(() => {
+      batch(() => setItems([]));
+    });
+    assert.strictEqual(focusController.current(), null);
+
+    app.unmount();
+  });
+
+  it("focus changes do not re-run a Show effect that disposed its child", () => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+    const [visible, setVisible] = createSignal(true);
+    const shownRef = createRef();
+    let createCount = 0;
+    let focusController!: FocusController;
+
+    const app = App.mount(
+      () => {
+        focusController = useFocus();
+        return Box({
+          focusable: true,
+          children: [
+            Show({
+              when: visible,
+              children: () => {
+                createCount++;
+                return Box({ focusable: true, autoFocus: true, ref: shownRef });
+              },
+            }),
+          ],
+        });
+      },
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+      },
+    );
+
+    assert.strictEqual(createCount, 1);
+
+    // Dispose and recreate within one batched update. The disposing run
+    // must not subscribe the Show effect to the focus signal, otherwise
+    // the focus write re-enters the effect mid-update.
+    batch(() => {
+      setVisible(false);
+      setVisible(true);
+    });
+    assert.strictEqual(createCount, 2);
+
+    // Subsequent focus changes must not re-run the Show effect and
+    // recreate its subtree
+    const shown = shownRef.current;
+    assert.ok(shown !== null);
+    app.focus.focusNode(shown);
+    assert.strictEqual(createCount, 2);
+    assert.strictEqual(focusController.current(), shown);
 
     app.unmount();
   });
