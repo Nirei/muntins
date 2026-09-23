@@ -1,0 +1,1 @@
+{"version":3,"file":"TabFocus.d.ts","sourceRoot":"","sources":["../../../src/core/components/TabFocus.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,IAAI,EAAE,MAAM,oBAAoB,CAAC;AAK/C,mCAAmC;AACnC,MAAM,WAAW,aAAa;IAC5B,QAAQ,EAAE,IAAI,EAAE,CAAC;IACjB,IAAI,CAAC,EAAE,OAAO,CAAC;CAChB;AAED;;;;;GAKG;AACH,wBAAgB,QAAQ,CAAC,KAAK,EAAE,aAAa,GAAG,IAAI,CAmBnD"}

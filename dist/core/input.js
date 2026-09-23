@@ -1,0 +1,801 @@
+// Input handling and parsing
+import * as readline from "node:readline";
+// Mouse button constants
+export const MOUSE_LEFT = 0;
+const NO_MODIFIERS = { ctrl: false, alt: false, shift: false };
+export { NO_MODIFIERS };
+/**
+ * Check if a character is printable (not a control character).
+ */
+export function isPrintable(char) {
+    if (!char || char.length === 0)
+        return false;
+    const code = char.codePointAt(0);
+    if (code === undefined)
+        return false;
+    return code >= 0x20 && code !== 0x7f && !(code >= 0xd800 && code <= 0xdfff);
+}
+/**
+ * Normalize key names for consistency.
+ */
+function normalizeKeyName(name) {
+    const normalized = name.toLowerCase();
+    switch (normalized) {
+        case "return":
+            return "enter";
+        case "esc":
+            return "escape";
+        default:
+            return normalized;
+    }
+}
+/**
+ * Map readline keypress event to our KeyInput type.
+ */
+export function mapKeypressToEvent(char, key) {
+    if (!key && !char) {
+        return null;
+    }
+    const rawName = key?.name ?? char ?? "";
+    const name = normalizeKeyName(rawName);
+    const sequence = key?.sequence ?? char ?? "";
+    const printableChar = isPrintable(char) ? char : "";
+    return {
+        type: "key",
+        name,
+        char: printableChar,
+        ctrl: key?.ctrl ?? false,
+        alt: key?.meta ?? false,
+        shift: key?.shift ?? false,
+        sequence,
+    };
+}
+/**
+ * Setup keyboard input handling using Node's readline.
+ *
+ * Converts readline keypress events into our KeyInput type.
+ *
+ * @param stdin - Input stream (must have emitKeypressEvents called)
+ * @param onKey - Callback for each key input
+ * @returns Cleanup function to remove the listener
+ */
+export function setupKeyboardInput(stdin, onKey) {
+    // Enable keypress events on stdin
+    // NOTE: This is a one-way operation in Node.js, there's no way to "disable" it.
+    // The keypress events will continue until the process exits.
+    readline.emitKeypressEvents(stdin);
+    const handler = (char, key) => {
+        const event = mapKeypressToEvent(char, key);
+        if (event) {
+            onKey(event);
+        }
+    };
+    stdin.on("keypress", handler);
+    // Return cleanup function (removes our handler, but emitKeypressEvents cannot be undone)
+    return () => {
+        stdin.off("keypress", handler);
+    };
+}
+/**
+ * Enable terminal features needed for input handling.
+ *
+ * Enables raw mode and sends escape sequences for focus reporting and
+ * bracketed paste. Optionally enables mouse tracking.
+ *
+ * @throws Error if stdin is not a TTY (raw mode not supported)
+ */
+export function setupTerminal(stdin, stdout, options = {}) {
+    if (!stdin.isTTY) {
+        throw new Error("stdin is not a TTY; raw mode not supported");
+    }
+    stdin.setRawMode(true);
+    let seq = "";
+    if (options.mouse) {
+        seq += "\x1b[?1000h"; // Basic mouse press/release
+        seq += "\x1b[?1002h"; // Button-event tracking (motion while pressed)
+        seq += "\x1b[?1003h"; // Any-event tracking (hover/motion without pressing)
+        seq += "\x1b[?1006h"; // SGR extended coordinates
+    }
+    seq += "\x1b[?1004h"; // Focus reporting
+    seq += "\x1b[?2004h"; // Bracketed paste
+    stdout.write(seq);
+}
+/**
+ * Restore terminal to normal state.
+ *
+ * Disables raw mode and sends escape sequences to turn off all features
+ * enabled by setupTerminal. Safe to call multiple times.
+ */
+export function teardownTerminal(stdin, stdout) {
+    let seq = "";
+    seq += "\x1b[?2004l"; // Disable bracketed paste
+    seq += "\x1b[?1004l"; // Disable focus reporting
+    seq += "\x1b[?1006l"; // Disable mouse tracking
+    seq += "\x1b[?1003l";
+    seq += "\x1b[?1002l";
+    seq += "\x1b[?1000l";
+    stdout.write(seq);
+    if (stdin.isTTY) {
+        stdin.setRawMode(false);
+    }
+    // Allow process to exit naturally by unreferencing stdin.
+    // The unref method may not exist on mock streams in tests.
+    if (typeof stdin.unref === "function") {
+        stdin.unref();
+    }
+}
+// Parser state machine states (const object pattern for strip-types compatibility)
+const ParserState = {
+    Ground: 0,
+    Escape: 1,
+    Csi: 2,
+    SgrMouse: 3,
+    Ss3: 4, // SS3 sequences (ESC O) for function keys
+};
+// CSI sequence terminators to key names
+const CSI_KEYS = {
+    A: "up",
+    B: "down",
+    C: "right",
+    D: "left",
+    H: "home",
+    F: "end",
+    Z: "tab", // Shift+Tab
+};
+// CSI sequences with numeric parameters: ESC [ n ~
+const CSI_TILDE_KEYS = {
+    1: "home",
+    2: "insert",
+    3: "delete",
+    4: "end",
+    5: "pageup",
+    6: "pagedown",
+    7: "home",
+    8: "end",
+    11: "f1",
+    12: "f2",
+    13: "f3",
+    14: "f4",
+    15: "f5",
+    17: "f6",
+    18: "f7",
+    19: "f8",
+    20: "f9",
+    21: "f10",
+    23: "f11",
+    24: "f12",
+};
+// SS3 sequences (ESC O): function keys on some terminals
+const SS3_KEYS = {
+    P: "f1",
+    Q: "f2",
+    R: "f3",
+    S: "f4",
+    A: "up",
+    B: "down",
+    C: "right",
+    D: "left",
+    H: "home",
+    F: "end",
+};
+// Control character names
+const CTRL_NAMES = {
+    0: "space", // Ctrl+Space / Ctrl+@
+    8: "backspace", // Ctrl+H
+    9: "tab",
+    10: "enter", // Ctrl+J (line feed)
+    13: "enter", // Ctrl+M (carriage return)
+    27: "escape",
+    127: "backspace",
+};
+/**
+ * Parse SGR mouse protocol parameters into a MouseInput or ScrollInput.
+ *
+ * @param params - The "button;col;row" parameters from the SGR sequence
+ * @param isPress - true for press (M terminator), false for release (m terminator)
+ * @returns Parsed mouse or scroll input, or null if invalid
+ */
+export function parseMouseSequence(params, isPress) {
+    // Parse "button;col;row"
+    const parts = params.split(";");
+    if (parts.length !== 3)
+        return null;
+    const button = Number.parseInt(parts[0], 10);
+    const col = Number.parseInt(parts[1], 10);
+    const row = Number.parseInt(parts[2], 10);
+    if (Number.isNaN(button) || Number.isNaN(col) || Number.isNaN(row))
+        return null;
+    const shift = (button & 4) !== 0;
+    const alt = (button & 8) !== 0;
+    const ctrl = (button & 16) !== 0;
+    const isMotion = (button & 32) !== 0;
+    const baseButton = button & 3;
+    const isScroll = (button & 64) !== 0;
+    const x = col - 1;
+    const y = row - 1;
+    // Scroll: bits 0-1 encode direction (0=up, 1=down, 2=left, 3=right)
+    if (isScroll) {
+        const directions = ["up", "down", "left", "right"];
+        const direction = directions[baseButton];
+        return {
+            type: "scroll",
+            direction,
+            x,
+            y,
+            ctrl,
+            alt,
+            shift,
+        };
+    }
+    const action = isMotion
+        ? "move"
+        : isPress
+            ? "press"
+            : "release";
+    return {
+        type: "mouse",
+        action,
+        button: baseButton,
+        x,
+        y,
+        ctrl,
+        alt,
+        shift,
+    };
+}
+/**
+ * State machine parser for escape sequences (mouse and focus events).
+ *
+ * Parses SGR mouse protocol sequences and focus events from raw input.
+ * Does NOT emit key events - use UnifiedParser for that.
+ */
+export class SequenceParser {
+    state = ParserState.Ground;
+    buffer = "";
+    /**
+     * Feed input data and return any parsed inputs.
+     *
+     * @param data - Raw input string (may contain multiple sequences)
+     * @returns Array of parsed inputs (may be empty)
+     */
+    feed(data) {
+        const events = [];
+        for (const char of data) {
+            const event = this.processChar(char);
+            if (event)
+                events.push(event);
+        }
+        return events;
+    }
+    processChar(char) {
+        switch (this.state) {
+            case ParserState.Ground:
+                if (char === "\x1b") {
+                    this.state = ParserState.Escape;
+                    this.buffer = "";
+                }
+                return null;
+            case ParserState.Escape:
+                if (char === "[") {
+                    this.state = ParserState.Csi;
+                }
+                else if (char === "\x1b") {
+                    // Stay in Escape state for consecutive ESC
+                    this.state = ParserState.Escape;
+                }
+                else {
+                    this.state = ParserState.Ground;
+                }
+                return null;
+            case ParserState.Csi:
+                if (char === "<") {
+                    this.state = ParserState.SgrMouse;
+                    this.buffer = "";
+                }
+                else if (char === "I") {
+                    // Focus in: \x1b[I
+                    this.state = ParserState.Ground;
+                    return { type: "focus", focused: true };
+                }
+                else if (char === "O") {
+                    // Focus out: \x1b[O
+                    this.state = ParserState.Ground;
+                    return { type: "focus", focused: false };
+                }
+                else if (char === "\x1b") {
+                    // New escape sequence starting, don't lose it
+                    this.state = ParserState.Escape;
+                }
+                else {
+                    // Not a recognized sequence, reset
+                    this.state = ParserState.Ground;
+                }
+                return null;
+            case ParserState.SgrMouse:
+                if (char === "M" || char === "m") {
+                    const isPress = char === "M";
+                    const event = parseMouseSequence(this.buffer, isPress);
+                    this.state = ParserState.Ground;
+                    this.buffer = "";
+                    return event;
+                }
+                if ((char >= "0" && char <= "9") || char === ";") {
+                    this.buffer += char;
+                }
+                else if (char === "\x1b") {
+                    // New escape sequence starting, don't lose it
+                    this.state = ParserState.Escape;
+                    this.buffer = "";
+                }
+                else {
+                    // Invalid sequence, reset
+                    this.state = ParserState.Ground;
+                    this.buffer = "";
+                }
+                return null;
+            case ParserState.Ss3:
+                // SequenceParser doesn't handle SS3, just reset
+                this.state = ParserState.Ground;
+                return null;
+        }
+    }
+}
+/**
+ * Unified input parser that handles all input from raw data.
+ *
+ * Parses keyboard, mouse, scroll, and focus events without using
+ * readline.emitKeypressEvents. This avoids the escape code leak bug
+ * where readline emits spurious key events for mouse sequences.
+ */
+export class UnifiedParser {
+    state = ParserState.Ground;
+    buffer = "";
+    sequenceStart = "";
+    /**
+     * Check if the parser is waiting for more input to resolve an escape sequence.
+     * When true, a standalone Esc keypress may be pending.
+     */
+    get pending() {
+        return this.state !== ParserState.Ground;
+    }
+    /**
+     * Flush any pending state as a standalone Esc keypress.
+     * Call this after a timeout to resolve ambiguous Esc vs escape-sequence.
+     */
+    flushPending() {
+        if (this.state === ParserState.Escape) {
+            this.state = ParserState.Ground;
+            return this.makeKeyInput("escape", "", "\x1b", false, false, false);
+        }
+        // For other mid-sequence states, discard (incomplete/invalid sequence)
+        if (this.state !== ParserState.Ground) {
+            this.state = ParserState.Ground;
+            this.buffer = "";
+            this.sequenceStart = "";
+        }
+        return null;
+    }
+    /**
+     * Feed input data and return parsed inputs.
+     *
+     * @param data - Raw input string (may contain multiple sequences)
+     * @returns Array of parsed inputs
+     */
+    feed(data) {
+        const events = [];
+        for (const char of data) {
+            const result = this.processChar(char);
+            if (result) {
+                if (Array.isArray(result)) {
+                    events.push(...result);
+                }
+                else {
+                    events.push(result);
+                }
+            }
+        }
+        return events;
+    }
+    processChar(char) {
+        const code = char.charCodeAt(0);
+        switch (this.state) {
+            case ParserState.Ground:
+                if (char === "\x1b") {
+                    this.state = ParserState.Escape;
+                    this.sequenceStart = char;
+                    this.buffer = "";
+                    return null;
+                }
+                // Control characters
+                if (code < 32 || code === 127) {
+                    return this.makeControlKeyEvent(code, char);
+                }
+                // Printable characters
+                return this.makeKeyInput(char, char, char, false, false, false);
+            case ParserState.Escape:
+                this.sequenceStart += char;
+                if (char === "[") {
+                    this.state = ParserState.Csi;
+                    this.buffer = "";
+                    return null;
+                }
+                if (char === "O") {
+                    this.state = ParserState.Ss3;
+                    return null;
+                }
+                if (char === "\x1b") {
+                    // Double ESC - emit first ESC and stay in Escape state
+                    this.sequenceStart = char;
+                    return this.makeKeyInput("escape", "", "\x1b", false, false, false);
+                }
+                // ESC + char = Alt+char
+                this.state = ParserState.Ground;
+                {
+                    const altCode = char.charCodeAt(0);
+                    if (altCode < 32 || altCode === 127) {
+                        // Alt + control character
+                        const ctrlEvent = this.makeControlKeyEvent(altCode, char);
+                        if (ctrlEvent) {
+                            return { ...ctrlEvent, alt: true, sequence: this.sequenceStart };
+                        }
+                    }
+                    const name = char.toLowerCase();
+                    const printable = isPrintable(char) ? char : "";
+                    return this.makeKeyInput(name, printable, this.sequenceStart, false, true, char !== name);
+                }
+            case ParserState.Csi:
+                this.sequenceStart += char;
+                if (char === "<") {
+                    this.state = ParserState.SgrMouse;
+                    this.buffer = "";
+                    return null;
+                }
+                if (char === "I") {
+                    this.state = ParserState.Ground;
+                    return { type: "focus", focused: true };
+                }
+                if (char === "O") {
+                    this.state = ParserState.Ground;
+                    return { type: "focus", focused: false };
+                }
+                // Collect parameters
+                if ((char >= "0" && char <= "9") || char === ";") {
+                    this.buffer += char;
+                    return null;
+                }
+                // Terminal character
+                if (char === "~") {
+                    return this.handleCsiTilde();
+                }
+                if (CSI_KEYS[char]) {
+                    return this.handleCsiKey(char);
+                }
+                if (char === "\x1b") {
+                    // New escape sequence - emit what we have as unknown and restart
+                    this.state = ParserState.Escape;
+                    this.sequenceStart = char;
+                    this.buffer = "";
+                    return null;
+                }
+                // Unknown CSI sequence, ignore
+                this.state = ParserState.Ground;
+                return null;
+            case ParserState.SgrMouse:
+                this.sequenceStart += char;
+                if (char === "M" || char === "m") {
+                    const isPress = char === "M";
+                    const event = parseMouseSequence(this.buffer, isPress);
+                    this.state = ParserState.Ground;
+                    this.buffer = "";
+                    if (event) {
+                        event.sequence = this.sequenceStart;
+                    }
+                    return event;
+                }
+                if ((char >= "0" && char <= "9") || char === ";") {
+                    this.buffer += char;
+                    return null;
+                }
+                if (char === "\x1b") {
+                    this.state = ParserState.Escape;
+                    this.sequenceStart = char;
+                    this.buffer = "";
+                    return null;
+                }
+                // Invalid sequence
+                this.state = ParserState.Ground;
+                this.buffer = "";
+                return null;
+            case ParserState.Ss3:
+                this.sequenceStart += char;
+                this.state = ParserState.Ground;
+                if (SS3_KEYS[char]) {
+                    return this.makeKeyInput(SS3_KEYS[char], "", this.sequenceStart, false, false, false);
+                }
+                // Unknown SS3 sequence, ignore
+                return null;
+        }
+    }
+    handleCsiKey(char) {
+        const name = CSI_KEYS[char];
+        const { ctrl, alt, shift } = this.parseModifiers();
+        this.state = ParserState.Ground;
+        // Shift+Tab special case
+        const isShiftTab = char === "Z";
+        return this.makeKeyInput(name, "", this.sequenceStart, ctrl, alt, isShiftTab || shift);
+    }
+    handleCsiTilde() {
+        this.state = ParserState.Ground;
+        const parts = this.buffer.split(";");
+        const keyNum = Number.parseInt(parts[0], 10);
+        const name = CSI_TILDE_KEYS[keyNum];
+        if (!name)
+            return null;
+        const { ctrl, alt, shift } = this.parseModifiers();
+        return this.makeKeyInput(name, "", this.sequenceStart, ctrl, alt, shift);
+    }
+    parseModifiers() {
+        // Modifiers in CSI sequences: ESC [ params ; modifier char
+        // modifier = 1 + (shift ? 1 : 0) + (alt ? 2 : 0) + (ctrl ? 4 : 0)
+        const parts = this.buffer.split(";");
+        if (parts.length < 2) {
+            return { ctrl: false, alt: false, shift: false };
+        }
+        const mod = Number.parseInt(parts[parts.length - 1], 10) - 1;
+        return {
+            shift: (mod & 1) !== 0,
+            alt: (mod & 2) !== 0,
+            ctrl: (mod & 4) !== 0,
+        };
+    }
+    makeControlKeyEvent(code, char) {
+        // Named control characters
+        if (CTRL_NAMES[code] !== undefined) {
+            const name = CTRL_NAMES[code];
+            return this.makeKeyInput(name, "", char, false, false, false);
+        }
+        // Ctrl+A through Ctrl+Z (codes 1-26)
+        if (code >= 1 && code <= 26) {
+            const name = String.fromCharCode(code + 96); // 1 -> 'a', 2 -> 'b', etc.
+            return this.makeKeyInput(name, "", char, true, false, false);
+        }
+        // Other control characters - emit as-is
+        return this.makeKeyInput(char, "", char, false, false, false);
+    }
+    makeKeyInput(name, char, sequence, ctrl, alt, shift) {
+        return {
+            type: "key",
+            name,
+            char,
+            ctrl,
+            alt,
+            shift,
+            sequence,
+        };
+    }
+}
+/**
+ * Parser for bracketed paste sequences.
+ *
+ * When bracketed paste is enabled, pasted text is wrapped:
+ * - Start marker: \x1b[200~
+ * - End marker: \x1b[201~
+ *
+ * Handles split markers across chunks and preserves data before paste.
+ *
+ * NOTE: This parser trusts the terminal to comply with the bracketed paste
+ * protocol. If pasted content contains a literal end marker (\x1b[201~), the
+ * paste will terminate early. Terminals are responsible for ensuring the end
+ * marker is not present in paste content (typically by filtering or escaping).
+ */
+export class PasteParser {
+    inPaste = false;
+    pasteBuffer = "";
+    prefixBuffer = ""; // Buffer for incomplete start marker
+    suffixBuffer = ""; // Buffer for incomplete end marker
+    /**
+     * Check if the parser is holding a buffered prefix (potential start marker).
+     */
+    get pending() {
+        return this.prefixBuffer.length > 0;
+    }
+    /**
+     * Flush the buffered prefix as regular input data.
+     * Call this after a timeout when no more bytes arrive to complete the marker.
+     */
+    flushPending() {
+        const data = this.prefixBuffer;
+        this.prefixBuffer = "";
+        return data;
+    }
+    /**
+     * Feed input data and extract any paste content.
+     *
+     * @param data - Raw input string
+     * @returns Paste result with text (if complete), remaining data, and data before paste
+     */
+    feed(data) {
+        let remaining = data;
+        let beforePaste = "";
+        if (!this.inPaste) {
+            // Handle potential split start marker from previous chunk
+            if (this.prefixBuffer.length > 0) {
+                remaining = this.prefixBuffer + remaining;
+                this.prefixBuffer = "";
+            }
+            // Look for start marker
+            const startMarker = "\x1b[200~";
+            const startIdx = remaining.indexOf(startMarker);
+            if (startIdx === -1) {
+                // Check if data ends with a prefix of the start marker
+                for (let i = 1; i < startMarker.length; i++) {
+                    const suffix = remaining.slice(-i);
+                    if (startMarker.startsWith(suffix)) {
+                        this.prefixBuffer = suffix;
+                        return {
+                            text: null,
+                            remaining: remaining.slice(0, -i),
+                            beforePaste: "",
+                        };
+                    }
+                }
+                return { text: null, remaining, beforePaste: "" };
+            }
+            // Found start marker - preserve data BEFORE the paste
+            beforePaste = remaining.slice(0, startIdx);
+            this.inPaste = true;
+            this.pasteBuffer = "";
+            remaining = remaining.slice(startIdx + startMarker.length);
+        }
+        // Handle potential split end marker from previous chunk
+        if (this.suffixBuffer.length > 0) {
+            remaining = this.suffixBuffer + remaining;
+            this.suffixBuffer = "";
+        }
+        // Look for end marker
+        const endMarker = "\x1b[201~";
+        const endIdx = remaining.indexOf(endMarker);
+        if (endIdx === -1) {
+            // Check if data ends with a prefix of the end marker
+            for (let i = 1; i < endMarker.length; i++) {
+                const suffix = remaining.slice(-i);
+                if (endMarker.startsWith(suffix)) {
+                    this.suffixBuffer = suffix;
+                    this.pasteBuffer += remaining.slice(0, -i);
+                    return { text: null, remaining: "", beforePaste };
+                }
+            }
+            this.pasteBuffer += remaining;
+            return { text: null, remaining: "", beforePaste };
+        }
+        this.pasteBuffer += remaining.slice(0, endIdx);
+        const text = this.pasteBuffer;
+        this.inPaste = false;
+        this.pasteBuffer = "";
+        return {
+            text,
+            remaining: remaining.slice(endIdx + endMarker.length),
+            beforePaste,
+        };
+    }
+}
+/**
+ * Setup resize event handling.
+ *
+ * @param stdout - Output stream to monitor for resize events
+ * @param onResize - Callback for resize events
+ * @returns Cleanup function to remove the listener
+ */
+export function setupResizeHandler(stdout, onResize) {
+    const handler = () => {
+        onResize({
+            type: "resize",
+            width: stdout.columns,
+            height: stdout.rows,
+        });
+    };
+    stdout.on("resize", handler);
+    return () => {
+        stdout.off("resize", handler);
+    };
+}
+/**
+ * Create a unified input parser that handles all input types.
+ *
+ * Combines keyboard, mouse, paste, focus, and resize event parsing
+ * into a single interface. Manages terminal setup/teardown.
+ *
+ * When mouse is enabled, uses UnifiedParser to parse all input from raw data,
+ * avoiding the escape code leak bug where readline.emitKeypressEvents emits
+ * spurious key events for mouse sequences.
+ *
+ * @param stdin - Input stream
+ * @param stdout - Output stream (for resize events)
+ * @param onEvent - Callback for all input events
+ * @param options - Optional configuration (mouse tracking)
+ * @returns Object with destroy() method to cleanup
+ */
+export function createInputParser(stdin, stdout, onEvent, options = {}) {
+    const cleanups = [];
+    setupTerminal(stdin, stdout, options);
+    cleanups.push(() => teardownTerminal(stdin, stdout));
+    const pasteParser = new PasteParser();
+    const unifiedParser = new UnifiedParser();
+    let escapeTimer = null;
+    const dataHandler = (data) => {
+        // New input arrived — cancel any pending escape timeout since
+        // the parser will resolve the ambiguity with the new bytes.
+        if (escapeTimer) {
+            clearTimeout(escapeTimer);
+            escapeTimer = null;
+        }
+        let str = data.toString("utf8");
+        // Check for paste first (consumes entire paste content)
+        const pasteResult = pasteParser.feed(str);
+        if (pasteResult.beforePaste) {
+            const events = unifiedParser.feed(pasteResult.beforePaste);
+            for (const event of events) {
+                onEvent(event);
+            }
+        }
+        if (pasteResult.text !== null) {
+            onEvent({ type: "paste", text: pasteResult.text });
+        }
+        str = pasteResult.remaining;
+        if (str) {
+            const events = unifiedParser.feed(str);
+            for (const event of events) {
+                onEvent(event);
+            }
+        }
+        // If either parser is holding buffered bytes after processing, set a
+        // timeout to flush them. Real escape sequences and paste markers arrive
+        // as a single chunk from the terminal; a lone \x1b that isn't followed
+        // by more bytes within the timeout means the user pressed Esc.
+        if (pasteParser.pending || unifiedParser.pending) {
+            escapeTimer = setTimeout(() => {
+                escapeTimer = null;
+                // Flush paste parser prefix first — it may contain an \x1b that
+                // the unified parser needs to see.
+                const prefix = pasteParser.flushPending();
+                if (prefix) {
+                    const events = unifiedParser.feed(prefix);
+                    for (const event of events) {
+                        onEvent(event);
+                    }
+                }
+                // Then flush any pending escape sequence state.
+                const event = unifiedParser.flushPending();
+                if (event) {
+                    onEvent(event);
+                }
+            }, 100);
+        }
+    };
+    stdin.on("data", dataHandler);
+    cleanups.push(() => {
+        stdin.off("data", dataHandler);
+        if (escapeTimer) {
+            clearTimeout(escapeTimer);
+            escapeTimer = null;
+        }
+    });
+    const resizeCleanup = setupResizeHandler(stdout, (event) => {
+        onEvent(event);
+    });
+    cleanups.push(resizeCleanup);
+    // Create cleanup function with guard against double execution
+    let destroyed = false;
+    const cleanup = () => {
+        if (destroyed)
+            return;
+        destroyed = true;
+        for (const fn of cleanups) {
+            fn();
+        }
+    };
+    return {
+        destroy: cleanup,
+    };
+}
+//# sourceMappingURL=input.js.map

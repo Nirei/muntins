@@ -1,0 +1,1 @@
+{"version":3,"file":"Portal.d.ts","sourceRoot":"","sources":["../../../src/core/components/Portal.ts"],"names":[],"mappings":"AACA,OAAO,EAAE,IAAI,EAAE,MAAM,oBAAoB,CAAC;AAI1C,kCAAkC;AAClC,MAAM,WAAW,WAAW;IAC1B,sCAAsC;IACtC,QAAQ,EAAE,IAAI,GAAG,IAAI,EAAE,CAAC;CACzB;AAED;;;;;;;;;;GAUG;AACH,wBAAgB,MAAM,CAAC,KAAK,EAAE,WAAW,GAAG,IAAI,CA8C/C"}
