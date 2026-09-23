@@ -339,10 +339,13 @@ export function Textarea(props: TextareaProps): Node {
     return getWidth() - ps - pe - 1;
   };
 
+  // Clamp cursor to the value length. cursorPos is read untracked because
+  // this effect writes it: subscribing to the signal it writes would
+  // re-enter the effect mid-update when the value shrinks inside a batch.
   createEffect(() => {
     const val = getValue();
     const len = textLength(val);
-    if (cursorPos() > len) {
+    if (untrack(cursorPos) > len) {
       setCursorPos(len);
     }
   });

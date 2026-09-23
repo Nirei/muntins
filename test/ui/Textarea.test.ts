@@ -2155,3 +2155,61 @@ describe("Textarea", () => {
     });
   });
 });
+
+describe("Textarea controlled value reset", () => {
+  it("clearing value synchronously in a batched Enter handler does not throw", () => {
+    const [draft, setDraft] = createSignal("");
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout(40, 10);
+
+    const app = App.mount(
+      () =>
+        Box({
+          onKeyPress: (key) => {
+            if (key.name === "enter") {
+              setDraft("");
+              return true;
+            }
+            return false;
+          },
+          children: [
+            Textarea({
+              value: draft,
+              onChange: setDraft,
+              multiline: false,
+              autoFocus: true,
+              width: 10,
+            }),
+          ],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+        fpsLimit: 0,
+        scroll: false,
+      },
+    );
+
+    const send = (bytes: string) => {
+      assert.doesNotThrow(() => {
+        mockStdin.emit("data", Buffer.from(bytes));
+      });
+    };
+
+    send("a");
+    send("b");
+    assert.strictEqual(draft(), "ab");
+
+    // Enter resets the draft synchronously inside the batched key handler.
+    // The cursor-clamp effect must not re-enter itself when it clamps the
+    // cursor to the new (shorter) value length.
+    send("\r");
+    assert.strictEqual(draft(), "");
+
+    // The cursor must have been clamped back to the start
+    send("z");
+    assert.strictEqual(draft(), "z");
+
+    app.unmount();
+  });
+});
