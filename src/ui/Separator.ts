@@ -38,18 +38,21 @@ export function Separator(props: SeparatorProps): Node {
 
   const isHorizontal = () => getOrientation() === "horizontal";
 
+  // styleFallback emits an entry for every style key, so spreading it after
+  // our own props would clobber them with theme getters. Resolve through it
+  // instead: instance style > theme > component default.
+  const themeStyle = styleFallback(style, "separator");
+
   // Build props as Record so Box resolves functions at runtime
   const boxProps: Record<string, unknown> = {
     // Use a single border edge to create the line
     border: () => (isHorizontal() ? { top: true } : { left: true }),
-    // Horizontal: width is 'auto' (fills via alignSelf), fixed height of 1
-    // Vertical: fixed width of 1, height is 'auto' (fills via alignSelf)
-    // Using 'auto' instead of undefined to avoid overriding DEFAULT_FLEX_STYLE
-    width: () => (isHorizontal() ? "auto" : 1),
-    height: () => (isHorizontal() ? 1 : "auto"),
-    // Stretch to fill available space in the cross-axis
-    alignSelf: "stretch",
-    ...styleFallback(style, "separator"),
+    ...themeStyle,
+    // Horizontal: width is 'auto' (fills via stretch), fixed height of 1
+    // Vertical: fixed width of 1, height is 'auto' (fills via stretch)
+    alignSelf: () => resolve(themeStyle.alignSelf) ?? "stretch",
+    width: () => resolve(themeStyle.width) ?? (isHorizontal() ? "auto" : 1),
+    height: () => resolve(themeStyle.height) ?? (isHorizontal() ? 1 : "auto"),
   };
 
   return Box(boxProps as Parameters<typeof Box>[0]);
