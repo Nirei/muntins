@@ -334,12 +334,14 @@ export function Textarea(props: TextareaProps): Node {
     }
   });
 
-  // Horizontal scrolling for single-line mode
+  // Horizontal scrolling for single-line mode. Uses contentWidth (the
+  // visible text area after padding), not the box width: scrolling against
+  // the wider box width leaves the cursor's column past the visible area.
   createEffect(() => {
     if (isMultiline) return;
 
     const pos = cursorPos();
-    const width = getWidth();
+    const width = contentWidth();
     const val = getValue();
     const cursorDisplayPos = displayWidthToPosition(val, pos);
     const offset = untrack(scrollLeft);

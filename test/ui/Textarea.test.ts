@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { describe, it } from "node:test";
+import { beforeEach, describe, it } from "node:test";
 import { INVERSE } from "../../src/core/buffer.ts";
 import { Box } from "../../src/core/components/Box.ts";
 import { App } from "../../src/core/runtime/App.ts";
@@ -30,6 +30,12 @@ function keyEvent(
 }
 
 describe("Textarea", () => {
+  // setTheme mutates global state. Reset to the default theme before every
+  // test so no test can leak a modified theme into another.
+  beforeEach(() => {
+    setTheme(defaultThemeJson);
+  });
+
   describe("rendering", () => {
     // Default theme has paddingStart:1 on input (textarea falls back to input).
     // Text content starts at column 1 in the buffer.
@@ -710,7 +716,10 @@ describe("Textarea", () => {
       const style =
         typeof node.style === "function" ? node.style() : node.style;
       assert.strictEqual(style.width, 40);
-      setTheme({ tokens: {} });
+      // Restore the default theme: setTheme mutates global state, and leaving
+      // an empty theme here leaks into every test that runs afterward
+      // (e.g. cursor tests that depend on default input padding).
+      setTheme(defaultThemeJson);
     });
   });
 
@@ -728,12 +737,14 @@ describe("Textarea", () => {
         },
       );
       const buf = app.renderer.buffer;
+      // Default theme gives input-style paddingStart: 1
+      const p = 1;
       // Line 1
-      assert.strictEqual(buf.getSymbol(0, 0), "H");
+      assert.strictEqual(buf.getSymbol(p, 0), "H");
       // Line 2
-      assert.strictEqual(buf.getSymbol(0, 1), "W");
+      assert.strictEqual(buf.getSymbol(p, 1), "W");
       // Line 3 should be empty
-      assert.notStrictEqual(buf.getSymbol(0, 2), "H");
+      assert.notStrictEqual(buf.getSymbol(p, 2), "H");
       app.unmount();
     });
 
@@ -827,18 +838,13 @@ describe("Textarea", () => {
       const outputContains = (s: string) =>
         stripAnsi(mockStdout.written).includes(s);
 
-      // Helper to send key via stdin (triggers full event cycle)
-      // When mouse is enabled, runtime uses 'data' events; otherwise uses 'keypress'
+      // Helper to send key via stdin (triggers full event cycle).
+      // Always uses "data" events: the runtime's input parser listens on
+      // "data" regardless of mouse mode (the legacy "keypress" path was
+      // removed), so keypress-style emission silently did nothing.
       const sendKey = async (name: string) => {
-        if (mouseEnabled) {
-          const seq = KEY_SEQUENCES[name] ?? name;
-          mockStdin.emit("data", Buffer.from(seq));
-        } else {
-          mockStdin.emit("keypress", name.length === 1 ? name : undefined, {
-            name,
-            sequence: name,
-          });
-        }
+        const seq = KEY_SEQUENCES[name] ?? name;
+        mockStdin.emit("data", Buffer.from(seq));
         await flushMicrotasks();
       };
 
@@ -1573,8 +1579,8 @@ describe("Textarea", () => {
         },
       );
       await nextRender();
-      // Click at column 3 on row 0, then type X
-      mockStdin.emit("data", Buffer.from(sgrClick(3, 0)));
+      // Click at column 3 on row 0, then type X. +1 for paddingStart.
+      mockStdin.emit("data", Buffer.from(sgrClick(4, 0)));
       await nextRender();
       mockStdin.emit("data", Buffer.from("X"));
       await nextRender();
@@ -1609,7 +1615,7 @@ describe("Textarea", () => {
         },
       );
       await nextRender();
-      mockStdin.emit("data", Buffer.from(sgrClick(2, 1)));
+      mockStdin.emit("data", Buffer.from(sgrClick(3, 1)));
       await nextRender();
       mockStdin.emit("data", Buffer.from("X"));
       await nextRender();
@@ -1679,7 +1685,7 @@ describe("Textarea", () => {
         },
       );
       await nextRender();
-      mockStdin.emit("data", Buffer.from(sgrClick(2, 3)));
+      mockStdin.emit("data", Buffer.from(sgrClick(3, 3)));
       await nextRender();
       mockStdin.emit("data", Buffer.from("X"));
       await nextRender();
@@ -2229,6 +2235,10 @@ describe("Textarea", () => {
 });
 
 describe("Textarea controlled value reset", () => {
+  beforeEach(() => {
+    setTheme(defaultThemeJson);
+  });
+
   it("clearing value synchronously in a batched Enter handler does not throw", () => {
     const [draft, setDraft] = createSignal("");
     const mockStdin = createMockStdin();
