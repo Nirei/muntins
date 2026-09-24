@@ -1,3 +1,4 @@
+import { type InheritableColor } from "./buffer.ts";
 /**
  * Get the length of a string in grapheme clusters.
  *
@@ -76,7 +77,7 @@ export declare function textDelete(text: string, start: number, end: number): st
  */
 export declare function displayWidthToPosition(text: string, pos: number): number;
 /** Text wrap mode for layout. */
-export type WrapMode = "wrap" | "truncate" | "truncate-end" | "truncate-start";
+export type WrapMode = "wrap" | "word" | "none" | "truncate" | "truncate-end" | "truncate-start";
 /**
  * A single grapheme cluster with its precomputed display width.
  *
@@ -94,6 +95,37 @@ export interface VisualSegment {
  * grapheme segments — eliminating the need for downstream consumers to
  * re-segment the string.
  */
+export interface VisualLine {
+    text: string;
+    displayWidth: number;
+    segments: readonly VisualSegment[];
+}
+/**
+ * A styled run of text. Spans are laid out as one continuous flow;
+ * `"\n"` inside a span is a hard line break. Any omitted style
+ * property is inherited from the containing node and ancestors.
+ */
+export interface StyledSpan {
+    text: string;
+    color?: InheritableColor;
+    backgroundColor?: InheritableColor;
+    bold?: boolean;
+    dim?: boolean;
+    italic?: boolean;
+    underline?: boolean;
+    strikethrough?: boolean;
+    inverse?: boolean;
+}
+/** A grapheme segment carrying the index of the span it came from. */
+export interface StyledSegment extends VisualSegment {
+    spanIndex: number;
+}
+/** A visual line of styled segments. */
+export interface StyledVisualLine {
+    text: string;
+    displayWidth: number;
+    segments: readonly StyledSegment[];
+}
 export interface VisualLine {
     text: string;
     displayWidth: number;
@@ -121,6 +153,17 @@ export declare function segmentText(text: string): {
  */
 export declare function layoutLineFromSegments(segments: VisualSegment[], maxWidth: number): VisualLine[];
 /**
+ * Wrap pre-segmented text at word boundaries (greedy algorithm).
+ *
+ * Break opportunities exist before a non-space segment that follows a space,
+ * and between wide graphemes (CJK/emoji — terminals allow breaking between
+ * them since they carry no intra-word semantics). A word longer than the
+ * line falls back to grapheme-boundary breaks. Spaces at a break point are
+ * not rendered (trimmed from the end of the wrapped line, skipped at the
+ * start of the next). The final line keeps its trailing content as-is.
+ */
+export declare function layoutWordWrapFromSegments(segments: VisualSegment[], maxWidth: number): VisualLine[];
+/**
  * Truncate pre-segmented lines to fit maxWidth. Skips the segmentation step
  * entirely — used when segments were already computed during measure.
  */
@@ -143,12 +186,39 @@ export declare function measureTextFromSegments(segmentedLines: VisualSegment[][
  */
 export declare function layoutLine(line: string, maxWidth: number): VisualLine[];
 /**
+ * Lays out a single line of text, wrapping at word boundaries.
+ *
+ * String-level counterpart of `layoutWordWrapFromSegments` — see that
+ * function for the wrapping algorithm.
+ */
+export declare function layoutWords(line: string, maxWidth: number): VisualLine[];
+/** Wrap modes usable for styled-span layout. */
+export type SpanWrapMode = "wrap" | "word" | "none";
+/**
+ * Lay out a sequence of styled spans into visual lines.
+ *
+ * Spans form one continuous text flow: wrapping may split a span and
+ * break at boundaries between spans. `"\n"` inside span text is a hard
+ * break. Segment-level span indices are preserved so rendering can
+ * resolve styles per span.
+ */
+export declare function layoutStyledSpans(spans: readonly StyledSpan[], maxWidth: number, wrapMode: SpanWrapMode): StyledVisualLine[];
+/**
+ * Measure styled spans for layout. Mirrors `measureTextFromSegments`
+ * semantics per wrap mode ("none" returns the full intrinsic width).
+ */
+export declare function measureStyledSpans(spans: readonly StyledSpan[], availableWidth: number, wrapMode: SpanWrapMode): {
+    width: number;
+    height: number;
+};
+/**
  * Measures text for layout purposes.
  * Returns the width and height needed to display the text.
  *
  * @param text - The text to measure
  * @param availableWidth - Available width for wrapping
- * @param wrap - Wrapping mode: "wrap" for line wrapping, or truncate modes for single line
+ * @param wrap - Wrapping mode: "wrap" for grapheme wrapping, "word" for word
+ *   wrapping, "none" for full intrinsic width, or truncate modes for single line
  */
 export declare function measureText(text: string, availableWidth: number, wrap: WrapMode): {
     width: number;

@@ -8,6 +8,7 @@ export { For, type ForProps } from "./components/For.ts";
 export { Portal, type PortalProps } from "./components/Portal.ts";
 export { Show, type ShowProps } from "./components/Show.ts";
 export { Text, type TextProps } from "./components/Text.ts";
+export { RichText, type RichTextProps, } from "./components/RichText.ts";
 export { createRef, Node, type Ref } from "./runtime/Node.ts";
 export { App, DEFAULT_MOUNT_OPTIONS, type MountOptions, } from "./runtime/App.ts";
 export { FocusScopeComponent, type FocusScopeProps, } from "./components/FocusScopeComponent.ts";
@@ -16,7 +17,8 @@ export { useFocus } from "./components/useFocus.ts";
 export type { FocusController } from "./runtime/FocusManager.ts";
 export { BORDER_CHARS, DEFAULT_INHERITED_STYLE, enterTuiMode, exitTuiMode, flushFrame, } from "./render.ts";
 export type { BorderProp, BorderStyleName, InheritableBool, InheritedStyle, ReactiveTextStyle, TextStyle, } from "./render.ts";
-export { layoutLine, layoutLineFromSegments, measureText, measureTextFromSegments, segmentLine, segmentText, truncateLine, truncateLineFromSegments, type VisualLine, type VisualSegment, } from "./text.ts";
+export { renderStyledText } from "./render.ts";
+export { layoutLine, layoutLineFromSegments, layoutWordWrapFromSegments, layoutWords, measureText, measureTextFromSegments, segmentLine, segmentText, truncateLine, truncateLineFromSegments, type SpanWrapMode, type StyledSegment, type StyledSpan, type StyledVisualLine, type VisualLine, type VisualSegment, type WrapMode, } from "./text.ts";
 export { parseColor, resolveTheme, setTheme, styleFallback, theme, } from "./theme.ts";
 export type { ColorString, Theme } from "./theme.ts";
 //# sourceMappingURL=index.d.ts.map

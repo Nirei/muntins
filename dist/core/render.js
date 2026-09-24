@@ -216,6 +216,69 @@ export function renderText(buffer, rect, displayLines, props, inherited, clip) {
     }
 }
 /**
+ * Renders pre-laid-out styled visual lines into the buffer.
+ *
+ * Like `renderText()`, but resolves style per segment through its span:
+ * span value > node-level prop > inherited style. Fills the entire area
+ * with the node-level resolved background first to clear stale content.
+ */
+export function renderStyledText(buffer, rect, displayLines, spans, props, inherited, clip) {
+    if (!rectOverlaps(rect, clip))
+        return;
+    const { screenX: x, screenY: y, height } = rect;
+    const baseFg = resolveInheritable(props.color, inherited.color);
+    const baseBg = resolveInheritable(props.backgroundColor, inherited.backgroundColor);
+    const baseMods = computeModifiers(props, inherited);
+    fillClippedRect(buffer, rect, clip, baseFg, baseBg, baseMods);
+    for (let row = 0; row < Math.min(displayLines.length, height); row++) {
+        const screenRow = y + row;
+        if (screenRow < clip.y || screenRow >= clip.y + clip.height)
+            continue;
+        const visualLine = displayLines[row];
+        let col = x;
+        for (const seg of visualLine.segments) {
+            const span = spans[seg.spanIndex];
+            const fg = span?.color !== undefined
+                ? resolveInheritable(span.color, inherited.color)
+                : baseFg;
+            const bg = span?.backgroundColor !== undefined
+                ? resolveInheritable(span.backgroundColor, inherited.backgroundColor)
+                : baseBg;
+            const mods = span
+                ? computeSpanModifiers(span, props, inherited)
+                : baseMods;
+            if (col >= clip.x &&
+                col + seg.displayWidth <= clip.x + clip.width &&
+                col < clip.x + clip.width) {
+                buffer.set(col, screenRow, seg.grapheme, fg, bg, mods);
+            }
+            col += seg.displayWidth;
+            if (col >= clip.x + clip.width)
+                break;
+        }
+    }
+}
+/** Modifier bitmask for a segment: span override > node prop > inherited. */
+function computeSpanModifiers(span, props, inherited) {
+    const pick = (spanValue, propName, inheritedName) => spanValue !== undefined
+        ? spanValue
+        : resolveInheritable(props[propName], inherited[inheritedName]);
+    let mods = 0;
+    if (pick(span.bold, "bold", "bold"))
+        mods |= BOLD;
+    if (pick(span.dim, "dim", "dim"))
+        mods |= DIM;
+    if (pick(span.italic, "italic", "italic"))
+        mods |= ITALIC;
+    if (pick(span.underline, "underline", "underline"))
+        mods |= UNDERLINE;
+    if (pick(span.strikethrough, "strikethrough", "strikethrough"))
+        mods |= STRIKETHROUGH;
+    if (pick(span.inverse, "inverse", "inverse"))
+        mods |= INVERSE;
+    return mods;
+}
+/**
  * Enter TUI mode (display setup).
  *
  * Optionally enters alternate screen buffer, hides cursor, clears screen,

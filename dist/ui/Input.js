@@ -45,6 +45,7 @@ export function Input(props) {
         autoFocus: props.autoFocus,
         ref: props.ref,
         style: props.style,
+        onKeyPress: props.onKeyPress,
         multiline: false,
     });
 }

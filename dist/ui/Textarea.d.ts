@@ -1,3 +1,4 @@
+import { type KeyEvent } from "../core/input.ts";
 import { type ReactiveFlexStyle } from "../core/layout.ts";
 import { Node, type Ref } from "../core/runtime/Node.ts";
 import { type MaybeAccessor } from "../core/signals.ts";
@@ -23,6 +24,14 @@ export interface TextareaProps {
      * Up/Down arrows do nothing. Default: true
      */
     multiline?: boolean;
+    /**
+     * Intercept key events before built-in editing behavior. Return `true` to
+     * consume the key (built-in handling is skipped and the event does not
+     * propagate further); return `undefined` or `false` to let Textarea handle
+     * it normally. Use this to remap keys, e.g. Enter submits and Shift+Enter
+     * inserts a line break.
+     */
+    onKeyPress?: (key: KeyEvent) => boolean | undefined;
     /** Disable the textarea */
     disabled?: MaybeAccessor<boolean>;
     /** Focus control */

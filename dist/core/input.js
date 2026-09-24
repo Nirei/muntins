@@ -410,7 +410,12 @@ export class UnifiedParser {
                 if (code < 32 || code === 127) {
                     return this.makeControlKeyEvent(code, char);
                 }
-                // Printable characters
+                // Printable characters. A literal space is named "space" to match
+                // the readline convention the rest of the library keys off
+                // (Button, Switch, Select, Menubar all check name === "space").
+                if (char === " ") {
+                    return this.makeKeyInput("space", " ", char, false, false, false);
+                }
                 return this.makeKeyInput(char, char, char, false, false, false);
             case ParserState.Escape:
                 this.sequenceStart += char;

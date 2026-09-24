@@ -15,6 +15,7 @@ export { For } from "./components/For.js";
 export { Portal } from "./components/Portal.js";
 export { Show } from "./components/Show.js";
 export { Text } from "./components/Text.js";
+export { RichText, } from "./components/RichText.js";
 // Runtime - Node
 export { createRef, Node } from "./runtime/Node.js";
 // Runtime - App / Context
@@ -25,8 +26,9 @@ export { TabFocus } from "./components/TabFocus.js";
 export { useFocus } from "./components/useFocus.js";
 // Render (pass-through)
 export { BORDER_CHARS, DEFAULT_INHERITED_STYLE, enterTuiMode, exitTuiMode, flushFrame, } from "./render.js";
+export { renderStyledText } from "./render.js";
 // Text utilities (pass-through)
-export { layoutLine, layoutLineFromSegments, measureText, measureTextFromSegments, segmentLine, segmentText, truncateLine, truncateLineFromSegments, } from "./text.js";
+export { layoutLine, layoutLineFromSegments, layoutWordWrapFromSegments, layoutWords, measureText, measureTextFromSegments, segmentLine, segmentText, truncateLine, truncateLineFromSegments, } from "./text.js";
 // Theme (generic infrastructure — UI layer provides defaults and re-exports)
 export { parseColor, resolveTheme, setTheme, styleFallback, theme, } from "./theme.js";
 //# sourceMappingURL=index.js.map

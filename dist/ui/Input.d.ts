@@ -1,3 +1,4 @@
+import type { KeyEvent } from "../core/input.ts";
 import type { ReactiveFlexStyle } from "../core/layout.ts";
 import type { Node, Ref } from "../core/runtime/Node.ts";
 import type { MaybeAccessor } from "../core/signals.ts";
@@ -13,6 +14,11 @@ export interface InputProps {
     placeholder?: string | (() => string);
     /** Input width in characters. Default from theme. */
     width?: number | (() => number);
+    /**
+     * Intercept key events before built-in editing behavior. Return `true` to
+     * consume the key. Passed through to the underlying Textarea.
+     */
+    onKeyPress?: (key: KeyEvent) => boolean | undefined;
     /** Disable the input */
     disabled?: MaybeAccessor<boolean>;
     /** Focus control */

@@ -10,34 +10,6 @@ import { getActiveContext } from "../core/runtime/context.js";
 import { createEffect, createSignal, resolve, untrack, } from "../core/signals.js";
 import { layoutLine as computeLayoutLine, displayWidthToPosition, textLength, } from "../core/text.js";
 import { styleFallback, theme } from "../core/theme.js";
-/**
- * Convert linear cursor position to line/column.
- */
-function posToLineCol(text, pos) {
-    const lines = text.split("\n");
-    let remaining = pos;
-    for (let line = 0; line < lines.length; line++) {
-        const lineLen = textLength(lines[line]);
-        if (remaining <= lineLen) {
-            return { line, column: remaining };
-        }
-        remaining -= lineLen + 1; // +1 for newline
-    }
-    const lastLine = lines.length - 1;
-    return { line: lastLine, column: textLength(lines[lastLine]) };
-}
-/**
- * Convert line/column to linear cursor position.
- */
-function lineColToPos(text, cursor) {
-    const lines = text.split("\n");
-    let pos = 0;
-    for (let i = 0; i < cursor.line && i < lines.length; i++) {
-        pos += textLength(lines[i]) + 1; // +1 for newline
-    }
-    const currentLine = lines[cursor.line] ?? "";
-    return pos + Math.min(cursor.column, textLength(currentLine));
-}
 function getVisualLines(text, width) {
     if (width <= 0) {
         const gc = textLength(text);
@@ -246,12 +218,14 @@ export function Textarea(props) {
             setScrollTop(cursorRow - maxHeight + 1);
         }
     });
-    // Horizontal scrolling for single-line mode
+    // Horizontal scrolling for single-line mode. Uses contentWidth (the
+    // visible text area after padding), not the box width: scrolling against
+    // the wider box width leaves the cursor's column past the visible area.
     createEffect(() => {
         if (isMultiline)
             return;
         const pos = cursorPos();
-        const width = getWidth();
+        const width = contentWidth();
         const val = getValue();
         const cursorDisplayPos = displayWidthToPosition(val, pos);
         const offset = untrack(scrollLeft);
@@ -280,6 +254,8 @@ export function Textarea(props) {
     const handleKeyPress = (key) => {
         if (isDisabled())
             return false;
+        if (props.onKeyPress?.(key) === true)
+            return true;
         const val = getValue();
         const pos = cursorPos();
         const len = textLength(val);

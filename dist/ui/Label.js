@@ -1,6 +1,6 @@
 // Label component - text label for form elements
 import { Text } from "../core/components/Text.js";
-import { useFocus } from "../core/components/useFocus.js";
+import { getActiveContext } from "../core/runtime/context.js";
 import { styleFallback } from "../core/theme.js";
 /**
  * A text label for form elements, optionally associated with a focusable target.
@@ -26,11 +26,14 @@ import { styleFallback } from "../core/theme.js";
  */
 export function Label(props) {
     const { children, for: forRef, style } = props;
-    // Get focus controller to handle for association
-    // Only available within mount context - outside context, for won't work but label still renders
-    const focus = useFocus();
+    // Focus controller for the for association. Only available within a
+    // mount context - outside one, for is inert but the label still renders.
+    const activeContext = getActiveContext();
+    const focus = activeContext === null
+        ? null
+        : activeContext.app.focus.createController(activeContext.currentScope);
     // Sync with for focused
-    const isFocused = () => focus.current() === forRef?.current;
+    const isFocused = () => focus !== null && focus.current() === forRef?.current;
     const handleMousePress = forRef
         ? (_event) => {
             focus?.set(forRef);

@@ -4,6 +4,12 @@ export { theme, setTheme, styleFallback } from "../core/theme.js";
 export { Label } from "./Label.js";
 export { Button } from "./Button.js";
 export { Separator, } from "./Separator.js";
+export { Heading } from "./Heading.js";
+export { Blockquote } from "./Blockquote.js";
+export { CodeBlock } from "./CodeBlock.js";
+export { List, ListItem, } from "./List.js";
+export { Table, computeColumnWidths, } from "./Table.js";
+export { Markdown } from "./Markdown.js";
 // Form controls
 export { Switch } from "./Switch.js";
 export { RadioGroup, } from "./Radiogroup.js";

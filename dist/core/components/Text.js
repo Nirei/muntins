@@ -3,7 +3,7 @@ import { renderText } from "../render.js";
 import { Node } from "../runtime/Node.js";
 import { getActiveContext } from "../runtime/context.js";
 import { createEffect, resolve } from "../signals.js";
-import { layoutLineFromSegments, measureTextFromSegments, segmentText, truncateLineFromSegments, } from "../text.js";
+import { layoutLineFromSegments, layoutWordWrapFromSegments, measureTextFromSegments, segmentText, truncateLineFromSegments, } from "../text.js";
 /**
  * Creates a Text node - a leaf node that displays text content.
  *
@@ -65,7 +65,15 @@ export function Text(props) {
                 ? cached.lines
                 : wrapMode === "wrap"
                     ? segmentedLines.flatMap((line) => layoutLineFromSegments(line, bounds.width))
-                    : segmentedLines.map((line) => truncateLineFromSegments(line, bounds.width, wrapMode));
+                    : wrapMode === "word"
+                        ? segmentedLines.flatMap((line) => layoutWordWrapFromSegments(line, bounds.width))
+                        : wrapMode === "none"
+                            ? segmentedLines.map((line) => ({
+                                text: line.map((s) => s.grapheme).join(""),
+                                displayWidth: line.reduce((sum, s) => sum + s.displayWidth, 0),
+                                segments: line,
+                            }))
+                            : segmentedLines.map((line) => truncateLineFromSegments(line, bounds.width, wrapMode));
             displayLinesCache = {
                 sourceText: text,
                 width: bounds.width,

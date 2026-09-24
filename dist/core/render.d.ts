@@ -1,6 +1,6 @@
 import { type Buffer, type Color, type InheritableColor } from "./buffer.ts";
 import { type Rect, type ScreenRect } from "./rects.ts";
-import type { VisualLine, WrapMode } from "./text.ts";
+import type { StyledSpan, StyledVisualLine, VisualLine, WrapMode } from "./text.ts";
 /**
  * Inherited style values passed down through the node tree during paint.
  * All properties are resolved (no "inherit" values).
@@ -124,6 +124,14 @@ export declare function fillClippedRect(buffer: Buffer, rect: ScreenRect, clip: 
  * (wrapping/truncation) must be done before calling this.
  */
 export declare function renderText(buffer: Buffer, rect: ScreenRect, displayLines: readonly VisualLine[], props: TextRenderProps, inherited: InheritedStyle, clip: Rect): void;
+/**
+ * Renders pre-laid-out styled visual lines into the buffer.
+ *
+ * Like `renderText()`, but resolves style per segment through its span:
+ * span value > node-level prop > inherited style. Fills the entire area
+ * with the node-level resolved background first to clear stale content.
+ */
+export declare function renderStyledText(buffer: Buffer, rect: ScreenRect, displayLines: readonly StyledVisualLine[], spans: readonly StyledSpan[], props: TextRenderProps, inherited: InheritedStyle, clip: Rect): void;
 /**
  * Enter TUI mode (display setup).
  *
