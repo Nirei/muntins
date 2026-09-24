@@ -10,6 +10,26 @@ export {
   type SeparatorProps,
   type SeparatorOrientation,
 } from "./Separator.ts";
+export { Heading, type HeadingProps } from "./Heading.ts";
+export { Blockquote, type BlockquoteProps } from "./Blockquote.ts";
+export { CodeBlock, type CodeBlockProps } from "./CodeBlock.ts";
+export {
+  List,
+  ListItem,
+  type ListProps,
+  type ListItemProps,
+  type ListItemTask,
+} from "./List.ts";
+export {
+  Table,
+  computeColumnWidths,
+  type CellMatrix,
+  type ColumnAlign,
+  type TableColumn,
+  type TableCell,
+  type TableProps,
+} from "./Table.ts";
+export { Markdown, type MarkdownProps } from "./Markdown.ts";
 
 // Form controls
 export { Switch, type SwitchProps } from "./Switch.ts";

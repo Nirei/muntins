@@ -98,7 +98,7 @@ if (key.name === 'delete' && cursorPos < textLength(value)) {
 JavaScript strings are indexed by UTF-16 code units. Many characters span multiple code units:
 
 | Character | `string.length` | `textLength` |
-|-----------|-----------------|--------------|
+| ----------- | ----------------- | -------------- |
 | `"a"` | 1 | 1 |
 | `"é"` (precomposed) | 1 | 1 |
 | `"e\u0301"` (e + combining acute) | 2 | 1 |
@@ -107,3 +107,42 @@ JavaScript strings are indexed by UTF-16 code units. Many characters span multip
 | `"👨‍👩‍👧"` (family) | 8 | 1 |
 
 Using string indices for cursor movement would let users land in the middle of a character. The text utilities ensure you always work with complete graphemes.
+
+## Wrap modes
+
+`WrapMode` controls how `Text` (and other text-bearing components) fit content into the available width:
+
+| Mode | Behavior |
+| ------ | ---------- |
+| `"wrap"` | Greedy wrapping at grapheme boundaries (default for `Text`) |
+| `"word"` | Greedy wrapping at word boundaries; long words fall back to grapheme breaks; breaks are allowed between wide graphemes (CJK/emoji) |
+| `"none"` | No wrapping, no truncation; measurement returns the full intrinsic width — callers clip via `overflow: hidden` |
+| `"truncate"` / `"truncate-end"` | Single line, truncated at the end with an ellipsis |
+| `"truncate-start"` | Single line, truncated at the start with an ellipsis |
+
+```typescript
+import { Text } from 'muntins';
+
+Text({ content: "hello bold world", wrap: "word" });
+```
+
+At a `"word"` break point the trailing space is not rendered, and spaces are skipped at the start of the continuation line.
+
+## Styled spans and RichText
+
+A `StyledSpan` is a run of text with optional style properties. Any omitted property is inherited (span value → node prop → inherited style). `"\\n"` inside span text is a hard line break.
+
+```typescript
+import { RichText, type StyledSpan } from 'muntins';
+
+const spans: StyledSpan[] = [
+  { text: "normal " },
+  { text: "bold", bold: true },
+  { text: " and " },
+  { text: "struck", strikethrough: true },
+];
+
+RichText({ spans }); // word-wraps by default
+```
+
+`RichText` is a leaf text primitive like `Text`, but with per-span styling. `Text` keeps its fast single-style path — prefer it when a whole run shares one style. Layout helpers `layoutStyledSpans` / `measureStyledSpans` and the low-level `renderStyledText` are exported for custom leaf nodes that need styled runs.

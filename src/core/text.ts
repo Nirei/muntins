@@ -5,6 +5,7 @@
 // of emoji, combining marks, and other multi-code-point characters.
 
 import {
+  type InheritableColor,
   graphemeCount,
   graphemeDisplayWidth,
   graphemeSlice,
@@ -111,7 +112,13 @@ export function displayWidthToPosition(text: string, pos: number): number {
 }
 
 /** Text wrap mode for layout. */
-export type WrapMode = "wrap" | "truncate" | "truncate-end" | "truncate-start";
+export type WrapMode =
+  | "wrap"
+  | "word"
+  | "none"
+  | "truncate"
+  | "truncate-end"
+  | "truncate-start";
 
 /**
  * A single grapheme cluster with its precomputed display width.
@@ -131,6 +138,40 @@ export interface VisualSegment {
  * grapheme segments — eliminating the need for downstream consumers to
  * re-segment the string.
  */
+export interface VisualLine {
+  text: string;
+  displayWidth: number;
+  segments: readonly VisualSegment[];
+}
+
+/**
+ * A styled run of text. Spans are laid out as one continuous flow;
+ * `"\n"` inside a span is a hard line break. Any omitted style
+ * property is inherited from the containing node and ancestors.
+ */
+export interface StyledSpan {
+  text: string;
+  color?: InheritableColor;
+  backgroundColor?: InheritableColor;
+  bold?: boolean;
+  dim?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strikethrough?: boolean;
+  inverse?: boolean;
+}
+
+/** A grapheme segment carrying the index of the span it came from. */
+export interface StyledSegment extends VisualSegment {
+  spanIndex: number;
+}
+
+/** A visual line of styled segments. */
+export interface StyledVisualLine {
+  text: string;
+  displayWidth: number;
+  segments: readonly StyledSegment[];
+}
 export interface VisualLine {
   text: string;
   displayWidth: number;
@@ -215,6 +256,94 @@ export function layoutLineFromSegments(
     : [{ text: "", displayWidth: 0, segments: [] }];
 }
 
+function isSpaceSegment(seg: VisualSegment): boolean {
+  return seg.grapheme === " ";
+}
+
+function isWideSegment(seg: VisualSegment): boolean {
+  return seg.displayWidth >= 2;
+}
+
+/**
+ * Wrap pre-segmented text at word boundaries (greedy algorithm).
+ *
+ * Break opportunities exist before a non-space segment that follows a space,
+ * and between wide graphemes (CJK/emoji — terminals allow breaking between
+ * them since they carry no intra-word semantics). A word longer than the
+ * line falls back to grapheme-boundary breaks. Spaces at a break point are
+ * not rendered (trimmed from the end of the wrapped line, skipped at the
+ * start of the next). The final line keeps its trailing content as-is.
+ */
+export function layoutWordWrapFromSegments(
+  segments: VisualSegment[],
+  maxWidth: number,
+): VisualLine[] {
+  if (maxWidth <= 0 || segments.length === 0) {
+    return segments.length > 0
+      ? [segmentsToVisualLine(segments)]
+      : [{ text: "", displayWidth: 0, segments: [] }];
+  }
+
+  const result: VisualLine[] = [];
+  let lineStart = 0;
+  let lastBreak = -1; // first segment of the next line
+  let width = 0;
+
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+
+    // Record break opportunity: this segment can start a new line when the
+    // previous one is a space (word boundary), or between wide graphemes
+    // (CJK/emoji). Recorded before the overflow check so a segment that
+    // itself overflows can still break before itself.
+    if (
+      i > lineStart &&
+      !isSpaceSegment(seg) &&
+      (isSpaceSegment(segments[i - 1]) ||
+        isWideSegment(seg) ||
+        isWideSegment(segments[i - 1]))
+    ) {
+      lastBreak = i;
+    }
+
+    if (
+      width + seg.displayWidth > maxWidth &&
+      i > lineStart &&
+      !isSpaceSegment(seg) &&
+      seg.displayWidth <= maxWidth
+    ) {
+      // Overflow: break at the last recorded opportunity if any,
+      // otherwise at the grapheme boundary (oversized word fallback).
+      const breakAt = lastBreak > lineStart ? lastBreak : i;
+      let end = breakAt;
+      while (end > lineStart && isSpaceSegment(segments[end - 1])) end--;
+      result.push(segmentsToVisualLine(segments.slice(lineStart, end)));
+      lineStart = breakAt;
+      while (
+        lineStart < segments.length &&
+        isSpaceSegment(segments[lineStart])
+      ) {
+        lineStart++;
+      }
+      if (lineStart >= segments.length) break;
+      i = lineStart - 1; // for-loop increments
+      lastBreak = -1;
+      width = 0;
+      continue;
+    }
+
+    width += seg.displayWidth;
+  }
+
+  if (lineStart < segments.length) {
+    result.push(segmentsToVisualLine(segments.slice(lineStart)));
+  }
+
+  return result.length > 0
+    ? result
+    : [{ text: "", displayWidth: 0, segments: [] }];
+}
+
 /**
  * Truncate pre-segmented lines to fit maxWidth. Skips the segmentation step
  * entirely — used when segments were already computed during measure.
@@ -249,9 +378,11 @@ export function measureTextFromSegments(
     return { width: 0, height: 0 };
   }
 
-  if (wrap === "wrap") {
+  if (wrap === "wrap" || wrap === "word") {
+    const layout =
+      wrap === "wrap" ? layoutLineFromSegments : layoutWordWrapFromSegments;
     const visualLines = segmentedLines.flatMap((line) =>
-      layoutLineFromSegments(line, availableWidth),
+      layout(line, availableWidth),
     );
     let maxWidth = 0;
     for (const vl of visualLines) {
@@ -261,6 +392,16 @@ export function measureTextFromSegments(
       width: Math.min(maxWidth, availableWidth),
       height: visualLines.length,
     };
+  }
+
+  if (wrap === "none") {
+    // Full intrinsic width, unclamped — callers clip via overflow
+    let maxWidth = 0;
+    for (const segments of segmentedLines) {
+      const w = segmentsDisplayWidth(segments);
+      if (w > maxWidth) maxWidth = w;
+    }
+    return { width: maxWidth, height: segmentedLines.length };
   }
 
   let maxWidth = 0;
@@ -342,12 +483,114 @@ export function layoutLine(line: string, maxWidth: number): VisualLine[] {
 }
 
 /**
+ * Lays out a single line of text, wrapping at word boundaries.
+ *
+ * String-level counterpart of `layoutWordWrapFromSegments` — see that
+ * function for the wrapping algorithm.
+ */
+export function layoutWords(line: string, maxWidth: number): VisualLine[] {
+  return layoutWordWrapFromSegments(segmentLine(line), maxWidth);
+}
+
+/** Wrap modes usable for styled-span layout. */
+export type SpanWrapMode = "wrap" | "word" | "none";
+
+/**
+ * Segment styled spans into source lines (split on hard `"\n"` breaks),
+ * tagging every grapheme with its span index.
+ */
+function segmentSpans(spans: readonly StyledSpan[]): StyledSegment[][] {
+  const lines: StyledSegment[][] = [[]];
+  for (let spanIndex = 0; spanIndex < spans.length; spanIndex++) {
+    for (const grapheme of graphemes(spans[spanIndex].text)) {
+      if (grapheme === "\n") {
+        lines.push([]);
+        continue;
+      }
+      lines[lines.length - 1].push({
+        grapheme,
+        displayWidth: graphemeDisplayWidth(grapheme),
+        spanIndex,
+      });
+    }
+  }
+  return lines;
+}
+
+function styledLine(segments: readonly StyledSegment[]): StyledVisualLine {
+  let text = "";
+  let displayWidth = 0;
+  for (const s of segments) {
+    text += s.grapheme;
+    displayWidth += s.displayWidth;
+  }
+  return { text, displayWidth, segments };
+}
+
+/**
+ * Lay out a sequence of styled spans into visual lines.
+ *
+ * Spans form one continuous text flow: wrapping may split a span and
+ * break at boundaries between spans. `"\n"` inside span text is a hard
+ * break. Segment-level span indices are preserved so rendering can
+ * resolve styles per span.
+ */
+export function layoutStyledSpans(
+  spans: readonly StyledSpan[],
+  maxWidth: number,
+  wrapMode: SpanWrapMode,
+): StyledVisualLine[] {
+  const sourceLines = segmentSpans(spans);
+  if (sourceLines.length === 1 && sourceLines[0].length === 0) {
+    return [styledLine([])];
+  }
+
+  if (wrapMode === "none") {
+    return sourceLines.map(styledLine);
+  }
+
+  return sourceLines.flatMap((line) => {
+    const wrapped = layoutWordWrapFromSegments(line, maxWidth);
+    return wrapped.map((visualLine) =>
+      styledLine(
+        visualLine.segments.map((seg) => ({
+          ...seg,
+          spanIndex: (seg as StyledSegment).spanIndex,
+        })),
+      ),
+    );
+  });
+}
+
+/**
+ * Measure styled spans for layout. Mirrors `measureTextFromSegments`
+ * semantics per wrap mode ("none" returns the full intrinsic width).
+ */
+export function measureStyledSpans(
+  spans: readonly StyledSpan[],
+  availableWidth: number,
+  wrapMode: SpanWrapMode,
+): { width: number; height: number } {
+  const lines = layoutStyledSpans(spans, availableWidth, wrapMode);
+  if (lines.length === 0) return { width: 0, height: 0 };
+  let maxWidth = 0;
+  for (const line of lines) {
+    if (line.displayWidth > maxWidth) maxWidth = line.displayWidth;
+  }
+  return {
+    width: wrapMode === "none" ? maxWidth : Math.min(maxWidth, availableWidth),
+    height: lines.length,
+  };
+}
+
+/**
  * Measures text for layout purposes.
  * Returns the width and height needed to display the text.
  *
  * @param text - The text to measure
  * @param availableWidth - Available width for wrapping
- * @param wrap - Wrapping mode: "wrap" for line wrapping, or truncate modes for single line
+ * @param wrap - Wrapping mode: "wrap" for grapheme wrapping, "word" for word
+ *   wrapping, "none" for full intrinsic width, or truncate modes for single line
  */
 export function measureText(
   text: string,
@@ -360,10 +603,9 @@ export function measureText(
 
   const lines = text.split("\n");
 
-  if (wrap === "wrap") {
-    const visualLines = lines.flatMap((line) =>
-      layoutLine(line, availableWidth),
-    );
+  if (wrap === "wrap" || wrap === "word") {
+    const layout = wrap === "wrap" ? layoutLine : layoutWords;
+    const visualLines = lines.flatMap((line) => layout(line, availableWidth));
     let maxWidth = 0;
     for (const vl of visualLines) {
       if (vl.displayWidth > maxWidth) maxWidth = vl.displayWidth;
@@ -372,6 +614,15 @@ export function measureText(
       width: Math.min(maxWidth, availableWidth),
       height: visualLines.length,
     };
+  }
+
+  if (wrap === "none") {
+    let intrinsicWidth = 0;
+    for (const line of lines) {
+      const w = segmentsDisplayWidth(segmentLine(line));
+      if (w > intrinsicWidth) intrinsicWidth = w;
+    }
+    return { width: intrinsicWidth, height: lines.length };
   }
 
   let maxWidth = 0;

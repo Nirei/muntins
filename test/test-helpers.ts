@@ -266,6 +266,45 @@ export function paintTree(
   inherited: InheritedStyle,
   clip: Rect,
 ): void {
+  paintNode(node, [layout], 0, inherited, clip, buffer);
+}
+
+function paintNode(
+  node: Node,
+  layoutChildren: LayoutResult[],
+  startIndex: number,
+  inherited: InheritedStyle,
+  clip: Rect,
+  buffer: RenderBuffer,
+): number {
+  const style = typeof node.style === "function" ? node.style() : node.style;
+
+  if (style.display === "none") return 1;
+
+  // display: contents boxes are skipped in layout; their children consume
+  // layout slots in the parent's children list (mirrors Renderer.paintNode)
+  if (style.display === "contents") {
+    const children =
+      typeof node.children === "function"
+        ? (node.children as () => Node[])()
+        : (node.children ?? []);
+    let consumed = 0;
+    for (const child of children) {
+      consumed += paintNode(
+        child,
+        layoutChildren,
+        startIndex + consumed,
+        inherited,
+        clip,
+        buffer,
+      );
+    }
+    return consumed;
+  }
+
+  const layout = layoutChildren[startIndex];
+  if (!layout) return 0;
+
   if (node.render) {
     node.render(layout, buffer, inherited, clip);
   }
@@ -276,7 +315,17 @@ export function paintTree(
       : (node.children ?? []);
   const childLayouts = layout.children ?? [];
 
-  for (let i = 0; i < children.length && i < childLayouts.length; i++) {
-    paintTree(children[i], childLayouts[i], buffer, inherited, clip);
+  let childIndex = 0;
+  for (const child of children) {
+    childIndex += paintNode(
+      child,
+      childLayouts,
+      childIndex,
+      inherited,
+      clip,
+      buffer,
+    );
   }
+
+  return 1;
 }

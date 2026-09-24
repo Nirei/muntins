@@ -64,6 +64,10 @@ export { For, type ForProps } from "./components/For.ts";
 export { Portal, type PortalProps } from "./components/Portal.ts";
 export { Show, type ShowProps } from "./components/Show.ts";
 export { Text, type TextProps } from "./components/Text.ts";
+export {
+  RichText,
+  type RichTextProps,
+} from "./components/RichText.ts";
 
 // Runtime - Node
 export { createRef, Node, type Ref } from "./runtime/Node.ts";
@@ -100,19 +104,27 @@ export type {
   ReactiveTextStyle,
   TextStyle,
 } from "./render.ts";
+export { renderStyledText } from "./render.ts";
 
 // Text utilities (pass-through)
 export {
   layoutLine,
   layoutLineFromSegments,
+  layoutWordWrapFromSegments,
+  layoutWords,
   measureText,
   measureTextFromSegments,
   segmentLine,
   segmentText,
   truncateLine,
   truncateLineFromSegments,
+  type SpanWrapMode,
+  type StyledSegment,
+  type StyledSpan,
+  type StyledVisualLine,
   type VisualLine,
   type VisualSegment,
+  type WrapMode,
 } from "./text.ts";
 
 // Theme (generic infrastructure — UI layer provides defaults and re-exports)

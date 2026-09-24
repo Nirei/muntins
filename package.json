@@ -28,5 +28,8 @@
     "typescript": "^5.6"
   },
   "keywords": ["terminal", "tui", "cli", "signals", "flexbox", "reactive"],
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "marked": "^18.0.14"
+  }
 }

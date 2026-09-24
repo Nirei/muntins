@@ -410,7 +410,7 @@ Text({
   strikethrough: true,
   dim: true,
   inverse: true,                    // swap fg and bg
-  wrap: 'wrap',                     // 'wrap' | 'truncate' | 'truncate-end' | 'truncate-start'
+  wrap: 'wrap',                     // 'wrap' | 'word' | 'none' | 'truncate' | 'truncate-end' | 'truncate-start'
 });
 
 // Content and styles can be reactive
@@ -419,6 +419,36 @@ Text({
   color: () => status() === 'ok' ? 'green' : 'red',
   bold: () => status() === 'error',
 });
+```
+
+### Styled text runs (`RichText`)
+
+`RichText` renders a flow of `StyledSpan`s — runs of text with individual
+styles. Any omitted style property is inherited (span value → node prop →
+inherited style); `"\n"` inside a span is a hard break. RichText
+word-wraps by default.
+
+```typescript
+RichText({
+  spans: [
+    { text: 'normal ' },
+    { text: 'bold', bold: true },
+    { text: ' and ' },
+    { text: 'struck', strikethrough: true },
+  ],
+});
+```
+
+### Markdown
+
+`Markdown` parses GitHub-flavored Markdown and renders it with the generic
+components (`Heading`, `CodeBlock`, `Blockquote`, `List`, `Table`,
+`Separator`, `RichText`). HTML blocks render as dimmed literal source by
+default (`html: 'skip'` drops them). The parser (`marked`) is the single
+runtime dependency, confined behind the `src/markdown/parse.ts` adapter.
+
+```typescript
+Markdown({ content: () => fileTextSignal() });
 ```
 
 ---
@@ -430,6 +460,17 @@ Text({
 mount(component, options?)
 Box(props)           // { children, backgroundColor?, ...flexStyle, ...eventHandlers }
 Text(props)          // { content, ...textStyle, ...eventHandlers }
+RichText(props)      // { spans, wrap? } — styled text runs
+
+// Document components
+Markdown(props)      // { content, html? } — GFM markdown renderer
+Heading(props)       // { level: 1-6, children }
+Blockquote(props)    // { children } — quote bar + padding, nests
+CodeBlock(props)     // { content, language? } — preformatted, no wrap
+List(props)          // { ordered?, start?, gap?, children }
+ListItem(props)      // { task?: 'checked'|'unchecked', children }
+Table(props)         // { columns: {header, align?}[], rows } — GFM-style grid
+Separator(props)     // { orientation }
 
 // Conditional rendering and lists
 Show(props)          // { when, then, else? }

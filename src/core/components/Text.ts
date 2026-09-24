@@ -8,6 +8,7 @@ import {
   type VisualLine,
   type WrapMode,
   layoutLineFromSegments,
+  layoutWordWrapFromSegments,
   measureTextFromSegments,
   segmentText,
   truncateLineFromSegments,
@@ -121,9 +122,22 @@ export function Text(props: TextProps): Node {
             ? segmentedLines.flatMap((line) =>
                 layoutLineFromSegments(line, bounds.width),
               )
-            : segmentedLines.map((line) =>
-                truncateLineFromSegments(line, bounds.width, wrapMode),
-              );
+            : wrapMode === "word"
+              ? segmentedLines.flatMap((line) =>
+                  layoutWordWrapFromSegments(line, bounds.width),
+                )
+              : wrapMode === "none"
+                ? segmentedLines.map((line) => ({
+                    text: line.map((s) => s.grapheme).join(""),
+                    displayWidth: line.reduce(
+                      (sum, s) => sum + s.displayWidth,
+                      0,
+                    ),
+                    segments: line,
+                  }))
+                : segmentedLines.map((line) =>
+                    truncateLineFromSegments(line, bounds.width, wrapMode),
+                  );
 
       displayLinesCache = {
         sourceText: text,

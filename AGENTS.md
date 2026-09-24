@@ -29,7 +29,7 @@ Always use `npm run typecheck` instead of invoking `tsc` or `npx tsc` directly.
 ### Naming Conventions
 
 | Type | Convention | Examples |
-|------|------------|----------|
+| ------ | ------------ | ---------- |
 | Functions | camelCase | `createSignal`, `createEffect`, `computeLayout` |
 | Types/Interfaces | PascalCase | `FlexStyle`, `LayoutResult`, `InputEvent` |
 | Constants (bitmasks) | UPPER_CASE | `BOLD = 1`, `DIM = 2`, `ITALIC = 4` |
@@ -58,6 +58,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/). Format:
 Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `style`
 
 Examples:
+
 - `feat: add createMemo primitive`
 - `fix: prevent effect re-entry during batch`
 - `refactor(core): move core modules to src/core/`
@@ -68,7 +69,7 @@ Examples:
 Five modules with clean interfaces (no module depends on more than one other):
 
 | Module | Purpose |
-|--------|---------|
+| -------- | --------- |
 | `core/signals.ts` | Reactive core: createSignal, createEffect, etc. |
 | `core/layout.ts` | Flexbox layout: computeLayout() |
 | `core/buffer.ts` | Cell buffer, diff, ANSI serialization |
@@ -82,11 +83,13 @@ Five modules with clean interfaces (no module depends on more than one other):
 2. **Two primitives** - `Box` and `Text` are the only layout primitives.
 3. **Flexbox layout** - CSS flexbox semantics in terminal cells.
 4. **Fine-grained reactivity** - Surgical updates, no virtual DOM diffing.
-5. **Zero runtime dependencies** - Only dev dependencies (Biome, TypeScript, Knip).
+5. **Zero runtime dependencies — one exception.** `marked` (the Markdown
+   parser) is the only runtime dependency, confined behind the
+   `src/markdown/parse.ts` adapter. The rendering side never imports it.
 6. **No barrel files** - Never create `index.ts` files that only re-export from other modules. Import directly from the source module. Barrel files break tree-shaking and obscure dependencies.
 
 | Document | Description |
-|---|---|
+| --- | --- |
 | `docs/ARCHITECTURE.md` | System architecture: the five core modules, their responsibilities, data structures, and how they connect through the build → layout → paint pipeline. |
 | `docs/API.md` | Public API reference and usage examples covering primitives, layout, reactivity, focus, events, and composable component patterns. |
 | `docs/WHEEL.md` | Node.js APIs, ECMA globals, and external specifications to leverage, what the library should use rather than reimplement from scratch. |
