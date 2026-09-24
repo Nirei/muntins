@@ -7,11 +7,7 @@ import { createRef } from "../../src/core/runtime/Node.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { Button } from "../../src/ui/Button.ts";
 import { Dialog } from "../../src/ui/Dialog.ts";
-import {
-  createMockStdin,
-  createMockStdout,
-  keyEvent,
-} from "../test-helpers.ts";
+import { createMockStdin, createMockStdout } from "../test-helpers.ts";
 
 describe("Dialog", () => {
   describe("conditional rendering", () => {
@@ -101,7 +97,7 @@ describe("Dialog", () => {
   });
 
   describe("keyboard handling", () => {
-    it("Escape key calls onClose", () => {
+    it("Escape key calls onClose", async () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
       let closeCalled = false;
@@ -125,8 +121,11 @@ describe("Dialog", () => {
         },
       );
 
-      // Simulate Escape key (keypress event format)
-      mockStdin.emit("keypress", "\x1b", { name: "escape", sequence: "\x1b" });
+      // Simulate Escape key: a lone ESC byte. The input parser holds it
+      // pending for ~100ms to disambiguate escape sequences, so wait for the
+      // flush timer before asserting.
+      mockStdin.emit("data", Buffer.from("\x1b"));
+      await new Promise((resolve) => setTimeout(resolve, 120));
 
       assert.strictEqual(closeCalled, true);
       app.unmount();
@@ -157,7 +156,7 @@ describe("Dialog", () => {
       );
 
       // Simulate Enter key (should not close)
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
 
       assert.strictEqual(closeCalled, false);
       app.unmount();
@@ -307,7 +306,7 @@ describe("Dialog", () => {
       assert.ok(mockStdout.written.includes("Button2"));
 
       // Tab should work (focus is trapped within TabFocus)
-      mockStdin.emit("keypress", "\t", { name: "tab", sequence: "\t" });
+      mockStdin.emit("data", Buffer.from("\t"));
 
       app.unmount();
     });
@@ -381,13 +380,13 @@ describe("Dialog", () => {
       assert.ok(mockStdout.written.includes("OK"));
 
       // Press Enter on the focused button
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
 
       assert.strictEqual(buttonClicked, true);
       app.unmount();
     });
 
-    it("onClose callback is invoked on Escape", () => {
+    it("onClose callback is invoked on Escape", async () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
       let onCloseCalled = false;
@@ -418,8 +417,10 @@ describe("Dialog", () => {
       // Initially open
       assert.ok(mockStdout.written.includes("ClosableDialog"));
 
-      // Press Escape (keypress event format)
-      mockStdin.emit("keypress", "\x1b", { name: "escape", sequence: "\x1b" });
+      // Press Escape: a lone ESC byte, flushed as an escape key event after
+      // the parser's pending-sequence timeout.
+      mockStdin.emit("data", Buffer.from("\x1b"));
+      await new Promise((resolve) => setTimeout(resolve, 120));
 
       // onClose should have been called
       assert.strictEqual(onCloseCalled, true);

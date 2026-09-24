@@ -158,25 +158,25 @@ describe("styleFallback", () => {
   it("returns theme values as reactive getters", () => {
     setTheme({
       tokens: {},
-      widget: { paddingStart: 2, border: "single" },
+      widget: { paddingStart: 2, width: 20 },
     });
     const merged = styleFallback(undefined, "widget");
     // Values are getter functions
     assert.strictEqual(typeof merged.paddingStart, "function");
     assert.strictEqual((merged.paddingStart as () => unknown)(), 2);
-    assert.strictEqual((merged.border as () => unknown)(), "single");
+    assert.strictEqual((merged.width as () => unknown)(), 20);
   });
 
   it("instance style overrides theme values (static, not getter)", () => {
     setTheme({
       tokens: {},
-      widget: { paddingStart: 2, border: "single" },
+      widget: { paddingStart: 2, width: 20 },
     });
     const merged = styleFallback({ paddingStart: 5 }, "widget");
     // Instance value is static (not a getter)
     assert.strictEqual(merged.paddingStart, 5);
     // Theme value remains a getter
-    assert.strictEqual((merged.border as () => unknown)(), "single");
+    assert.strictEqual((merged.width as () => unknown)(), 20);
   });
 
   it("passes through instance props even for missing theme key", () => {
@@ -185,21 +185,27 @@ describe("styleFallback", () => {
     assert.strictEqual(merged.paddingStart, 1);
   });
 
-  it("returns empty object when no instance style and missing theme key", () => {
+  it("emits a getter for every style key when theme key is missing", () => {
     setTheme({ tokens: {} });
     const merged = styleFallback(undefined, "missing");
-    assert.deepStrictEqual(merged, {});
+    // One entry per style key, each resolving to undefined
+    const keys = Object.keys(merged);
+    assert.ok(keys.length > 0);
+    for (const key of keys) {
+      assert.strictEqual(typeof merged[key], "function", `${key} is a getter`);
+      assert.strictEqual((merged[key] as () => unknown)(), undefined);
+    }
   });
 
   it("supports fallback chain across multiple theme keys", () => {
     setTheme({
       tokens: {},
       input: { backgroundColor: "red", width: 20 },
-      "select--trigger": { border: "single", paddingStart: 1 },
+      "select--trigger": { gap: 2, paddingStart: 1 },
     });
     const merged = styleFallback(undefined, "select--trigger", "input");
     // select--trigger properties
-    assert.strictEqual((merged.border as () => unknown)(), "single");
+    assert.strictEqual((merged.gap as () => unknown)(), 2);
     assert.strictEqual((merged.paddingStart as () => unknown)(), 1);
     // Falls back to input for properties not in select--trigger
     assert.strictEqual((merged.width as () => unknown)(), 20);
@@ -222,11 +228,11 @@ describe("styleFallback", () => {
     setTheme({
       tokens: {},
       base: { color: "blue", gap: 1 },
-      specific: { color: "red", border: "single" },
+      specific: { color: "red", width: 30 },
     });
     const merged = styleFallback({ color: "green" }, "specific", "base");
     assert.strictEqual(merged.color, "green");
-    assert.strictEqual((merged.border as () => unknown)(), "single");
+    assert.strictEqual((merged.width as () => unknown)(), 30);
     assert.strictEqual((merged.gap as () => unknown)(), 1);
   });
 });

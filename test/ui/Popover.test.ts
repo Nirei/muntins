@@ -176,7 +176,12 @@ describe("Popover", () => {
   });
 
   describe("keyboard handling", () => {
-    it("Escape key calls onClose", () => {
+    // A standalone "\x1b" byte is flushed as an escape key event only after
+    // the input parser's ambiguity timeout, so wait for it before asserting.
+    const escapeFlushDelay = () =>
+      new Promise<void>((resolve) => setTimeout(resolve, 150));
+
+    it("Escape key calls onClose", async () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
       let closeCalled = false;
@@ -205,14 +210,16 @@ describe("Popover", () => {
         },
       );
 
-      // Simulate Escape key
-      mockStdin.emit("keypress", "\x1b", { name: "escape", sequence: "\x1b" });
+      // Simulate Escape key as raw stdin data (the input parser listens
+      // on "data" events; keypress-style emission does nothing).
+      mockStdin.emit("data", Buffer.from("\x1b"));
+      await escapeFlushDelay();
 
       assert.strictEqual(closeCalled, true);
       app.unmount();
     });
 
-    it("other keys do not close popover", () => {
+    it("other keys do not close popover", async () => {
       const mockStdin = createMockStdin();
       const mockStdout = createMockStdout();
       let closeCalled = false;
@@ -241,8 +248,9 @@ describe("Popover", () => {
         },
       );
 
-      // Simulate Enter key (should not close)
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      // Simulate Enter key as raw stdin data - should not close
+      mockStdin.emit("data", Buffer.from("\r"));
+      await escapeFlushDelay();
 
       assert.strictEqual(closeCalled, false);
       app.unmount();

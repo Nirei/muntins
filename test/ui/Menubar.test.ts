@@ -40,7 +40,9 @@ function createSampleMenus(): Menu[] {
   ];
 }
 
-// Helper to send key press via keypress event
+// Helper to send key press as raw data on stdin. The runtime's input
+// parser (createInputParser) listens on "data" events, so escape
+// sequences must be fed as bytes, not keypress-style events.
 function sendKey(mockStdin: MockStdin, name: string, sequence?: string): void {
   const keySequences: Record<string, string> = {
     left: "\x1b[D",
@@ -54,8 +56,13 @@ function sendKey(mockStdin: MockStdin, name: string, sequence?: string): void {
     end: "\x1b[F",
   };
   const seq = sequence ?? keySequences[name] ?? name;
-  mockStdin.emit("keypress", seq, { name, sequence: seq });
+  mockStdin.emit("data", Buffer.from(seq));
 }
+
+// Wait for the parser's escape-key timeout. A standalone "\x1b" byte is
+// held pending for 100ms before being flushed as an escape key event.
+const escapeFlushDelay = () =>
+  new Promise<void>((resolve) => setTimeout(resolve, 150));
 
 function mountWithHighlightTracking() {
   const mockStdin = createMockStdin();
@@ -316,9 +323,10 @@ describe("Menubar", () => {
       // Clear written
       mockStdout.written = "";
 
-      // Close with escape
+      // Close with escape. A standalone \x1b byte is flushed as an escape
+      // key event only after the parser's ambiguity timeout, so wait for it.
       sendKey(mockStdin, "escape");
-      await nextRender();
+      await escapeFlushDelay();
 
       // Menu items should no longer be rendered
       assert.ok(!mockStdout.written.includes("New"));

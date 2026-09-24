@@ -159,7 +159,7 @@ describe("Select", () => {
       );
 
       // Simulate Enter key to open
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
 
       // Wait for render to complete
       await nextRender();
@@ -194,7 +194,7 @@ describe("Select", () => {
       );
 
       // Simulate Space key to open
-      mockStdin.emit("keypress", " ", { name: "space", sequence: " " });
+      mockStdin.emit("data", Buffer.from(" "));
       await nextRender();
 
       // Options should now be visible
@@ -226,10 +226,7 @@ describe("Select", () => {
       );
 
       // Simulate Down key to open
-      mockStdin.emit("keypress", "\x1b[B", {
-        name: "down",
-        sequence: "\x1b[B",
-      });
+      mockStdin.emit("data", Buffer.from("\x1b[B"));
       await nextRender();
 
       // Options should now be visible
@@ -267,13 +264,15 @@ describe("Select", () => {
       );
 
       // Open dropdown
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
       await nextRender();
       assert.ok(mockStdout.written.includes("Canada"));
 
-      // Press Escape
-      mockStdin.emit("keypress", "\x1b", { name: "escape", sequence: "\x1b" });
-      await nextRender();
+      // Press Escape. The input parser buffers a lone ESC byte for 100ms
+      // (to disambiguate escape sequences) before flushing it as an escape
+      // key event, so wait past that timeout before asserting.
+      mockStdin.emit("data", Buffer.from("\x1b"));
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
       // onChange should not have been called
       assert.strictEqual(changeCalled, false);
@@ -308,18 +307,15 @@ describe("Select", () => {
       );
 
       // Open dropdown
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
       await nextRender();
 
       // Navigate down once (from us to uk)
-      mockStdin.emit("keypress", "\x1b[B", {
-        name: "down",
-        sequence: "\x1b[B",
-      });
+      mockStdin.emit("data", Buffer.from("\x1b[B"));
       await nextRender();
 
       // Select with Enter
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
       await nextRender();
 
       assert.strictEqual(selectedValue, "uk");
@@ -354,18 +350,15 @@ describe("Select", () => {
       );
 
       // Open dropdown (highlighted starts at selected item: canada)
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
       await nextRender();
 
       // Press Home to go to first
-      mockStdin.emit("keypress", "\x1b[H", {
-        name: "home",
-        sequence: "\x1b[H",
-      });
+      mockStdin.emit("data", Buffer.from("\x1b[H"));
       await nextRender();
 
       // Select with Enter
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
       await nextRender();
 
       assert.strictEqual(selectedValue, "us");
@@ -400,15 +393,15 @@ describe("Select", () => {
       );
 
       // Open dropdown
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
       await nextRender();
 
       // Press End to go to last
-      mockStdin.emit("keypress", "\x1b[F", { name: "end", sequence: "\x1b[F" });
+      mockStdin.emit("data", Buffer.from("\x1b[F"));
       await nextRender();
 
       // Select with Enter
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
       await nextRender();
 
       assert.strictEqual(selectedValue, "ca");
@@ -443,27 +436,21 @@ describe("Select", () => {
       );
 
       // Open dropdown
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
       await nextRender();
 
       // Navigate down twice (us -> uk -> ca)
-      mockStdin.emit("keypress", "\x1b[B", {
-        name: "down",
-        sequence: "\x1b[B",
-      });
+      mockStdin.emit("data", Buffer.from("\x1b[B"));
       await nextRender();
-      mockStdin.emit("keypress", "\x1b[B", {
-        name: "down",
-        sequence: "\x1b[B",
-      });
+      mockStdin.emit("data", Buffer.from("\x1b[B"));
       await nextRender();
 
       // Navigate up once (ca -> uk)
-      mockStdin.emit("keypress", "\x1b[A", { name: "up", sequence: "\x1b[A" });
+      mockStdin.emit("data", Buffer.from("\x1b[A"));
       await nextRender();
 
       // Select with Enter
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
       await nextRender();
 
       assert.strictEqual(selectedValue, "uk");
@@ -498,15 +485,15 @@ describe("Select", () => {
       );
 
       // Open dropdown (starts at us, index 0)
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
       await nextRender();
 
       // Try to go up from first item (should stay at first)
-      mockStdin.emit("keypress", "\x1b[A", { name: "up", sequence: "\x1b[A" });
+      mockStdin.emit("data", Buffer.from("\x1b[A"));
       await nextRender();
 
       // Select with Enter
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
       await nextRender();
 
       // Should still be first item
@@ -543,7 +530,7 @@ describe("Select", () => {
       mockStdout.written = "";
 
       // Try to open with Enter
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
 
       // Options should not appear
       assert.ok(!mockStdout.written.includes("UK"));
@@ -576,7 +563,7 @@ describe("Select", () => {
       );
 
       // Try to open while disabled
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
       await nextRender();
       assert.ok(!mockStdout.written.includes("UK"));
 
@@ -586,7 +573,7 @@ describe("Select", () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       // Now it should open
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
       await nextRender();
       assert.ok(mockStdout.written.includes("UK"));
 
@@ -617,7 +604,7 @@ describe("Select", () => {
       );
 
       // Should respond to keyboard input (implies focusable)
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
       // No error means it's working
       app.unmount();
     });
@@ -751,14 +738,11 @@ describe("Select", () => {
       );
 
       // Open and select second option
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
       await nextRender();
-      mockStdin.emit("keypress", "\x1b[B", {
-        name: "down",
-        sequence: "\x1b[B",
-      });
+      mockStdin.emit("data", Buffer.from("\x1b[B"));
       await nextRender();
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
       await nextRender();
 
       assert.strictEqual(selectedValue, "uk");
@@ -793,14 +777,11 @@ describe("Select", () => {
       );
 
       // Open and select with Space
-      mockStdin.emit("keypress", " ", { name: "space", sequence: " " });
+      mockStdin.emit("data", Buffer.from(" "));
       await nextRender();
-      mockStdin.emit("keypress", "\x1b[B", {
-        name: "down",
-        sequence: "\x1b[B",
-      });
+      mockStdin.emit("data", Buffer.from("\x1b[B"));
       await nextRender();
-      mockStdin.emit("keypress", " ", { name: "space", sequence: " " });
+      mockStdin.emit("data", Buffer.from(" "));
       await nextRender();
 
       assert.strictEqual(selectedValue, "uk");
@@ -955,7 +936,7 @@ describe("Select", () => {
       );
 
       // Open dropdown
-      mockStdin.emit("keypress", "\r", { name: "enter", sequence: "\r" });
+      mockStdin.emit("data", Buffer.from("\r"));
       await nextRender();
 
       // Both background and dropdown content should be visible

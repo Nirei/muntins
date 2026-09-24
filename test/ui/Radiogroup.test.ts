@@ -1,17 +1,17 @@
 import assert from "node:assert";
-import { describe, it } from "node:test";
-import {
-  DEFAULT_COLOR,
-  Buffer as RenderBuffer,
-} from "../../src/core/buffer.ts";
-import { Box } from "../../src/core/components/Box.ts";
-import { Text } from "../../src/core/components/Text.ts";
-import { DEFAULT_FLEX_STYLE } from "../../src/core/layout.ts";
+import { beforeEach, describe, it } from "node:test";
+import { Buffer as RenderBuffer } from "../../src/core/buffer.ts";
 import { DEFAULT_CLIP } from "../../src/core/rects.ts";
 import { DEFAULT_INHERITED_STYLE } from "../../src/core/render.ts";
+import { App } from "../../src/core/runtime/App.ts";
 import { type Node, createRef } from "../../src/core/runtime/Node.ts";
 import { createSignal } from "../../src/core/signals.ts";
-import { RadioGroup } from "../../src/ui/Radiogroup.ts";
+import { setTheme } from "../../src/core/theme.ts";
+import defaultThemeJson from "../../src/default-theme.json" with {
+  type: "json",
+};
+import { RadioGroup, type RadioGroupProps } from "../../src/ui/Radiogroup.ts";
+import { createMockStdin, createMockStdout } from "../test-helpers.ts";
 
 const options = [
   { value: "a", label: "Option A" },
@@ -41,37 +41,62 @@ function createKeyEvent(
   };
 }
 
-// Helper to get children from a node (handles getter pattern)
-function getNodeChildren(node: Node): Node[] {
-  const children = node.children;
-  if (typeof children === "function") {
-    return (children as () => Node[])();
-  }
-  return children ?? [];
+// RadioGroup calls useFocus(), which requires an active runtime context.
+// Mount it inside a minimal app so the component can be constructed.
+function mountRadioGroup<T>(props: RadioGroupProps<T>): {
+  app: App;
+  node: Node;
+} {
+  const mockStdin = createMockStdin();
+  const mockStdout = createMockStdout();
+  let node!: Node;
+  const app = App.mount(
+    () => {
+      node = RadioGroup(props);
+      return node;
+    },
+    {
+      stdin: mockStdin as unknown as NodeJS.ReadStream,
+      stdout: mockStdout as unknown as NodeJS.WriteStream,
+      fpsLimit: 0,
+    },
+  );
+  return { app, node };
+}
+
+// The RadioGroup Box contains a single For container whose children are
+// one wrapper Box per option (the wrapper carries the mouse handler).
+function getOptionWrappers(node: Node): Node[] {
+  const forContainer = node.resolveChildren()[0];
+  return forContainer.resolveChildren();
+}
+
+// Structure per option: wrapper Box > option Box > [glyph Text, label Text]
+function getGlyph(wrapper: Node): Node | undefined {
+  const optionBox = wrapper.resolveChildren()[0];
+  return optionBox?.resolveChildren()[0];
 }
 
 describe("RadioGroup", () => {
+  beforeEach(() => {
+    setTheme(defaultThemeJson);
+  });
+
   describe("rendering", () => {
     it("renders all options", () => {
-      const node = RadioGroup({ value: "a", options });
+      const { app, node } = mountRadioGroup({ value: "a", options });
 
-      const children = getNodeChildren(node);
-      assert.strictEqual(children.length, 3);
+      assert.strictEqual(getOptionWrappers(node).length, 3);
+      app.unmount();
     });
 
     it("shows ● for selected option, ○ for unselected", () => {
-      const node = RadioGroup({ value: "b", options });
+      const { app, node } = mountRadioGroup({ value: "b", options });
 
-      const children = getNodeChildren(node);
+      const wrappers = getOptionWrappers(node);
 
-      // Each option is wrapped in a Box (for mouse handling) containing the rendered option
-      // Structure: RadioGroup > wrapper Box > option Box > [glyph Text, label Text]
       // Check first option (unselected)
-      const wrapper0 = children[0];
-      const wrapper0Children = getNodeChildren(wrapper0);
-      const opt0 = wrapper0Children[0];
-      const opt0Children = getNodeChildren(opt0);
-      const glyph0 = opt0Children[0];
+      const glyph0 = getGlyph(wrappers[0]);
       assert.ok(glyph0?.render);
 
       const buffer0 = new RenderBuffer(1, 1);
@@ -84,11 +109,7 @@ describe("RadioGroup", () => {
       assert.strictEqual(buffer0.getSymbol(0, 0), "○");
 
       // Check second option (selected)
-      const wrapper1 = children[1];
-      const wrapper1Children = getNodeChildren(wrapper1);
-      const opt1 = wrapper1Children[0];
-      const opt1Children = getNodeChildren(opt1);
-      const glyph1 = opt1Children[0];
+      const glyph1 = getGlyph(wrappers[1]);
       assert.ok(glyph1?.render);
 
       const buffer1 = new RenderBuffer(1, 1);
@@ -99,19 +120,15 @@ describe("RadioGroup", () => {
         DEFAULT_CLIP,
       );
       assert.strictEqual(buffer1.getSymbol(0, 0), "●");
+      app.unmount();
     });
 
     it("reactive value prop updates selection", () => {
       const [value, setValue] = createSignal("a");
-      const node = RadioGroup({ value, options });
+      const { app, node } = mountRadioGroup({ value, options });
 
       const getGlyphBuffer = (optIndex: number) => {
-        const children = getNodeChildren(node);
-        const wrapper = children[optIndex];
-        const wrapperChildren = getNodeChildren(wrapper);
-        const opt = wrapperChildren[0];
-        const optChildren = getNodeChildren(opt);
-        const glyph = optChildren[0];
+        const glyph = getGlyph(getOptionWrappers(node)[optIndex]);
         const buffer = new RenderBuffer(1, 1);
         glyph?.render?.(
           { x: 0, y: 0, screenX: 0, screenY: 0, width: 1, height: 1 },
@@ -129,13 +146,14 @@ describe("RadioGroup", () => {
       setValue("b");
       assert.strictEqual(getGlyphBuffer(0).getSymbol(0, 0), "○");
       assert.strictEqual(getGlyphBuffer(1).getSymbol(0, 0), "●");
+      app.unmount();
     });
   });
 
   describe("keyboard handling", () => {
     it("Down moves to next option and selects", () => {
       let receivedValue: string | undefined;
-      const node = RadioGroup({
+      const { app, node } = mountRadioGroup({
         value: "a",
         options,
         onChange: (v) => {
@@ -148,11 +166,12 @@ describe("RadioGroup", () => {
 
       assert.strictEqual(result, true);
       assert.strictEqual(receivedValue, "b");
+      app.unmount();
     });
 
     it("Right moves to next option and selects", () => {
       let receivedValue: string | undefined;
-      const node = RadioGroup({
+      const { app, node } = mountRadioGroup({
         value: "a",
         options,
         onChange: (v) => {
@@ -165,11 +184,12 @@ describe("RadioGroup", () => {
 
       assert.strictEqual(result, true);
       assert.strictEqual(receivedValue, "b");
+      app.unmount();
     });
 
     it("Up moves to previous option and selects", () => {
       let receivedValue: string | undefined;
-      const node = RadioGroup({
+      const { app, node } = mountRadioGroup({
         value: "b",
         options,
         onChange: (v) => {
@@ -182,11 +202,12 @@ describe("RadioGroup", () => {
 
       assert.strictEqual(result, true);
       assert.strictEqual(receivedValue, "a");
+      app.unmount();
     });
 
     it("Left moves to previous option and selects", () => {
       let receivedValue: string | undefined;
-      const node = RadioGroup({
+      const { app, node } = mountRadioGroup({
         value: "b",
         options,
         onChange: (v) => {
@@ -199,11 +220,12 @@ describe("RadioGroup", () => {
 
       assert.strictEqual(result, true);
       assert.strictEqual(receivedValue, "a");
+      app.unmount();
     });
 
     it("arrow keys wrap around at end", () => {
       let receivedValue: string | undefined;
-      const node = RadioGroup({
+      const { app, node } = mountRadioGroup({
         value: "c", // last option
         options,
         onChange: (v) => {
@@ -216,11 +238,12 @@ describe("RadioGroup", () => {
 
       assert.strictEqual(result, true);
       assert.strictEqual(receivedValue, "a"); // wrapped to first
+      app.unmount();
     });
 
     it("arrow keys wrap around at start", () => {
       let receivedValue: string | undefined;
-      const node = RadioGroup({
+      const { app, node } = mountRadioGroup({
         value: "a", // first option
         options,
         onChange: (v) => {
@@ -233,11 +256,12 @@ describe("RadioGroup", () => {
 
       assert.strictEqual(result, true);
       assert.strictEqual(receivedValue, "c"); // wrapped to last
+      app.unmount();
     });
 
     it("Home selects first option", () => {
       let receivedValue: string | undefined;
-      const node = RadioGroup({
+      const { app, node } = mountRadioGroup({
         value: "c",
         options,
         onChange: (v) => {
@@ -250,11 +274,12 @@ describe("RadioGroup", () => {
 
       assert.strictEqual(result, true);
       assert.strictEqual(receivedValue, "a");
+      app.unmount();
     });
 
     it("End selects last option", () => {
       let receivedValue: string | undefined;
-      const node = RadioGroup({
+      const { app, node } = mountRadioGroup({
         value: "a",
         options,
         onChange: (v) => {
@@ -267,11 +292,12 @@ describe("RadioGroup", () => {
 
       assert.strictEqual(result, true);
       assert.strictEqual(receivedValue, "c");
+      app.unmount();
     });
 
     it("other keys do not trigger onChange", () => {
       let called = false;
-      const node = RadioGroup({
+      const { app, node } = mountRadioGroup({
         value: "a",
         options,
         onChange: () => {
@@ -284,10 +310,11 @@ describe("RadioGroup", () => {
 
       assert.strictEqual(result, false);
       assert.strictEqual(called, false);
+      app.unmount();
     });
 
     it("empty options array returns false for navigation keys", () => {
-      const node = RadioGroup({
+      const { app, node } = mountRadioGroup({
         value: "a",
         options: [],
       });
@@ -296,13 +323,14 @@ describe("RadioGroup", () => {
       const result = node.onKeyPress(createKeyEvent("down"));
 
       assert.strictEqual(result, false);
+      app.unmount();
     });
   });
 
   describe("mouse handling", () => {
     it("clicking option selects it", () => {
       let receivedValue: string | undefined;
-      const node = RadioGroup({
+      const { app, node } = mountRadioGroup({
         value: "a",
         options,
         onChange: (v) => {
@@ -311,8 +339,8 @@ describe("RadioGroup", () => {
       });
 
       // Get the second option (Option B)
-      const children = getNodeChildren(node);
-      const opt1 = children[1];
+      const wrappers = getOptionWrappers(node);
+      const opt1 = wrappers[1];
       assert.ok(opt1.onMousePress, "Option should have onMousePress handler");
       opt1.onMousePress({
         type: "mouse",
@@ -327,11 +355,12 @@ describe("RadioGroup", () => {
       });
 
       assert.strictEqual(receivedValue, "b");
+      app.unmount();
     });
 
     it("clicking already selected option does nothing (no duplicate callback)", () => {
       let callCount = 0;
-      const node = RadioGroup({
+      const { app, node } = mountRadioGroup({
         value: "a",
         options,
         onChange: () => {
@@ -339,8 +368,8 @@ describe("RadioGroup", () => {
         },
       });
 
-      const children = getNodeChildren(node);
-      const opt0 = children[0]; // already selected
+      const wrappers = getOptionWrappers(node);
+      const opt0 = wrappers[0]; // already selected
       assert.ok(opt0.onMousePress);
       opt0.onMousePress({
         type: "mouse",
@@ -356,11 +385,12 @@ describe("RadioGroup", () => {
 
       // Should still fire (consistent with keyboard behavior)
       assert.strictEqual(callCount, 1);
+      app.unmount();
     });
 
     it("disabled group ignores mouse clicks", () => {
       let called = false;
-      const node = RadioGroup({
+      const { app, node } = mountRadioGroup({
         value: "a",
         options,
         disabled: true,
@@ -369,8 +399,8 @@ describe("RadioGroup", () => {
         },
       });
 
-      const children = getNodeChildren(node);
-      const opt1 = children[1];
+      const wrappers = getOptionWrappers(node);
+      const opt1 = wrappers[1];
       assert.ok(opt1.onMousePress);
       opt1.onMousePress({
         type: "mouse",
@@ -385,13 +415,14 @@ describe("RadioGroup", () => {
       });
 
       assert.strictEqual(called, false);
+      app.unmount();
     });
   });
 
   describe("disabled state", () => {
     it("disabled group ignores all input", () => {
       let called = false;
-      const node = RadioGroup({
+      const { app, node } = mountRadioGroup({
         value: "a",
         options,
         disabled: true,
@@ -405,17 +436,17 @@ describe("RadioGroup", () => {
 
       assert.strictEqual(result, false);
       assert.strictEqual(called, false);
+      app.unmount();
     });
 
     it("disabled group renders with dim", () => {
-      const node = RadioGroup({ value: "a", options, disabled: true });
+      const { app, node } = mountRadioGroup({
+        value: "a",
+        options,
+        disabled: true,
+      });
 
-      const children = getNodeChildren(node);
-      const wrapper0 = children[0];
-      const wrapper0Children = getNodeChildren(wrapper0);
-      const opt0 = wrapper0Children[0];
-      const opt0Children = getNodeChildren(opt0);
-      const glyph = opt0Children[0];
+      const glyph = getGlyph(getOptionWrappers(node)[0]);
 
       assert.ok(glyph?._inheritableProps?.dim);
       const dimValue =
@@ -423,12 +454,13 @@ describe("RadioGroup", () => {
           ? glyph._inheritableProps.dim()
           : glyph._inheritableProps.dim;
       assert.strictEqual(dimValue, true);
+      app.unmount();
     });
 
     it("reactive disabled prop updates behavior", () => {
       const [disabled, setDisabled] = createSignal(false);
       let callCount = 0;
-      const node = RadioGroup({
+      const { app, node } = mountRadioGroup({
         value: "a",
         options,
         disabled,
@@ -447,20 +479,22 @@ describe("RadioGroup", () => {
       setDisabled(true);
       node.onKeyPress(createKeyEvent("down"));
       assert.strictEqual(callCount, 1); // Should not have increased
+      app.unmount();
     });
   });
 
   describe("direction", () => {
     it("default direction is row", () => {
-      const node = RadioGroup({ value: "a", options });
+      const { app, node } = mountRadioGroup({ value: "a", options });
 
       const style =
         typeof node.style === "function" ? node.style() : node.style;
       assert.strictEqual(style.flexDirection, "row");
+      app.unmount();
     });
 
     it("direction: row renders horizontally", () => {
-      const node = RadioGroup({
+      const { app, node } = mountRadioGroup({
         value: "a",
         options,
         style: { flexDirection: "row" },
@@ -469,13 +503,14 @@ describe("RadioGroup", () => {
       const style =
         typeof node.style === "function" ? node.style() : node.style;
       assert.strictEqual(style.flexDirection, "row");
+      app.unmount();
     });
 
     it("reactive direction prop updates layout", () => {
       const [direction, setDirection] = createSignal<"row" | "column">(
         "column",
       );
-      const node = RadioGroup({
+      const { app, node } = mountRadioGroup({
         value: "a",
         options,
         style: { flexDirection: direction },
@@ -485,45 +520,60 @@ describe("RadioGroup", () => {
 
       setDirection("row");
       assert.strictEqual(node.resolveStyle().flexDirection, "row");
+      app.unmount();
     });
   });
 
   describe("focus", () => {
     it("is focusable by default", () => {
-      const node = RadioGroup({ value: "a", options });
+      const { app, node } = mountRadioGroup({ value: "a", options });
       assert.strictEqual(node.focusable, true);
+      app.unmount();
     });
 
     it("focusable: false makes it not focusable", () => {
-      const node = RadioGroup({ value: "a", options, focusable: false });
+      const { app, node } = mountRadioGroup({
+        value: "a",
+        options,
+        focusable: false,
+      });
       assert.strictEqual(node.focusable, false);
+      app.unmount();
     });
 
     it("autoFocus prop is passed through", () => {
-      const node = RadioGroup({ value: "a", options, autoFocus: true });
+      const { app, node } = mountRadioGroup({
+        value: "a",
+        options,
+        autoFocus: true,
+      });
       assert.strictEqual(node.autoFocus, true);
+      app.unmount();
     });
 
     it("ref is bound to the node", () => {
       const ref = createRef();
-      const node = RadioGroup({ value: "a", options, ref });
+      const { app, node } = mountRadioGroup({
+        value: "a",
+        options,
+        ref,
+      });
       assert.strictEqual(ref.current, node);
+      app.unmount();
     });
 
     it("focus index syncs with selected value", () => {
       const [value, setValue] = createSignal("a");
-      const node = RadioGroup({
-        value,
-        options,
-        onChange: setValue,
-      });
+      const first = mountRadioGroup({ value, options, onChange: setValue });
 
       // Move down (a -> b)
-      node.onKeyPress?.(createKeyEvent("down"));
+      first.node.onKeyPress?.(createKeyEvent("down"));
+      assert.strictEqual(value(), "b");
 
-      // Now move down again - should go to c, not wrap to a
+      // A fresh group sharing the value signal mounts with value "b";
+      // its highlighted index syncs, so Down goes to "c" instead of "a".
       let receivedValue: string | undefined;
-      const node2 = RadioGroup({
+      const second = mountRadioGroup({
         value,
         options,
         onChange: (v) => {
@@ -531,14 +581,17 @@ describe("RadioGroup", () => {
         },
       });
 
-      node2.onKeyPress?.(createKeyEvent("down"));
+      second.node.onKeyPress?.(createKeyEvent("down"));
       assert.strictEqual(receivedValue, "c");
+
+      first.app.unmount();
+      second.app.unmount();
     });
   });
 
   describe("style overrides", () => {
     it("applies style overrides", () => {
-      const node = RadioGroup({
+      const { app, node } = mountRadioGroup({
         value: "a",
         options,
         style: { marginTop: 2, gap: 1 },
@@ -548,6 +601,7 @@ describe("RadioGroup", () => {
         typeof node.style === "function" ? node.style() : node.style;
       assert.strictEqual(style.marginTop, 2);
       assert.strictEqual(style.gap, 1);
+      app.unmount();
     });
   });
 });
