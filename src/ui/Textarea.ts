@@ -62,6 +62,15 @@ export interface TextareaProps {
    */
   multiline?: boolean;
 
+  /**
+   * Intercept key events before built-in editing behavior. Return `true` to
+   * consume the key (built-in handling is skipped and the event does not
+   * propagate further); return `undefined` or `false` to let Textarea handle
+   * it normally. Use this to remap keys, e.g. Enter submits and Shift+Enter
+   * inserts a line break.
+   */
+  onKeyPress?: (key: KeyEvent) => boolean | undefined;
+
   /** Disable the textarea */
   disabled?: MaybeAccessor<boolean>;
 
@@ -72,48 +81,6 @@ export interface TextareaProps {
 
   /** Style overrides */
   style?: Partial<ReactiveFlexStyle>;
-}
-
-/**
- * Cursor position in the textarea as line and column.
- */
-interface CursorPosition {
-  line: number;
-  column: number;
-}
-
-/**
- * Convert linear cursor position to line/column.
- */
-function posToLineCol(text: string, pos: number): CursorPosition {
-  const lines = text.split("\n");
-  let remaining = pos;
-
-  for (let line = 0; line < lines.length; line++) {
-    const lineLen = textLength(lines[line]);
-    if (remaining <= lineLen) {
-      return { line, column: remaining };
-    }
-    remaining -= lineLen + 1; // +1 for newline
-  }
-
-  const lastLine = lines.length - 1;
-  return { line: lastLine, column: textLength(lines[lastLine]) };
-}
-
-/**
- * Convert line/column to linear cursor position.
- */
-function lineColToPos(text: string, cursor: CursorPosition): number {
-  const lines = text.split("\n");
-  let pos = 0;
-
-  for (let i = 0; i < cursor.line && i < lines.length; i++) {
-    pos += textLength(lines[i]) + 1; // +1 for newline
-  }
-
-  const currentLine = lines[cursor.line] ?? "";
-  return pos + Math.min(cursor.column, textLength(currentLine));
 }
 
 interface TextareaVisualLine {
@@ -403,6 +370,8 @@ export function Textarea(props: TextareaProps): Node {
 
   const handleKeyPress = (key: KeyEvent): boolean | undefined => {
     if (isDisabled()) return false;
+
+    if (props.onKeyPress?.(key) === true) return true;
 
     const val = getValue();
     const pos = cursorPos();

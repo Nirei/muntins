@@ -1,6 +1,7 @@
 // Input component - single-line text input (thin wrapper around Textarea)
 
 import type { ReactiveFlexStyle } from "../core/layout.ts";
+import type { KeyEvent } from "../core/input.ts";
 import type { Node, Ref } from "../core/runtime/Node.ts";
 import type { MaybeAccessor } from "../core/signals.ts";
 import { theme } from "../core/theme.ts";
@@ -21,6 +22,12 @@ export interface InputProps {
 
   /** Input width in characters. Default from theme. */
   width?: number | (() => number);
+
+  /**
+   * Intercept key events before built-in editing behavior. Return `true` to
+   * consume the key. Passed through to the underlying Textarea.
+   */
+  onKeyPress?: (key: KeyEvent) => boolean | undefined;
 
   /** Disable the input */
   disabled?: MaybeAccessor<boolean>;
@@ -78,6 +85,7 @@ export function Input(props: InputProps): Node {
     autoFocus: props.autoFocus,
     ref: props.ref,
     style: props.style,
+    onKeyPress: props.onKeyPress,
     multiline: false,
   });
 }

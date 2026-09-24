@@ -762,4 +762,46 @@ describe("Input", () => {
       app.unmount();
     });
   });
+
+  describe("onKeyPress passthrough", () => {
+    it("user onKeyPress receives keys and can consume them", () => {
+      let received = "unchanged";
+      const seenKeys: string[] = [];
+      const node = Input({
+        value: "ab",
+        onChange: (v) => {
+          received = v;
+        },
+        onKeyPress: (key) => {
+          seenKeys.push(key.name);
+          if (key.name === "enter") return true;
+          return undefined;
+        },
+      });
+
+      assert.ok(node.onKeyPress);
+      node.onKeyPress(keyEvent("end"));
+      node.onKeyPress(keyEvent("enter"));
+
+      assert.ok(seenKeys.includes("enter"));
+      assert.strictEqual(received, "unchanged");
+    });
+
+    it("user onKeyPress returning undefined keeps typing behavior", () => {
+      let received = "";
+      const node = Input({
+        value: "",
+        onChange: (v) => {
+          received = v;
+        },
+        onKeyPress: () => undefined,
+      });
+
+      assert.ok(node.onKeyPress);
+      const result = node.onKeyPress(keyEvent("a", "a"));
+
+      assert.strictEqual(result, true);
+      assert.strictEqual(received, "a");
+    });
+  });
 });

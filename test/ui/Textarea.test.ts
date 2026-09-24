@@ -150,6 +150,78 @@ describe("Textarea", () => {
       assert.strictEqual(received, "a\nb");
     });
 
+    it("user onKeyPress returning true intercepts Enter", () => {
+      let received = "unchanged";
+      const seenKeys: string[] = [];
+      const node = Textarea({
+        value: "ab",
+        onChange: (v) => {
+          received = v;
+        },
+        onKeyPress: (key) => {
+          seenKeys.push(key.name);
+          if (key.name === "enter" && !key.shift) return true;
+          return undefined;
+        },
+      });
+
+      assert.ok(node.onKeyPress);
+      node.onKeyPress(keyEvent("home"));
+      node.onKeyPress(keyEvent("right"));
+
+      const result = node.onKeyPress(keyEvent("enter"));
+
+      assert.strictEqual(result, true);
+      assert.strictEqual(received, "unchanged");
+      assert.ok(seenKeys.includes("enter"));
+    });
+
+    it("user onKeyPress returning undefined keeps built-in Enter handling", () => {
+      let received = "";
+      const node = Textarea({
+        value: "ab",
+        onChange: (v) => {
+          received = v;
+        },
+        onKeyPress: () => undefined,
+      });
+
+      assert.ok(node.onKeyPress);
+      node.onKeyPress(keyEvent("home"));
+      node.onKeyPress(keyEvent("right"));
+
+      const result = node.onKeyPress(keyEvent("enter"));
+
+      assert.strictEqual(result, true);
+      assert.strictEqual(received, "a\nb");
+    });
+
+    it("shift+enter falls through to user onKeyPress and can insert newline", () => {
+      let received = "";
+      let shiftEnterConsumed = false;
+      const node = Textarea({
+        value: "ab",
+        onChange: (v) => {
+          received = v;
+        },
+        onKeyPress: (key) => {
+          if (key.name === "enter" && key.shift) {
+            shiftEnterConsumed = true;
+            return undefined; // let built-in handling insert the newline
+          }
+          return undefined;
+        },
+      });
+
+      assert.ok(node.onKeyPress);
+      node.onKeyPress(keyEvent("home"));
+      node.onKeyPress(keyEvent("right"));
+      node.onKeyPress(keyEvent("enter", "", { shift: true }));
+
+      assert.ok(shiftEnterConsumed);
+      assert.strictEqual(received, "a\nb");
+    });
+
     it("Up arrow moves cursor to previous line", () => {
       let received = "";
       const node = Textarea({
