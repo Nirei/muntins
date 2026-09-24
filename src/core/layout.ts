@@ -553,9 +553,13 @@ function calculateIntrinsicSize(
     return paddingBorder;
   }
 
-  if (style.overflow !== "visible") {
-    return paddingBorder;
-  }
+  // Note: overflow:"hidden" does NOT affect intrinsic size (CSS: a scroll
+  // container is still content-sized when its size is auto; clipping only
+  // applies when the final size is smaller than the content). Keeping the
+  // content-based intrinsic here is what lets auto-width overflow containers
+  // (e.g. ScrollArea inside a plain row Box) size to their content instead
+  // of collapsing to zero. The zero automatic minimum for scroll containers
+  // is handled separately in computeAutoMin.
 
   // Note: For cross-axis intrinsic size with wrap, we can't compute actual lines
   // without knowing main-axis size first. We assume single-line behavior (max of
