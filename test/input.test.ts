@@ -1377,3 +1377,151 @@ describe("createInputParser non-mouse path", () => {
     parser.destroy();
   });
 });
+
+describe("enhanced keyboard protocol (kitty CSI u)", () => {
+  it("parses CSI u unmodified keys identically to legacy", () => {
+    const parser = new UnifiedParser();
+
+    let events = parser.feed("\x1b[13u"); // Enter
+    assert.strictEqual(events.length, 1);
+    const enter = events[0] as KeyInput;
+    assert.strictEqual(enter.name, "enter");
+    assert.strictEqual(enter.ctrl, false);
+    assert.strictEqual(enter.alt, false);
+    assert.strictEqual(enter.shift, false);
+
+    events = parser.feed("\x1b[27u"); // Escape
+    assert.strictEqual((events[0] as KeyInput).name, "escape");
+
+    events = parser.feed("\x1b[127u"); // Backspace
+    assert.strictEqual((events[0] as KeyInput).name, "backspace");
+
+    events = parser.feed("\x1b[97u"); // 'a'
+    assert.strictEqual((events[0] as KeyInput).name, "a");
+    assert.strictEqual((events[0] as KeyInput).char, "a");
+  });
+
+  it("parses modified Enter: Ctrl and Shift", () => {
+    const parser = new UnifiedParser();
+
+    let events = parser.feed("\x1b[13;5u");
+    assert.strictEqual(events.length, 1);
+    let key = events[0] as KeyInput;
+    assert.strictEqual(key.name, "enter");
+    assert.strictEqual(key.ctrl, true);
+    assert.strictEqual(key.shift, false);
+    assert.strictEqual(key.alt, false);
+
+    events = parser.feed("\x1b[13;2u");
+    key = events[0] as KeyInput;
+    assert.strictEqual(key.name, "enter");
+    assert.strictEqual(key.shift, true);
+    assert.strictEqual(key.ctrl, false);
+
+    // Alt+Enter: modifier 1 + 2 = 3
+    events = parser.feed("\x1b[13;3u");
+    key = events[0] as KeyInput;
+    assert.strictEqual(key.name, "enter");
+    assert.strictEqual(key.alt, true);
+  });
+
+  it("parses modified letters with shift", () => {
+    const parser = new UnifiedParser();
+
+    // Shift+A arrives as its uppercase codepoint 65
+    const events = parser.feed("\x1b[65;2u");
+    assert.strictEqual(events.length, 1);
+    const key = events[0] as KeyInput;
+    assert.strictEqual(key.name, "a");
+    assert.strictEqual(key.char, "A");
+    assert.strictEqual(key.shift, true);
+  });
+
+  it("parses keypad codes", () => {
+    const parser = new UnifiedParser();
+
+    let events = parser.feed("\x1b[57400u"); // keypad 1
+    assert.strictEqual((events[0] as KeyInput).name, "1");
+
+    events = parser.feed("\x1b[57414u"); // keypad Enter
+    assert.strictEqual((events[0] as KeyInput).name, "enter");
+  });
+
+  it("consumes the CSI ? u mode query response without emitting events", () => {
+    const parser = new UnifiedParser();
+
+    const events = parser.feed("\x1b[?1u");
+    assert.strictEqual(events.length, 0);
+    // Parser is back in ground state and still works
+    const after = parser.feed("\x1b[A");
+    assert.strictEqual((after[0] as KeyInput).name, "up");
+  });
+
+  it("handles event-type suffixes when present (code;mod:event)", () => {
+    const parser = new UnifiedParser();
+
+    const events = parser.feed("\x1b[13;5:3u"); // Ctrl+Enter release
+    assert.strictEqual(events.length, 1);
+    const key = events[0] as KeyInput;
+    assert.strictEqual(key.name, "enter");
+    assert.strictEqual(key.ctrl, true);
+  });
+
+  it("legacy parsing is unaffected", () => {
+    const parser = new UnifiedParser();
+
+    let events = parser.feed("\r");
+    assert.strictEqual((events[0] as KeyInput).name, "enter");
+    assert.strictEqual((events[0] as KeyInput).ctrl, false);
+
+    events = parser.feed("a");
+    assert.strictEqual((events[0] as KeyInput).name, "a");
+
+    events = parser.feed("\x1b[1;5A"); // Ctrl+Up
+    const up = events[0] as KeyInput;
+    assert.strictEqual(up.name, "up");
+    assert.strictEqual(up.ctrl, true);
+
+    events = parser.feed("\x1bOP"); // F1
+    assert.strictEqual((events[0] as KeyInput).name, "f1");
+
+    events = parser.feed("\x1b[3~"); // Delete
+    assert.strictEqual((events[0] as KeyInput).name, "delete");
+  });
+
+  it("setupTerminal enables progressive keyboard enhancement", () => {
+    let written = "";
+    const mockStdin = {
+      isTTY: true,
+      setRawMode: () => {},
+    } as unknown as NodeJS.ReadStream;
+    const mockStdout = {
+      write: (s: string) => {
+        written += s;
+        return true;
+      },
+    } as unknown as NodeJS.WriteStream;
+
+    setupTerminal(mockStdin, mockStdout);
+
+    assert.ok(written.includes("\x1b[?u"), "queries current keyboard mode");
+    assert.ok(
+      written.includes("\x1b[>1u"),
+      "pushes disambiguate-escape-codes flag",
+    );
+  });
+
+  it("teardownTerminal restores the prior keyboard mode", () => {
+    let written = "";
+    const mockStdout = {
+      write: (s: string) => {
+        written += s;
+        return true;
+      },
+    } as unknown as NodeJS.WriteStream;
+
+    teardownTerminal({ isTTY: false } as NodeJS.ReadStream, mockStdout);
+
+    assert.ok(written.includes("\x1b[<u"), "pops the pushed keyboard mode");
+  });
+});

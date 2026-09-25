@@ -2,11 +2,11 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { Buffer as RenderBuffer } from "../../src/core/buffer.ts";
 import { Box } from "../../src/core/components/Box.ts";
-import { createRoot } from "../../src/core/signals.ts";
 import { computeLayout } from "../../src/core/layout.ts";
 import { DEFAULT_CLIP } from "../../src/core/rects.ts";
 import { DEFAULT_INHERITED_STYLE } from "../../src/core/render.ts";
 import type { Node } from "../../src/core/runtime/Node.ts";
+import { createRoot } from "../../src/core/signals.ts";
 import { Markdown } from "../../src/ui/Markdown.ts";
 import { paintTree, toLayoutNode } from "../test-helpers.ts";
 

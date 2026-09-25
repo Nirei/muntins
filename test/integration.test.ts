@@ -57,9 +57,13 @@ class VirtualScreen {
         // Parse CSI sequence
         let j = i + 2;
 
-        // Handle optional ? for private mode sequences
+        // Handle optional prefix: '?' (private), '>' / '<' (kitty
+        // keyboard-mode push/pop/query) — all consumed silently below
+        // unless the command maps to a screen operation
         const isPrivate = data[j] === "?";
         if (isPrivate) {
+          j++;
+        } else if (data[j] === ">" || data[j] === "<") {
           j++;
         }
 
@@ -1318,8 +1322,9 @@ describe("integration", () => {
             // Parse CSI sequence
             let j = i + 2;
 
-            // Handle optional ? for private mode sequences
-            if (data[j] === "?") {
+            // Handle optional ? / > / < CSI prefixes (private modes and
+            // kitty keyboard-mode push/pop) — consumed silently
+            if (data[j] === "?" || data[j] === ">" || data[j] === "<") {
               j++;
             }
 

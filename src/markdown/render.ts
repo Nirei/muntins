@@ -4,15 +4,15 @@
 // List, Table, Separator) and RichText. Knows nothing about any parser.
 
 import { Box } from "../core/components/Box.ts";
+import { For } from "../core/components/For.ts";
 import { RichText } from "../core/components/RichText.ts";
 import type { Node } from "../core/runtime/Node.ts";
-import { createMemo, type MaybeAccessor, resolve } from "../core/signals.ts";
+import { type MaybeAccessor, createMemo, resolve } from "../core/signals.ts";
 import type { StyledSpan } from "../core/text.ts";
 import { theme } from "../core/theme.ts";
 import { Blockquote } from "../ui/Blockquote.ts";
 import { CodeBlock } from "../ui/CodeBlock.ts";
 import { Heading } from "../ui/Heading.ts";
-import { For } from "../core/components/For.ts";
 import { List, ListItem } from "../ui/List.ts";
 import { Separator } from "../ui/Separator.ts";
 import { Table, type TableCell } from "../ui/Table.ts";

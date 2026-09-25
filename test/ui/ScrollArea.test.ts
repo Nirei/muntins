@@ -38,7 +38,11 @@ class VirtualScreen {
       if (data[i] === "\x1b" && data[i + 1] === "[") {
         let j = i + 2;
         const isPrivate = data[j] === "?";
-        if (isPrivate) j++;
+        if (isPrivate) {
+          j++;
+        } else if (data[j] === ">" || data[j] === "<") {
+          j++;
+        }
         let params = "";
         while (j < data.length && /[0-9;]/.test(data[j])) {
           params += data[j];

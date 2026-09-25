@@ -1,12 +1,12 @@
 import { Box } from "../core/components/Box.ts";
+import type { ReactiveFlexStyle } from "../core/layout.ts";
 import type { Node } from "../core/runtime/Node.ts";
 import { type MaybeAccessor, createMemo, resolve } from "../core/signals.ts";
-import type { ReactiveFlexStyle } from "../core/layout.ts";
 import { styleFallback } from "../core/theme.ts";
 import { parse } from "../markdown/parse.ts";
 import {
-  renderBlocks,
   type MarkdownRenderOptions,
+  renderBlocks,
 } from "../markdown/render.ts";
 
 /** Props for the Markdown component. */

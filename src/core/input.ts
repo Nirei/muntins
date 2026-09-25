@@ -252,6 +252,15 @@ export function setupTerminal(
   seq += "\x1b[?1004h"; // Focus reporting
   seq += "\x1b[?2004h"; // Bracketed paste
 
+  // Progressive keyboard enhancement (kitty protocol). Query the current
+  // mode first (the CSI ? ... u reply is consumed by UnifiedParser), then
+  // push flag 1 (disambiguate escape codes) so modified keys like
+  // Ctrl+Enter / Shift+Enter arrive as CSI u sequences instead of
+  // collapsing into plain \r. Terminals without support ignore both.
+  // teardownTerminal pops the stack, restoring the prior mode exactly.
+  seq += "\x1b[?u"; // Query current progressive keyboard flags
+  seq += "\x1b[>1u"; // Push current mode, set disambiguate flag
+
   stdout.write(seq);
 }
 
@@ -266,6 +275,7 @@ export function teardownTerminal(
   stdout: NodeJS.WriteStream,
 ): void {
   let seq = "";
+  seq += "\x1b[<u"; // Pop progressive keyboard mode (restore prior flags)
   seq += "\x1b[?2004l"; // Disable bracketed paste
   seq += "\x1b[?1004l"; // Disable focus reporting
   seq += "\x1b[?1006l"; // Disable mouse tracking
@@ -355,6 +365,34 @@ const CTRL_NAMES: Record<number, string> = {
   13: "enter", // Ctrl+M (carriage return)
   27: "escape",
   127: "backspace",
+};
+
+// Kitty keyboard protocol: Unicode codepoints for named keys and keypad
+// codes (functional keys 57399+) reported via CSI u sequences.
+const KITTY_KEY_CODES: Record<number, string> = {
+  9: "tab",
+  13: "enter",
+  27: "escape",
+  32: "space",
+  127: "backspace",
+  57399: "0", // keypad 0
+  57400: "1",
+  57401: "2",
+  57402: "3",
+  57403: "4",
+  57404: "5",
+  57405: "6",
+  57406: "7",
+  57407: "8",
+  57408: "9",
+  57409: ".",
+  57410: "/",
+  57411: "*",
+  57412: "-",
+  57413: "+",
+  57414: "enter",
+  57415: "=",
+  57416: ",",
 };
 
 /**
@@ -533,6 +571,12 @@ export class UnifiedParser {
   private sequenceStart = "";
 
   /**
+   * Flags from the last CSI ? u progressive-keyboard query reply,
+   * or null when the terminal never answered (legacy mode).
+   */
+  keyboardFlags: number | null = null;
+
+  /**
    * Check if the parser is waiting for more input to resolve an escape sequence.
    * When true, a standalone Esc keypress may be pending.
    */
@@ -666,14 +710,26 @@ export class UnifiedParser {
           this.state = ParserState.Ground;
           return { type: "focus", focused: false };
         }
-        // Collect parameters
-        if ((char >= "0" && char <= "9") || char === ";") {
+        // Collect parameters. '?' '<' '>' appear in progressive-keyboard
+        // mode queries/acks; ':' separates kitty sub-parameters
+        // (alternate keys, event types).
+        if (
+          (char >= "0" && char <= "9") ||
+          char === ";" ||
+          char === "?" ||
+          char === ">" ||
+          char === "<" ||
+          char === ":"
+        ) {
           this.buffer += char;
           return null;
         }
         // Terminal character
         if (char === "~") {
           return this.handleCsiTilde();
+        }
+        if (char === "u") {
+          return this.handleCsiU();
         }
         if (CSI_KEYS[char]) {
           return this.handleCsiKey(char);
@@ -748,6 +804,76 @@ export class UnifiedParser {
       alt,
       isShiftTab || shift,
     );
+  }
+
+  /**
+   * Handle CSI u terminators: kitty progressive-keyboard key reports and
+   * mode query/ack replies.
+   *
+   * `CSI ? flags u` is the reply to our `CSI ? u` probe — consumed silently
+   * (flags recorded on `keyboardFlags`), never emitted as a key event.
+   * `CSI code ; modifiers [:event] u` is a key report: code is the Unicode
+   * codepoint (or a 57399+ functional code), modifiers use the shared
+   * 1 + shift + 2*alt + 4*ctrl encoding.
+   */
+  private handleCsiU(): KeyInput | null {
+    this.state = ParserState.Ground;
+    const params = this.buffer.split(";");
+    const first = params[0] ?? "";
+
+    // Query reply (or push/pop ack) — consume, do not emit
+    if (first.startsWith("?")) {
+      const flags = Number.parseInt(first.slice(1), 10);
+      this.keyboardFlags = Number.isNaN(flags) ? null : flags;
+      return null;
+    }
+    if (first.startsWith(">") || first.startsWith("<")) {
+      return null;
+    }
+
+    const code = Number.parseInt(first.split(":")[0], 10);
+    if (Number.isNaN(code)) return null;
+
+    // Modifiers come from the second parameter; a `:event` sub-parameter
+    // (1 press / 2 repeat / 3 release) may trail it when event reporting
+    // is on — strip it before the shared modifier math.
+    const modPart =
+      params.length >= 2 ? Number.parseInt(params[1].split(":")[0], 10) : 1;
+    const mod = (Number.isNaN(modPart) ? 1 : modPart) - 1;
+    const shift = (mod & 1) !== 0;
+    const alt = (mod & 2) !== 0;
+    const ctrl = (mod & 4) !== 0;
+
+    const named = KITTY_KEY_CODES[code];
+    if (named !== undefined) {
+      const char = named === "space" ? " " : "";
+      return this.makeKeyInput(
+        named,
+        char,
+        this.sequenceStart,
+        ctrl,
+        alt,
+        shift,
+      );
+    }
+
+    // Printable codepoint: match the legacy shape (lowercase name, the
+    // codepoint itself as char — e.g. Shift+A reports 65;2 → name "a",
+    // char "A", shift true).
+    if (code >= 32 && code !== 127 && !(code >= 0xd800 && code <= 0xdfff)) {
+      const char = String.fromCodePoint(code);
+      return this.makeKeyInput(
+        char.toLowerCase(),
+        char,
+        this.sequenceStart,
+        ctrl,
+        alt,
+        shift,
+      );
+    }
+
+    // Unknown functional code — drop rather than emit a bogus key
+    return null;
   }
 
   private handleCsiTilde(): KeyInput | null {

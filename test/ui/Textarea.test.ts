@@ -770,7 +770,7 @@ describe("Textarea", () => {
     function stripAnsi(s: string): string {
       // Match ESC [ followed by params and command letter
       const ESC = String.fromCharCode(0x1b);
-      const pattern = new RegExp(`${ESC}\\[[0-9;?]*[a-zA-Z]`, "g");
+      const pattern = new RegExp(`${ESC}\\[[0-9;<>?]*[a-zA-Z]`, "g");
       return s.replace(pattern, "");
     }
 
@@ -978,7 +978,7 @@ describe("Textarea", () => {
 
       function stripAnsi(s: string): string {
         const ESC = String.fromCharCode(0x1b);
-        const pattern = new RegExp(`${ESC}\\[[0-9;?]*[a-zA-Z]`, "g");
+        const pattern = new RegExp(`${ESC}\\[[0-9;<>?]*[a-zA-Z]`, "g");
         return s.replace(pattern, "");
       }
 
@@ -1141,7 +1141,7 @@ describe("Textarea", () => {
 
       const stripAnsi = (s: string): string => {
         const ESC = String.fromCharCode(0x1b);
-        const pattern = new RegExp(`${ESC}\\[[0-9;?]*[a-zA-Z]`, "g");
+        const pattern = new RegExp(`${ESC}\\[[0-9;<>?]*[a-zA-Z]`, "g");
         return s.replace(pattern, "");
       };
 
@@ -1205,7 +1205,7 @@ describe("Textarea", () => {
 
       const stripAnsi = (s: string): string => {
         const ESC = String.fromCharCode(0x1b);
-        const pattern = new RegExp(`${ESC}\\[[0-9;?]*[a-zA-Z]`, "g");
+        const pattern = new RegExp(`${ESC}\\[[0-9;<>?]*[a-zA-Z]`, "g");
         return s.replace(pattern, "");
       };
 
@@ -1275,7 +1275,7 @@ describe("Textarea", () => {
 
       const stripAnsi = (s: string): string => {
         const ESC = String.fromCharCode(0x1b);
-        const pattern = new RegExp(`${ESC}\\[[0-9;?]*[a-zA-Z]`, "g");
+        const pattern = new RegExp(`${ESC}\\[[0-9;<>?]*[a-zA-Z]`, "g");
         return s.replace(pattern, "");
       };
       const getOutput = () => stripAnsi(mockStdout.written);
@@ -1372,7 +1372,7 @@ describe("Textarea", () => {
 
       const stripAnsi = (s: string): string => {
         const ESC = String.fromCharCode(0x1b);
-        const pattern = new RegExp(`${ESC}\\[[0-9;?]*[a-zA-Z]`, "g");
+        const pattern = new RegExp(`${ESC}\\[[0-9;<>?]*[a-zA-Z]`, "g");
         return s.replace(pattern, "");
       };
 
@@ -1441,7 +1441,7 @@ describe("Textarea", () => {
 
       const stripAnsi = (s: string): string => {
         const ESC = String.fromCharCode(0x1b);
-        const pattern = new RegExp(`${ESC}\\[[0-9;?]*[a-zA-Z]`, "g");
+        const pattern = new RegExp(`${ESC}\\[[0-9;<>?]*[a-zA-Z]`, "g");
         return s.replace(pattern, "");
       };
 
