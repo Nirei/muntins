@@ -2,8 +2,10 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { Box } from "../../src/core/components/Box.ts";
 import { Text } from "../../src/core/components/Text.ts";
+import type { LayoutResult, ReactiveFlexStyle } from "../../src/core/layout.ts";
 import { App } from "../../src/core/runtime/App.ts";
 import { createRef } from "../../src/core/runtime/Node.ts";
+import type { Node } from "../../src/core/runtime/Node.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { Select, type SelectOption } from "../../src/ui/Select.ts";
 import {
@@ -997,5 +999,163 @@ describe("Select", () => {
       );
       app.unmount();
     });
+  });
+});
+
+describe("Select dropdown width", () => {
+  const openSelectWith = async (
+    options: SelectOption<string>[],
+    dropdownStyle?: Partial<ReactiveFlexStyle>,
+  ) => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+
+    const app = App.mount(
+      () =>
+        Box({
+          width: 30,
+          children: [
+            Select({
+              value: options[0]?.value ?? "",
+              options,
+              autoFocus: true,
+              dropdownStyle,
+            }),
+          ],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+        fpsLimit: 0,
+      },
+    );
+
+    mockStdin.emit("data", Buffer.from("\r")); // open dropdown
+    await nextRender();
+    return app;
+  };
+
+  /**
+   * Find the dropdown row (Box) containing the option Text whose intrinsic
+   * width matches `labelWidth`, and return the row's laid-out width.
+   * Option rows stretch to the dropdown container width, so the row width
+   * is what the user sees as the dropdown width (minus container padding).
+   */
+  const findOptionRowWidth = (app: App, labelWidth: number): number | null => {
+    const layout = app.layoutResult;
+    if (!layout) return null;
+
+    const isMarker = (node: Node): boolean => {
+      if (!node.measure) return false;
+      const style =
+        typeof node.style === "function" ? node.style() : node.style;
+      if (style.display === "none") return false;
+      const m = node.measure(
+        Number.POSITIVE_INFINITY,
+        Number.POSITIVE_INFINITY,
+      );
+      return m.width === labelWidth && m.height === 1;
+    };
+
+    const countSlots = (nodes: Node[]): number => {
+      let count = 0;
+      for (const node of nodes) {
+        const style =
+          typeof node.style === "function" ? node.style() : node.style;
+        if (style.display === "none") continue;
+        if (style.display === "contents") {
+          const kids =
+            typeof node.children === "function"
+              ? (node.children as () => Node[])()
+              : (node.children ?? []);
+          count += countSlots(kids);
+        } else {
+          count++;
+        }
+      }
+      return count;
+    };
+
+    // Returns the layout of the option row (container Box whose direct
+    // child is the marker Text), handling display:contents wrappers.
+    const walk = (
+      nodes: Node[],
+      layouts: LayoutResult[],
+      rowLayout: LayoutResult | null,
+    ): number | null => {
+      let index = 0;
+      for (const node of nodes) {
+        const style =
+          typeof node.style === "function" ? node.style() : node.style;
+        if (style.display === "none") continue;
+
+        if (style.display === "contents") {
+          const kids =
+            typeof node.children === "function"
+              ? (node.children as () => Node[])()
+              : (node.children ?? []);
+          const result = walk(kids, layouts, rowLayout);
+          if (result !== null) return result;
+          index += countSlots(kids);
+          continue;
+        }
+
+        const nodeLayout = layouts[index];
+        if (nodeLayout) {
+          if (isMarker(node) && rowLayout) return rowLayout.width;
+
+          const kids =
+            typeof node.children === "function"
+              ? (node.children as () => Node[])()
+              : (node.children ?? []);
+          // A dropdown option row directly contains the marker Text
+          const isRow = kids.some((kid) => isMarker(kid));
+          const result = walk(
+            kids,
+            nodeLayout.children ?? [],
+            isRow ? nodeLayout : rowLayout,
+          );
+          if (result !== null) return result;
+        }
+        index++;
+      }
+      return null;
+    };
+
+    return walk([app.root], [layout], null);
+  };
+
+  it("dropdown is at least as wide as the trigger (short labels)", async () => {
+    const marker = "markeroptions"; // 13 chars: unique intrinsic width
+    const app = await openSelectWith([
+      { value: "off", label: "off" },
+      { value: "low", label: marker },
+    ]);
+    // Trigger fills the fixed 30-wide wrapper; dropdown container adds
+    // 1+1 side padding, so each option row stretches to 28
+    assert.strictEqual(findOptionRowWidth(app, marker.length), 28);
+    app.unmount();
+  });
+
+  it("long labels expand the dropdown beyond the trigger width", async () => {
+    const app = await openSelectWith([
+      { value: "off", label: "off" },
+      { value: "long", label: "x".repeat(40) },
+    ]);
+    assert.strictEqual(findOptionRowWidth(app, 40), 40);
+    app.unmount();
+  });
+
+  it("dropdownStyle customizes the dropdown (wider padding)", async () => {
+    const app = await openSelectWith(
+      [
+        { value: "off", label: "off" },
+        { value: "low", label: "markeroptions" },
+      ],
+      { paddingStart: 3 },
+    );
+    // 30-wide trigger, paddingStart 3 + paddingEnd 1 -> row width 26
+    assert.strictEqual(findOptionRowWidth(app, "markeroptions".length), 26);
+    app.unmount();
   });
 });

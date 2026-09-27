@@ -3,13 +3,13 @@
 // Composes the generic ui components (Heading, Blockquote, CodeBlock,
 // List, Table, Separator) and RichText. Knows nothing about any parser.
 import { Box } from "../core/components/Box.js";
+import { For } from "../core/components/For.js";
 import { RichText } from "../core/components/RichText.js";
 import { createMemo, resolve } from "../core/signals.js";
 import { theme } from "../core/theme.js";
 import { Blockquote } from "../ui/Blockquote.js";
 import { CodeBlock } from "../ui/CodeBlock.js";
 import { Heading } from "../ui/Heading.js";
-import { For } from "../core/components/For.js";
 import { List, ListItem } from "../ui/List.js";
 import { Separator } from "../ui/Separator.js";
 import { Table } from "../ui/Table.js";

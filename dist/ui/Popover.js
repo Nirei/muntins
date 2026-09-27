@@ -140,6 +140,19 @@ function getNodePosition(ctx, node) {
     };
 }
 /**
+ * Get a node's laid-out width from the current layout (as flexbox
+ * assigned it, including stretch), or undefined when not yet laid out.
+ */
+function getNodeLayoutWidth(ctx, node) {
+    const { app } = ctx;
+    if (!app.layoutResult)
+        return undefined;
+    const layout = findNodeLayout(node, app.root, app.layoutResult);
+    if (!layout || typeof layout.width !== "number")
+        return undefined;
+    return layout.width;
+}
+/**
  * Calculate position for the popover based on anchor position and placement.
  */
 function calculatePosition(anchor, placement) {
@@ -229,7 +242,16 @@ export function Popover(props) {
         }
         return calculatePosition(anchorPos, getPlacement());
     };
+    const getMatchMode = () => resolve(props.matchAnchorWidth) ?? false;
+    // Read on every layout pass so an open popover tracks anchor resizes
+    const getAnchorWidth = () => {
+        if (!ctx || !anchorRef.current)
+            return undefined;
+        return getNodeLayoutWidth(ctx, anchorRef.current);
+    };
     const trigger = props.children({ ref: anchorRef });
+    const themeStyle = styleFallback(props.style, "popover");
+    const resolveWidth = (value) => resolve(value);
     return Box({
         display: "contents",
         children: [
@@ -247,10 +269,18 @@ export function Popover(props) {
                             onMousePress: () => props.onClose?.(),
                             children: [
                                 Box({
-                                    ...styleFallback(props.style, "popover"),
+                                    ...themeStyle,
                                     position: "absolute",
                                     top: () => getPositionStyle().top,
                                     start: () => getPositionStyle().start,
+                                    width: () => resolveWidth(themeStyle.width) ??
+                                        (getMatchMode() === true
+                                            ? (getAnchorWidth() ?? "auto")
+                                            : "auto"),
+                                    minWidth: () => resolveWidth(themeStyle.minWidth) ??
+                                        (getMatchMode() === "min"
+                                            ? (getAnchorWidth() ?? "auto")
+                                            : "auto"),
                                     onKeyPress: handleKeyPress,
                                     onMousePress: () => { },
                                     focusable: true,

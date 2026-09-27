@@ -329,3 +329,108 @@ function paintNode(
 
   return 1;
 }
+/**
+ * Find the current LayoutResult for a node inside a mounted app by walking
+ * the node tree and layout tree in parallel (mirrors display:contents/none
+ * handling in Renderer.paintNode).
+ */
+export function findNodeLayoutInApp(
+  app: App,
+  target: Node,
+): LayoutResult | null {
+  const layout = app.layoutResult;
+  if (!layout) return null;
+
+  const countSlots = (nodes: Node[]): number => {
+    let count = 0;
+    for (const node of nodes) {
+      const style =
+        typeof node.style === "function" ? node.style() : node.style;
+      if (style.display === "none") continue;
+      if (style.display === "contents") {
+        const children =
+          typeof node.children === "function"
+            ? (node.children as () => Node[])()
+            : (node.children ?? []);
+        count += countSlots(children);
+      } else {
+        count++;
+      }
+    }
+    return count;
+  };
+
+  const walk = (node: Node, layoutNode: LayoutResult): LayoutResult | null => {
+    if (node === target) return layoutNode;
+
+    const style = typeof node.style === "function" ? node.style() : node.style;
+    if (style.display === "none") return null;
+
+    const children =
+      typeof node.children === "function"
+        ? (node.children as () => Node[])()
+        : (node.children ?? []);
+    const childLayouts = layoutNode.children ?? [];
+
+    let index = 0;
+    for (const child of children) {
+      const childStyle =
+        typeof child.style === "function" ? child.style() : child.style;
+      if (childStyle.display === "none") continue;
+
+      if (childStyle.display === "contents") {
+        const result = walkWithSlots(child, childLayouts, index);
+        if (result) return result;
+      } else {
+        const childLayout = childLayouts[index];
+        if (childLayout) {
+          const result = walk(child, childLayout);
+          if (result) return result;
+        }
+        index++;
+      }
+    }
+    return null;
+  };
+
+  // display:contents wrappers consume layout slots but hold no layout of
+  // their own: walk their children against the parent's slot list starting
+  // at startIndex.
+  const walkWithSlots = (
+    contentsNode: Node,
+    siblings: LayoutResult[],
+    startIndex: number,
+  ): LayoutResult | null => {
+    const children =
+      typeof contentsNode.children === "function"
+        ? (contentsNode.children as () => Node[])()
+        : (contentsNode.children ?? []);
+
+    let index = startIndex;
+    for (const child of children) {
+      const style =
+        typeof child.style === "function" ? child.style() : child.style;
+      if (style.display === "none") continue;
+
+      if (style.display === "contents") {
+        const result = walkWithSlots(child, siblings, index);
+        if (result) return result;
+        const grandChildren =
+          typeof child.children === "function"
+            ? (child.children as () => Node[])()
+            : (child.children ?? []);
+        index += countSlots(grandChildren);
+      } else {
+        const childLayout = siblings[index];
+        if (childLayout) {
+          const result = walk(child, childLayout);
+          if (result) return result;
+        }
+        index++;
+      }
+    }
+    return null;
+  };
+
+  return walk(app.root, layout);
+}

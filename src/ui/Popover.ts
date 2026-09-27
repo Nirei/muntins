@@ -48,6 +48,18 @@ export interface PopoverProps {
   /** Placement relative to trigger. Default: "bottom-start" */
   placement?: MaybeAccessor<PopoverPlacement>;
 
+  /**
+   * Match the floating content's width to the anchor's laid-out width:
+   * - `true` — content width is exactly the anchor width
+   * - `"min"` — content keeps its intrinsic width but never renders
+   *   narrower than the anchor (long content still grows)
+   * - `false` (default) — content sizes to its own content only
+   *
+   * The anchor width is re-read on every layout pass, so the content
+   * tracks trigger resizes (e.g. terminal resize) while open.
+   */
+  matchAnchorWidth?: MaybeAccessor<boolean | "min">;
+
   /** Style overrides for popover container */
   style?: Partial<ReactiveFlexStyle>;
 }
@@ -223,6 +235,23 @@ function getNodePosition(
 }
 
 /**
+ * Get a node's laid-out width from the current layout (as flexbox
+ * assigned it, including stretch), or undefined when not yet laid out.
+ */
+function getNodeLayoutWidth(
+  ctx: RuntimeContext,
+  node: Node,
+): number | undefined {
+  const { app } = ctx;
+  if (!app.layoutResult) return undefined;
+
+  const layout = findNodeLayout(node, app.root, app.layoutResult);
+  if (!layout || typeof layout.width !== "number") return undefined;
+
+  return layout.width;
+}
+
+/**
  * Calculate position for the popover based on anchor position and placement.
  */
 function calculatePosition(
@@ -327,7 +356,20 @@ export function Popover(props: PopoverProps): Node {
     return calculatePosition(anchorPos, getPlacement());
   };
 
+  const getMatchMode = (): boolean | "min" =>
+    resolve(props.matchAnchorWidth) ?? false;
+
+  // Read on every layout pass so an open popover tracks anchor resizes
+  const getAnchorWidth = (): number | undefined => {
+    if (!ctx || !anchorRef.current) return undefined;
+    return getNodeLayoutWidth(ctx, anchorRef.current);
+  };
+
   const trigger = props.children({ ref: anchorRef });
+
+  const themeStyle = styleFallback(props.style, "popover");
+  const resolveWidth = (value: unknown): number | "auto" | undefined =>
+    resolve(value as number | "auto" | undefined);
 
   return Box({
     display: "contents",
@@ -347,10 +389,20 @@ export function Popover(props: PopoverProps): Node {
                 onMousePress: () => props.onClose?.(),
                 children: [
                   Box({
-                    ...styleFallback(props.style, "popover"),
+                    ...themeStyle,
                     position: "absolute",
                     top: () => getPositionStyle().top,
                     start: () => getPositionStyle().start,
+                    width: () =>
+                      resolveWidth(themeStyle.width) ??
+                      (getMatchMode() === true
+                        ? (getAnchorWidth() ?? "auto")
+                        : "auto"),
+                    minWidth: () =>
+                      resolveWidth(themeStyle.minWidth) ??
+                      (getMatchMode() === "min"
+                        ? (getAnchorWidth() ?? "auto")
+                        : "auto"),
                     onKeyPress: handleKeyPress,
                     onMousePress: () => {},
                     focusable: true,

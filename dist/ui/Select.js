@@ -103,19 +103,25 @@ export function Select(props) {
         }
         setIsOpen(false);
     };
+    const dropdownThemeStyle = styleFallback(props.dropdownStyle, "select--dropdown");
     return Popover({
         open: isOpen,
         onClose: () => setIsOpen(false),
         placement: "bottom-start",
+        // A dropdown is never narrower than its trigger; long labels still
+        // expand it
+        matchAnchorWidth: "min",
         content: () => Box({
-            flexDirection: "column",
             focusable: false,
+            ...dropdownThemeStyle,
+            flexDirection: () => resolve(dropdownThemeStyle.flexDirection) ?? "column",
+            flexGrow: () => resolve(dropdownThemeStyle.flexGrow) ?? 1,
             children: For({
                 each: props.options,
                 render: (opt, index) => {
                     const isHighlighted = () => highlightedIndex() === index();
                     return Box({
-                        ...styleFallback(undefined, () => (isHighlighted() ? "select--dropdown--highlight" : ""), "select--dropdown"),
+                        ...styleFallback(undefined, () => isHighlighted() ? "select--dropdown--highlight" : ""),
                         onMousePress: handleOptionMousePress(index()),
                         children: [Text({ content: opt().label })],
                     });

@@ -3,9 +3,11 @@ import { describe, it } from "node:test";
 import { Box } from "../../src/core/components/Box.ts";
 import { Text } from "../../src/core/components/Text.ts";
 import { App } from "../../src/core/runtime/App.ts";
+import { createRef } from "../../src/core/runtime/Node.ts";
 import { createSignal } from "../../src/core/signals.ts";
 import { Button } from "../../src/ui/Button.ts";
 import { Popover, type PopoverPlacement } from "../../src/ui/Popover.ts";
+import { findNodeLayoutInApp, nextRender } from "../test-helpers.ts";
 import { createMockStdin, createMockStdout } from "../test-helpers.ts";
 
 describe("Popover", () => {
@@ -775,5 +777,93 @@ describe("Popover", () => {
 
       app.unmount();
     });
+  });
+});
+
+describe("matchAnchorWidth", () => {
+  const mountPopover = (
+    matchAnchorWidth: boolean | "min" | undefined,
+    contentText: string,
+  ) => {
+    const mockStdin = createMockStdin();
+    const mockStdout = createMockStdout();
+    const markerRef = createRef();
+
+    const app = App.mount(
+      () =>
+        Box({
+          children: [
+            Popover({
+              open: true,
+              matchAnchorWidth,
+              // flexGrow fills the floating container's main axis, so the
+              // marker's laid-out width reflects the container width
+              content: () => [
+                Box({
+                  ref: markerRef,
+                  flexGrow: 1,
+                  children: [Text({ content: contentText })],
+                }),
+              ],
+              children: (props) =>
+                Box({
+                  ref: props.ref,
+                  width: 20,
+                  children: [Text({ content: "T" })],
+                }),
+            }),
+          ],
+        }),
+      {
+        stdin: mockStdin as unknown as NodeJS.ReadStream,
+        stdout: mockStdout as unknown as NodeJS.WriteStream,
+        fpsLimit: 0,
+      },
+    );
+
+    return { app, markerRef };
+  };
+
+  const contentWidth = async (mounted: {
+    app: App;
+    markerRef: ReturnType<typeof createRef>;
+  }) => {
+    await nextRender();
+    const markerNode = mounted.markerRef.current;
+    const layout = markerNode
+      ? findNodeLayoutInApp(mounted.app, markerNode)
+      : null;
+    return layout?.width;
+  };
+
+  it("true: content width equals anchor laid-out width", async () => {
+    const mounted = mountPopover(true, "x");
+    assert.strictEqual(await contentWidth(mounted), 20);
+    mounted.app.unmount();
+  });
+
+  it("'min': short content stretches to anchor width", async () => {
+    const mounted = mountPopover("min", "x");
+    assert.strictEqual(await contentWidth(mounted), 20);
+    mounted.app.unmount();
+  });
+
+  it("'min': long content keeps its intrinsic width beyond the anchor", async () => {
+    const long = "a".repeat(30);
+    const mounted = mountPopover("min", long);
+    assert.strictEqual(await contentWidth(mounted), 30);
+    mounted.app.unmount();
+  });
+
+  it("default: content width is intrinsic (unaffected)", async () => {
+    const mounted = mountPopover(undefined, "x");
+    assert.strictEqual(await contentWidth(mounted), 1);
+    mounted.app.unmount();
+  });
+
+  it("false: explicit opt-out keeps intrinsic width", async () => {
+    const mounted = mountPopover(false, "x");
+    assert.strictEqual(await contentWidth(mounted), 1);
+    mounted.app.unmount();
   });
 });

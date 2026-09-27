@@ -28,6 +28,12 @@ export interface SelectProps<T> {
     ref?: Ref;
     /** Style overrides */
     style?: Partial<ReactiveFlexStyle>;
+    /**
+     * Style overrides for the dropdown container. Merged over the
+     * `select--dropdown` theme slice, so apps can pad, size, or color the
+     * dropdown without forking the component.
+     */
+    dropdownStyle?: Partial<ReactiveFlexStyle>;
 }
 /**
  * A dropdown selection component for choosing one option from a list.

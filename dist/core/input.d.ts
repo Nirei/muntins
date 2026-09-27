@@ -178,6 +178,11 @@ export declare class UnifiedParser {
     private buffer;
     private sequenceStart;
     /**
+     * Flags from the last CSI ? u progressive-keyboard query reply,
+     * or null when the terminal never answered (legacy mode).
+     */
+    keyboardFlags: number | null;
+    /**
      * Check if the parser is waiting for more input to resolve an escape sequence.
      * When true, a standalone Esc keypress may be pending.
      */
@@ -196,6 +201,17 @@ export declare class UnifiedParser {
     feed(data: string): (KeyInput | MouseInput | ScrollInput | FocusEvent)[];
     private processChar;
     private handleCsiKey;
+    /**
+     * Handle CSI u terminators: kitty progressive-keyboard key reports and
+     * mode query/ack replies.
+     *
+     * `CSI ? flags u` is the reply to our `CSI ? u` probe — consumed silently
+     * (flags recorded on `keyboardFlags`), never emitted as a key event.
+     * `CSI code ; modifiers [:event] u` is a key report: code is the Unicode
+     * codepoint (or a 57399+ functional code), modifiers use the shared
+     * 1 + shift + 2*alt + 4*ctrl encoding.
+     */
+    private handleCsiU;
     private handleCsiTilde;
     private parseModifiers;
     private makeControlKeyEvent;

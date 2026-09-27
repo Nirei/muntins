@@ -1,6 +1,6 @@
+import type { ReactiveFlexStyle } from "../core/layout.ts";
 import type { Node } from "../core/runtime/Node.ts";
 import { type MaybeAccessor } from "../core/signals.ts";
-import type { ReactiveFlexStyle } from "../core/layout.ts";
 import { type MarkdownRenderOptions } from "../markdown/render.ts";
 /** Props for the Markdown component. */
 export interface MarkdownProps extends MarkdownRenderOptions {

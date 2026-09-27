@@ -21,6 +21,17 @@ export interface PopoverProps {
     }) => Node;
     /** Placement relative to trigger. Default: "bottom-start" */
     placement?: MaybeAccessor<PopoverPlacement>;
+    /**
+     * Match the floating content's width to the anchor's laid-out width:
+     * - `true` — content width is exactly the anchor width
+     * - `"min"` — content keeps its intrinsic width but never renders
+     *   narrower than the anchor (long content still grows)
+     * - `false` (default) — content sizes to its own content only
+     *
+     * The anchor width is re-read on every layout pass, so the content
+     * tracks trigger resizes (e.g. terminal resize) while open.
+     */
+    matchAnchorWidth?: MaybeAccessor<boolean | "min">;
     /** Style overrides for popover container */
     style?: Partial<ReactiveFlexStyle>;
 }
