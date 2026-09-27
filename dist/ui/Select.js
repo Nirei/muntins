@@ -104,6 +104,7 @@ export function Select(props) {
         setIsOpen(false);
     };
     const dropdownThemeStyle = styleFallback(props.dropdownStyle, "select--dropdown");
+    const triggerThemeStyle = styleFallback(props.style, () => (isFocused() ? "select--focused" : ""), "select--trigger", "input");
     return Popover({
         open: isOpen,
         onClose: () => setIsOpen(false),
@@ -130,13 +131,15 @@ export function Select(props) {
         }),
         children: (anchorProps) => {
             const node = Box({
-                ...styleFallback(props.style, () => (isFocused() ? "select--focused" : ""), "select--trigger", "input"),
+                ...triggerThemeStyle,
                 ref: anchorProps.ref,
                 focusable: props.focusable ?? true,
                 autoFocus: props.autoFocus,
                 onKeyPress: handleKeyPress,
                 onMousePress: handleTriggerMousePress,
-                flexGrow: 1,
+                // Default grow: fill remaining space in the parent, but an
+                // explicit style.flexGrow (or theme slice) always wins
+                flexGrow: () => resolve(triggerThemeStyle.flexGrow) ?? 1,
                 flexDirection: "row",
                 justifyContent: "space-between",
                 children: [

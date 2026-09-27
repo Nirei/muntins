@@ -11,6 +11,7 @@ import { Select, type SelectOption } from "../../src/ui/Select.ts";
 import {
   createMockStdin,
   createMockStdout,
+  findNodeLayoutInApp,
   nextRender,
 } from "../test-helpers.ts";
 
@@ -667,6 +668,113 @@ describe("Select", () => {
 
       // Should render without error (style applied)
       assert.ok(mockStdout.written.includes("USA"));
+      app.unmount();
+    });
+
+    it("style flexGrow 0 opts out of the trigger's default grow", () => {
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout();
+      const ref = createRef();
+
+      const app = App.mount(
+        () =>
+          Box({
+            flexDirection: "row",
+            width: 30,
+            children: [
+              Select({
+                value: "us",
+                options: testOptions,
+                ref,
+                style: { flexGrow: 0 },
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+        },
+      );
+
+      const triggerLayout = ref.current
+        ? findNodeLayoutInApp(app, ref.current)
+        : null;
+      assert.ok(triggerLayout, "trigger should have a layout");
+      // Not stretched: the trigger keeps the input theme's width: 20
+      assert.strictEqual(
+        triggerLayout.width,
+        20,
+        "trigger should keep its themed width, not stretch to 30",
+      );
+      app.unmount();
+    });
+
+    it("style flexGrow 0 with width auto sizes the trigger to content", () => {
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout();
+      const ref = createRef();
+
+      const app = App.mount(
+        () =>
+          Box({
+            flexDirection: "row",
+            width: 30,
+            children: [
+              Select({
+                value: "us",
+                options: testOptions,
+                ref,
+                style: { flexGrow: 0, width: "auto" },
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+        },
+      );
+
+      const triggerLayout = ref.current
+        ? findNodeLayoutInApp(app, ref.current)
+        : null;
+      assert.ok(triggerLayout, "trigger should have a layout");
+      // Content width: padding 1+1, "USA" 3, indicator "▼" 1
+      assert.strictEqual(triggerLayout.width, 6);
+      app.unmount();
+    });
+
+    it("trigger grows to fill remaining space by default", () => {
+      const mockStdin = createMockStdin();
+      const mockStdout = createMockStdout();
+      const ref = createRef();
+
+      const app = App.mount(
+        () =>
+          Box({
+            flexDirection: "row",
+            width: 30,
+            children: [
+              Select({
+                value: "us",
+                options: testOptions,
+                ref,
+              }),
+            ],
+          }),
+        {
+          stdin: mockStdin as unknown as NodeJS.ReadStream,
+          stdout: mockStdout as unknown as NodeJS.WriteStream,
+          fpsLimit: 0,
+        },
+      );
+
+      const triggerLayout = ref.current
+        ? findNodeLayoutInApp(app, ref.current)
+        : null;
+      assert.ok(triggerLayout, "trigger should have a layout");
+      assert.strictEqual(triggerLayout.width, 30);
       app.unmount();
     });
 
